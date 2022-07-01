@@ -3,7 +3,7 @@ from typing import Tuple
 from itertools import chain
 
 class node_constructor:
-    def __init__(self, label, *fixed_children):
+    def __init__(self, label: str, *fixed_children):
         self.label = label
         self.fixed_children = fixed_children
 
@@ -11,7 +11,8 @@ class node_constructor:
         childstrs = chain((str(i) for i in self.fixed_children if not i is None), children)
         childstrs = ' '.join(childstrs)
         if self.label:
-            childstrs = f"({self.label} {childstrs})"
+            for lab in reversed(self.label.split("+")):
+                childstrs = f"({lab} {childstrs})"
         return childstrs
 
     def __str__(self):
@@ -47,7 +48,7 @@ class sdcp_clause:
 class rule:
     lhs: str
     fn: sdcp_clause
-    rhs: tuple[str]
+    rhs: tuple[str] = ()
 
     def as_tuple(self):
         return self.lhs, self.rhs

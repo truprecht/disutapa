@@ -3,11 +3,10 @@ from discodop.tree import Tree
 class AutoTree(Tree):
     def __init__(self, *args):
         super().__init__(*args)
-        q = [self]
-        while q:
-            node = q.pop()
-            node.children.sort(key=lambda node: min(node.leaves()) if isinstance(node, Tree) else node)
-            q.extend(n for n in node.children if isinstance(n, Tree))
+        self.children.sort(
+            key=lambda node: node._minleaf if isinstance(node, AutoTree) else node)
+        self._minleaf = next(
+            (c._minleaf if isinstance(c, AutoTree) else c) for c in self.children)
 
 
 def test_tree():

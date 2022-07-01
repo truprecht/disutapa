@@ -55,5 +55,5 @@ class rule:
 
 @dataclass
 class grammar:
-    root: str
     rules: list[rule]
+    root: str = "ROOT"

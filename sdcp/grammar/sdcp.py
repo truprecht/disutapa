@@ -25,7 +25,7 @@ class node_constructor:
         return self.label == o.label and [l for l in self.fixed_children if not l is None] == [l for l in o.fixed_children if not l is None]
 
 
-@dataclass
+@dataclass(frozen=True)
 class sdcp_clause:
     label: str
     arity: int
@@ -44,7 +44,7 @@ class sdcp_clause:
         return NotImplementedError()
 
 
-@dataclass
+@dataclass(frozen=True)
 class rule:
     lhs: str
     fn: sdcp_clause

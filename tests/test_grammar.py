@@ -2,6 +2,7 @@ from sdcp.grammar.sdcp import sdcp_clause, node_constructor, rule, grammar
 from sdcp.grammar.parser import parser
 from sdcp.grammar.extract import extract, __extract
 from sdcp.autotree import AutoTree
+from sdcp.corpus import corpus_extractor
 
 def test_sdcp_fn():
     functions = [
@@ -56,7 +57,7 @@ def test_extract():
     tree = AutoTree("(SBAR+S (VP (VP 0 (VP|<> 4 5)) 3) (NP 1 2))")
     
     assert __extract(tree[(0,0,1)], "VP", {4}) == [(5, rule("VP|<>", sdcp_clause(None, 0), ()))]
-    assert __extract(tree[(0,0)], "VP") == [
+    assert __extract(tree[(0,0)], "VP", set()) == [
         (4, rule("VP", sdcp_clause("VP", 2, 1), ("L-VP", "VP|<>"))),
         (0, rule("L-VP", sdcp_clause(None, 0), ())),
         (5, rule("VP|<>", sdcp_clause(None, 0), ()))]
@@ -78,3 +79,27 @@ def test_pipeline():
     parse.init(*([r] for r in range(6)))
     parse.fill_chart()
     assert AutoTree(parse.get_best()) == AutoTree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
+
+
+def test_corpus_extractor():
+    from discodop.tree import DiscTree
+    c = corpus_extractor([DiscTree(AutoTree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))"), "where the survey was carried out".split())])
+    c.read()
+
+    assert c.goldrules == [list(range(6))]
+    assert c.goldtrees == [DiscTree(AutoTree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))"), "where the survey was carried out".split())]
+    assert c.sentences == [tuple("where the survey was carried out".split())]
+    assert list(c.rules) == [
+        rule("L-VP", sdcp_clause(None, 0), ()),
+        rule("ROOT", sdcp_clause("SBAR+S", 2, push_idx=1), ("VP", "NP")),
+        rule("NP", sdcp_clause("NP", 0), ()),
+        rule("VP", sdcp_clause("VP", 1, push_idx=1), ("VP",)),
+        rule("VP", sdcp_clause("VP", 2, push_idx=1), ("L-VP", "VP|<>")),
+        rule("VP|<>", sdcp_clause(None, 0), ()),
+    ]
+    
+    parse = parser(grammar(list(c.rules)))
+    for rs, gold in zip(c.goldrules, c.goldtrees):
+        parse.init(*([r] for r in rs))
+        parse.fill_chart()
+        assert AutoTree(parse.get_best()) == gold

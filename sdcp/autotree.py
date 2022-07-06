@@ -1,14 +1,37 @@
-from discodop.tree import Tree
+from calendar import c
+from discodop.tree import Tree, ImmutableTree, ImmutableParentedTree
+
 
 class AutoTree(Tree):
-    def __init__(self, *args):
-        super().__init__(*args)
+    def __init__(self, label_or_str, children=None):
+        if children is None:
+            return
+        super().__init__(label_or_str, children)
         self.children.sort(
             key=lambda node: node._minleaf if isinstance(node, AutoTree) else node)
+        self.postags = {}
+        for i in range(len(self.children)):
+            if not isinstance(self[i], Tree):
+                continue
+            if len(self[i]) == 1 and not isinstance(self[(i,0)], Tree):
+                self.postags[self[(i,0)]] = self[i].label
+                self[i] = self[(i,0)]
+            else:
+                self.postags.update(self[i].postags)
+                self[i].postags = self.postags
         self._minleaf = next(
             (c._minleaf if isinstance(c, AutoTree) else c) for c in self.children)
 
+    def tree(self):
+        children = (
+            c.tree() if isinstance(c, AutoTree) else 
+                Tree(self.postags[c], [c]) if c in self.postags else c
+            for c in self.children
+        )
+        return Tree(self.label, children)
 
-def test_tree():
-    assert AutoTree("(S 0 1 2)") == AutoTree("(S 2 0 1)")
-    assert AutoTree("(SBAR+S (VP (VP 0 4 5) 3) (NP 1 2))") == AutoTree("(SBAR+S (NP 1 2) (VP 3 (VP 0 4 5)))")
+    def immutable(self):
+        return ImmutableTree(self.tree())
+
+    def parented(self):
+        return ImmutableParentedTree(self.tree())

@@ -106,6 +106,8 @@ class parser:
             for item, bt, w in new_elements:
                 if self.save_backtrace(item, bt, w):
                     queue.put(qitem(*item, w))
+            if lhs == self.grammar.root and positions == set(range(self.len)):
+                return
 
 
     def get_best(self, item = None, pushed: int = None):

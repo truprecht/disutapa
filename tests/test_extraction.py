@@ -27,7 +27,7 @@ def test_corpus_extractor():
         assert AutoTree(parse.get_best()) == gold
 
 def test_sample():
-    c = corpus_extractor("tests/sample.export", vertmarkov=999)
+    c = corpus_extractor("tests/sample.export", vertmarkov=1)
     c.read()
     assert len(c.goldtrees) == len(c.goldrules) == len(c.sentences) == 3
     

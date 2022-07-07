@@ -1,6 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 from .sdcp import grammar, rule, sdcp_clause
+from queue import PriorityQueue
 
 @dataclass
 class backtrace:
@@ -10,6 +11,15 @@ class backtrace:
 
     def as_tuple(self):
         return self.rid, self.child_leafs
+
+@dataclass(eq=False, order=False)
+class qitem:
+    lhs: str
+    leaves: set()
+    weight: float
+
+    def __lt__(self, other):
+        return self.weight < other.weight
 
 
 def gaps(positions):
@@ -48,8 +58,7 @@ class parser:
                 self.weight[(lhs, frozenset([i]))] = self.gap_panelty([])
 
 
-    def save_backtrace(self, item, backtrace):
-        weight = self.gap_panelty(gaps(item[1]))
+    def save_backtrace(self, item, backtrace, weight):
         if not item in self.weight or self.weight[item] > weight:
             self.weight[item] = weight
             self.chart[item] = backtrace
@@ -58,36 +67,45 @@ class parser:
 
 
     def fill_chart(self):
-        queue = list(self.chart)
-        while queue:
-            lhs, positions = queue.pop()
+        queue = PriorityQueue()
+        for item in self.chart:
+            queue.put(qitem(*item, 0))
+        while not queue.empty():
+            qi = queue.get_nowait()
+            lhs, positions = qi.lhs, qi.leaves
             new_elements = []
             for rid, i in self.unaries.get(lhs, []):
                 if i in positions:
                     continue
                 newpos = positions.union({i})
                 newlhs = self.grammar.rules[rid].lhs
-                new_elements.append(((newlhs, newpos), backtrace(rid, i, (positions,))))
+                weight = self.weight[(lhs, positions)] + self.gap_panelty(gaps(newpos))
+                new_elements.append(((newlhs, newpos), backtrace(rid, i, (positions,)), weight))
             for rid, i in self.from_left.get(lhs, []):
                 if i in positions:
                     continue
                 r = self.grammar.rules[rid]
                 for (rhs2, positions2) in self.chart:
-                    if rhs2 == r.rhs[1] and not i in positions2 and not positions2.intersection(positions):
+                    if rhs2 == r.rhs[1] and not i in positions2 \
+                            and not positions2.intersection(positions) \
+                            and min(positions) < min(positions2):
                         newpos = positions.union({i}).union(positions2)
-                        new_elements.append(((r.lhs, newpos), backtrace(rid, i, (positions, positions2))))
+                        weight = self.weight[(lhs, positions)] + self.weight[(rhs2, positions2)] + self.gap_panelty(gaps(newpos))
+                        new_elements.append(((r.lhs, newpos), backtrace(rid, i, (positions, positions2)), weight))
             for rid, i in self.from_right.get(lhs, []):
                 if i in positions:
                     continue
                 r = self.grammar.rules[rid]
-
                 for (rhs2, positions2) in self.chart:
-                    if rhs2 == r.rhs[0] and not i in positions2 and not positions2.intersection(positions):
+                    if rhs2 == r.rhs[0] and not i in positions2 \
+                            and not positions2.intersection(positions) \
+                            and min(positions2) < min(positions):
                         newpos = positions.union({i}).union(positions2)
-                        new_elements.append(((r.lhs, newpos), backtrace(rid, i, (positions2, positions))))
-            for item, bt in new_elements:
-                if self.save_backtrace(item, bt):
-                    queue.append(item)
+                        weight = self.weight[(lhs, positions)] + self.weight[(rhs2, positions2)] + self.gap_panelty(gaps(newpos))
+                        new_elements.append(((r.lhs, newpos), backtrace(rid, i, (positions2, positions)), weight))
+            for item, bt, w in new_elements:
+                if self.save_backtrace(item, bt, w):
+                    queue.put(qitem(*item, w))
 
 
     def get_best(self, item = None, pushed: int = None):

@@ -5,20 +5,20 @@ from sdcp.autotree import AutoTree
 
 def test_str_rule():
     rules = [
-        rule("L-VP", sdcp_clause(None, 0), ()),
-        rule("SBAR+S", sdcp_clause("SBAR+S", 2), ("VP", "NP")),
-        rule("NP", sdcp_clause("NP", 0), ()),
-        rule("VP", sdcp_clause("VP", 1), ("VP",)),
-        rule("VP", sdcp_clause("VP", 2), ("L-VP", "VP|<>")),
-        rule("VP|<>", sdcp_clause(None, 0), ()),
+        rule("L-VP", ()),
+        rule("SBAR+S", ("VP", "NP"), fn_node="SBAR+S"),
+        rule("NP", (), fn_node="NP"),
+        rule("VP", ("VP",), fn_node="VP"),
+        rule("VP", ("L-VP", "VP|<>"), fn_node="VP"),
+        rule("VP|<>", ()),
     ]
     assert [repr(r) for r in rules] ==  [
-        "rule(lhs='L-VP', fn=sdcp_clause(label=None, arity=0, push_idx=-1), rhs=())",
-        "rule(lhs='SBAR+S', fn=sdcp_clause(label='SBAR+S', arity=2, push_idx=1), rhs=('VP', 'NP'))",
-        "rule(lhs='NP', fn=sdcp_clause(label='NP', arity=0, push_idx=-1), rhs=())",
-        "rule(lhs='VP', fn=sdcp_clause(label='VP', arity=1, push_idx=-1), rhs=('VP',))",
-        "rule(lhs='VP', fn=sdcp_clause(label='VP', arity=2, push_idx=1), rhs=('L-VP', 'VP|<>'))",
-        "rule(lhs='VP|<>', fn=sdcp_clause(label=None, arity=0, push_idx=-1), rhs=())",
+        "rule('L-VP', ())",
+        "rule('SBAR+S', ('VP', 'NP'), fn_node='SBAR+S')",
+        "rule('NP', (), fn_node='NP')",
+        "rule('VP', ('VP',), fn_node='VP')",
+        "rule('VP', ('L-VP', 'VP|<>'), fn_node='VP')",
+        "rule('VP|<>', ())",
     ]
 
 
@@ -59,12 +59,12 @@ def test_sdcp_fn():
 
 def test_parser():
     rules = [
-        rule("L-VP", sdcp_clause(None, 0), ()),
-        rule("SBAR+S", sdcp_clause("SBAR+S", 2), ("VP", "NP")),
-        rule("NP", sdcp_clause("NP", 0), ()),
-        rule("VP", sdcp_clause("VP", 1), ("VP",)),
-        rule("VP", sdcp_clause("VP", 2), ("L-VP", "VP|<>")),
-        rule("VP|<>", sdcp_clause(None, 0), ()),
+        rule("L-VP", ()),
+        rule("SBAR+S", ("VP", "NP"), fn_node="SBAR+S"),
+        rule("NP", (), fn_node="NP"),
+        rule("VP", ("VP",), fn_node="VP"),
+        rule("VP", ("L-VP", "VP|<>"), fn_node="VP"),
+        rule("VP|<>", ()),
     ]
     parse = parser(grammar(rules, "SBAR+S"))
     parse.init(*([rid] for rid in range(6)))

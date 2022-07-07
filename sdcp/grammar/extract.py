@@ -7,7 +7,7 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
         if tree in exclude:
             return None
         lhs = override_lhs if override_lhs else f"L-{parent}"
-        return Tree((tree, rule(lhs, sdcp_clause(None, 0), ())), [])
+        return Tree((tree, rule(lhs, ())), [])
     lex = min(tree[1].leaves()) if isinstance(tree[1], Tree) else tree[1]
     exclude.add(lex)
     rules = []
@@ -20,7 +20,7 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
     nodestr = None if "|<" in tree.label else tree.label.split("^")[0]
     lhs = override_lhs if override_lhs else tree.label
     push_idx = 1 if len(rules) == 2 else (-1 if not isinstance(tree[1], Tree) else 0)
-    return Tree((lex, rule(lhs, sdcp_clause(nodestr, len(rhs), push_idx=push_idx), tuple(rhs))), rules)
+    return Tree((lex, rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx)), rules)
 
 
 def extract(tree: Tree, override_root: str = "ROOT"):

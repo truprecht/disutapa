@@ -18,14 +18,15 @@ class AutoTree(Tree):
                 self[i] = self[(i,0)]
             else:
                 self.postags.update(self[i].postags)
-                self[i].postags = self.postags
         self._minleaf = next(
             (c._minleaf if isinstance(c, AutoTree) else c) for c in self.children)
 
-    def tree(self):
+    def tree(self, override_postags: list[str]|dict[int,str] = None):
+        if not override_postags:
+            override_postags = self.postags
         children = (
-            c.tree() if isinstance(c, AutoTree) else 
-                Tree(self.postags[c], [c]) if c in self.postags else c
+            c.tree(override_postags) if isinstance(c, AutoTree) else 
+                Tree(override_postags[c], [c]) # if c in self.postags else c
             for c in self.children
         )
         return Tree(self.label, children)

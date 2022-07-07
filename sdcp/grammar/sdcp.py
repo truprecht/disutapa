@@ -29,11 +29,18 @@ class node_constructor:
 class sdcp_clause:
     label: str
     arity: int
-    push_idx: int = 1
+    push_idx: int = -1
+
+    def __post_init__(self):
+        # set default value of push_idx to -1 (keep) for arities 0,1
+        # and to 1 (push to right successor) for arity 2
+        if self.arity == 2 and self.push_idx == -1:
+            object.__setattr__(self, "push_idx", 1)
+
 
     def __call__(self, lex: int, pushed: int) -> Tuple[node_constructor, Tuple[int, ...]]:
         if self.push_idx == 0:
-            lex, pushed = pushed, lex
+            pushed, lex = lex, pushed
         match self.arity:
             case 2:
                 return node_constructor(self.label), (pushed, lex)

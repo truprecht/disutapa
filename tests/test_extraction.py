@@ -1,8 +1,15 @@
-from sdcp.grammar.extract import rule, sdcp_clause, extract, __extract_tree
+from sdcp.grammar.extract import rule, sdcp_clause, extract, __extract_tree, singleton
 from sdcp.grammar.parser import parser, grammar
 from sdcp.corpus import corpus_extractor
 from sdcp.autotree import AutoTree, Tree
 
+
+def test_singleton():
+    tree = AutoTree("(ROOT 0)")
+    assert singleton(tree) == ((rule("ROOT", (), fn_node=""),), ("ROOT",))
+
+    tree = AutoTree("(SBAR+S 0)")
+    assert singleton(tree) == ((rule("ROOT", (), fn_node="SBAR"),), ("S",))
 
 def test_extract():
     tree = AutoTree("(SBAR+S (VP (VP 0 (VP|<> 4 5)) 3) (NP 1 2))")
@@ -25,12 +32,13 @@ def test_extract():
 
 
 def test_corpus_extractor():
-    c = corpus_extractor([(AutoTree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))"), "where the survey was carried out".split())])
+    c = corpus_extractor([(Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))"), "where the survey was carried out".split())])
     c.read()
 
-    assert c.goldrules == [list(range(6))]
-    assert c.goldtrees == [AutoTree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")]
+    assert c.goldrules == [tuple(range(6))]
+    assert c.goldtrees == [Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))")]
     assert c.sentences == [tuple("where the survey was carried out".split())]
+    assert c.goldpos == [tuple("WRB PT NN VBD VBN RP".split())]
     assert list(c.rules) == [
         rule("L-VP", ()),
         rule("ROOT", ("VP", "NP"), fn_node="SBAR+S"),
@@ -41,10 +49,30 @@ def test_corpus_extractor():
     ]
     
     parse = parser(grammar(list(c.rules)))
-    for rs, gold in zip(c.goldrules, c.goldtrees):
+    for rs, gold, gpos in zip(c.goldrules, c.goldtrees, c.goldpos):
         parse.init(*([r] for r in rs))
         parse.fill_chart()
-        assert AutoTree(parse.get_best()) == gold
+        assert AutoTree(parse.get_best()).tree(override_postags=gpos) == gold
+
+    
+    c = corpus_extractor([(Tree("(ROOT (S ($. 0)))"), ".".split())])
+    c.read()
+
+    assert c.goldrules == [tuple(range(1))]
+    assert c.goldtrees == [Tree("(ROOT (S ($. 0)))")]
+    assert c.sentences == [tuple(".".split())]
+    assert c.goldpos == [tuple("$.".split())]
+    assert list(c.rules) == [
+        rule("ROOT", (), fn_node="ROOT+S"),
+    ]
+    
+    parse = parser(grammar(list(c.rules)))
+    for rs, gold, gpos in zip(c.goldrules, c.goldtrees, c.goldpos):
+        parse.init(*([r] for r in rs))
+        parse.fill_chart()
+        assert parse.get_best() == "(ROOT+S 0)"
+        assert AutoTree(parse.get_best()) == AutoTree("(ROOT+S 0)")
+        assert AutoTree(parse.get_best()).tree(override_postags=gpos) == gold
 
 def test_sample():
     c = corpus_extractor("tests/sample.export", vertmarkov=1)
@@ -52,11 +80,10 @@ def test_sample():
     assert len(c.goldtrees) == len(c.goldrules) == len(c.sentences) == 3
     
     parse = parser(grammar(list(c.rules)))
-    for rs, gold in zip(c.goldrules, c.goldtrees):
+    for rs, gold, pos in zip(c.goldrules, c.goldtrees, c.goldpos):
         parse.init(*([r] for r in rs))
         parse.fill_chart()
-        print(AutoTree(parse.get_best()), gold)
-        assert AutoTree(parse.get_best()) == gold
+        assert AutoTree(parse.get_best()).tree(override_postags=pos) == gold
 
 
 def test_derivations():
@@ -82,7 +109,7 @@ def test_derivations():
             Tree((2, rule("NP", (), fn_node="NP")), [])
         ]
     )
-    assert AutoTree(eval_derivation(__extract_tree(t, "ROOT", set()))) == AutoTree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
+    assert AutoTree(eval_derivation(__extract_tree(t, "ROOT", set()))) == AutoTree("(SBAR+S (VP (VP 0 4 5) 3) (NP 1 2))")
 
 
     t = AutoTree("(ROOT (DU (PP 0 1) (DU|<> 2 (SMAIN (NP 3 8) (PP 4 (NP 5 6))))) 7)")

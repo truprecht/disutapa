@@ -11,8 +11,7 @@ class node_constructor:
         childstrs = chain((str(i) for i in self.fixed_children if not i is None), children)
         childstrs = ' '.join(childstrs)
         if self.label:
-            for lab in reversed(self.label.split("+")):
-                childstrs = f"({lab} {childstrs})"
+            childstrs = f"({self.label} {childstrs})"                
         return childstrs
 
     def __str__(self):

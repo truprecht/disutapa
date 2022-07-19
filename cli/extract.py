@@ -3,7 +3,6 @@ from argparse import ArgumentParser
 from datasets import Dataset, DatasetDict, Features, Value, ClassLabel, Sequence
 from tqdm import tqdm
 from sdcp.corpus import corpus_extractor
-from typing import Tuple
 
 @dataclass
 class ExtractionParameter:

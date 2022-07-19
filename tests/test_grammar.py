@@ -54,7 +54,7 @@ def test_sdcp_fn():
     assert consts[4][0]("0", "4 5") == "(VP 0 4 5)"
     assert consts[3][0]("(VP 0 4 5)") == "(VP 3 (VP 0 4 5))"
     assert consts[2][0]() == "(NP 1 2)"
-    assert consts[1][0]("(VP 3 (VP 0 4 5))", "(NP 1 2)") == "(SBAR (S (VP 3 (VP 0 4 5)) (NP 1 2)))"
+    assert consts[1][0]("(VP 3 (VP 0 4 5))", "(NP 1 2)") == "(SBAR+S (VP 3 (VP 0 4 5)) (NP 1 2))"
 
 
 def test_parser():
@@ -69,7 +69,7 @@ def test_parser():
     parse = parser(grammar(rules, "SBAR+S"))
     parse.init(*([rid] for rid in range(6)))
     parse.fill_chart()
-    assert AutoTree(parse.get_best()) == AutoTree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
+    assert AutoTree(parse.get_best()) == AutoTree("(SBAR+S (VP (VP 0 4 5) 3) (NP 1 2))")
 
 
 def test_pipeline():
@@ -78,4 +78,4 @@ def test_pipeline():
     parse = parser(grammar(rules))
     parse.init(*([r] for r in range(6)))
     parse.fill_chart()
-    assert AutoTree(parse.get_best()) == AutoTree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
+    assert AutoTree(parse.get_best()) == AutoTree("(SBAR+S (VP (VP 0 4 5) 3) (NP 1 2))")

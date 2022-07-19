@@ -2,6 +2,11 @@ from discodop.tree import Tree
 from .sdcp import rule, sdcp_clause
 
 
+def singleton(tree: Tree, nonterminal: str = "ROOT"):
+    label, pos = "+".join(tree.label.split("+")[:-1]), tree.label.split("+")[-1]
+    return (rule(nonterminal, (), fn_node=label),), (pos,)
+
+
 def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = None):
     if not isinstance(tree, Tree):
         if tree in exclude:

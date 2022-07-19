@@ -4,6 +4,7 @@ from sdcp.grammar.parser import parser
 from sdcp.autotree import AutoTree
 from discodop.eval import Evaluator, readparam
 from discodop.tree import ParentedTree
+from tqdm import tqdm
 
 from datasets import DatasetDict
 
@@ -13,13 +14,13 @@ def main(config: Namespace):
     data = DatasetDict.load_from_disk(config.corpus)["dev"]
     p = parser(grammar([eval(str_hr) for str_hr in data.features["supertag"].feature.names]))
     idtopos = data.features["pos"].feature.names
-    for i, sample in enumerate(data):
+    for i, sample in tqdm(enumerate(data)):
         p.init(
             *([i] for i in sample["supertag"]),
         )
         p.fill_chart()
-        prediction = AutoTree(p.get_best())
-        print(prediction.tree([idtopos[i] for i in sample["pos"]]))
+        prediction = p.get_best()
+        prediction = AutoTree(prediction)
         evaluator.add(i, ParentedTree.convert(AutoTree(sample["tree"]).tree([idtopos[i] for i in sample["pos"]])), list(sample["sentence"]),
                 ParentedTree.convert(prediction.tree([idtopos[i] for i in sample["pos"]])), list(sample["sentence"]))
     print(evaluator.summary())

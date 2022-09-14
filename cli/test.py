@@ -1,6 +1,6 @@
 from argparse import ArgumentParser, Namespace
 from sdcp.grammar.sdcp import rule, sdcp_clause, grammar
-from sdcp.grammar.parser import parser
+from sdcp.grammar.parser import parser, TopdownParser, LeftCornerParser
 from sdcp.autotree import AutoTree
 from discodop.eval import Evaluator, readparam
 from discodop.tree import ParentedTree
@@ -12,9 +12,10 @@ from datasets import DatasetDict
 def main(config: Namespace):
     evaluator = Evaluator(readparam(config.param))
     data = DatasetDict.load_from_disk(config.corpus)["dev"]
-    p = parser(grammar([eval(str_hr) for str_hr in data.features["supertag"].feature.names]))
+    p = LeftCornerParser(grammar([eval(str_hr) for str_hr in data.features["supertag"].feature.names]))
     idtopos = data.features["pos"].feature.names
-    for i, sample in tqdm(enumerate(data)):
+    for i, sample in enumerate(data):
+        print("starting", i, "with sentence len", len(sample["sentence"]))
         p.init(
             *([i] for i in sample["supertag"]),
         )

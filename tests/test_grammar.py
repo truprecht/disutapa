@@ -1,5 +1,5 @@
 from sdcp.grammar.sdcp import sdcp_clause, node_constructor, rule, grammar
-from sdcp.grammar.parser import parser
+from sdcp.grammar.parser import TopdownParser, parser, LeftCornerParser
 from sdcp.grammar.extract import extract
 from sdcp.autotree import AutoTree
 
@@ -69,6 +69,37 @@ def test_parser():
     parse = parser(grammar(rules, "SBAR+S"))
     parse.init(*([rid] for rid in range(6)))
     parse.fill_chart()
+    assert AutoTree(parse.get_best()) == AutoTree("(SBAR+S (VP (VP 0 4 5) 3) (NP 1 2))")
+
+
+def test_td_parser():
+    rules = [
+        rule("L-VP", ()),
+        rule("SBAR+S", ("VP", "NP"), fn_node="SBAR+S"),
+        rule("NP", (), fn_node="NP"),
+        rule("VP", ("VP",), fn_node="VP"),
+        rule("VP", ("L-VP", "VP|<>"), fn_node="VP"),
+        rule("VP|<>", ()),
+    ]
+    parse = TopdownParser(grammar(rules, "SBAR+S"))
+    parse.init(*([rid] for rid in range(6)))
+    parse.fill_chart()
+    assert AutoTree(parse.get_best()) == AutoTree("(SBAR+S (VP (VP 0 4 5) 3) (NP 1 2))")
+
+
+def test_lc_parser():
+    rules = [
+        rule("L-VP", ()),
+        rule("SBAR+S", ("VP", "NP"), fn_node="SBAR+S"),
+        rule("NP", (), fn_node="NP"),
+        rule("VP", ("VP",), fn_node="VP"),
+        rule("VP", ("L-VP", "VP|<>"), fn_node="VP"),
+        rule("VP|<>", ()),
+    ]
+    parse = LeftCornerParser(grammar(rules, "SBAR+S"))
+    parse.init(*([rid] for rid in range(6)))
+    parse.fill_chart()
+    print(parse.chart)
     assert AutoTree(parse.get_best()) == AutoTree("(SBAR+S (VP (VP 0 4 5) 3) (NP 1 2))")
 
 

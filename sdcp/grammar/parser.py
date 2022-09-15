@@ -26,8 +26,19 @@ class qitem:
     def __lt__(self, other):
         return self.weight < other.weight
 
+def spans(positions):
+    if not positions: return
+    ps = sorted(positions)
+    start, end = ps[0], ps[0]
+    for p in ps[1:]:
+        if p == end+1:
+            end = p
+        else:
+            yield start, end
+            start, end = p, p
+    yield start, end
 
-def gaps(positions):
+def gaplens(positions):
     ps = sorted(positions)
     for (last, next) in zip(ps[:-1], ps[1:]):
         if last+1 != next:
@@ -45,11 +56,11 @@ def gapscore(positions, totallen: int):
     return score
 
 def numgaps(positions, totallen: int):
-    return sum(1 for _ in gaps(positions))
+    return sum(1 for _ in gaplens(positions))
 
 def relative_gaps(positions, totallen: int):
     total_span = max(positions)-min(positions)+1
-    total_gaps = sum(gaps(positions))
+    total_gaps = sum(gaplens(positions))
     return total_gaps/total_span
 
 
@@ -207,6 +218,39 @@ class TopdownParser:
         return tree
 
 
+# @dataclass(init=False, frozen=True)
+# class ItemFilter:
+#     hard: bool
+#     leftmost: int
+#     rightmost: Optional[int]
+
+#     def __init__(self, leftmost: int, soft: bool = False, rightmost: Optional[int] = None):
+#         self.hard = soft
+#         self.leftmost = leftmost
+#         self.rightmost = rightmost
+
+#     def compatible(self, positions: set, last: bool):
+#         mip, map = min(positions), max(positions)
+#         mifits = mip == self.leftmost or \
+#             (not self.hard and mip > self.leftmost)
+#         mafits = not last or self.rightmost is None or map == self.rightmost
+#         return mafits and mifits
+
+#     def next(self, positions: set):
+#         if not positions: return self
+#         spanit = iter(spans(positions))
+#         start, end = next(spanit)
+#         leftmost = end+1 if start == self.leftmost else self.leftmost
+#         soft = soft or (start == leftmost and self.rightmost is None)
+#         if not self.rightmost is None:
+#             for start, end in spanit:
+#                 continue
+#             rightmost = start-1 if end == self.rightmost else self.rightmost
+#         else:
+#             rightmost = None
+#         return ItemFilter(leftmost, soft, rightmost)
+
+
 @dataclass(frozen=True)
 class ActiveItem:
     lhs: str
@@ -214,6 +258,9 @@ class ActiveItem:
     leaves: set
     lex: int
     pushed: Optional[int]
+    # successorfilter: ItemFilter
+    leftmost: int
+
 
 @dataclass(frozen=True)
 class PassiveItem:
@@ -236,25 +283,31 @@ class LeftCornerParser:
                 self.from_top.setdefault(self.grammar.rules[rid].lhs, []).append((rid, i))
 
 
-    def _initial_items(self, lhs, push):
+    def _initial_items(self, lhs: str, push: Optional[int], leftmost: int):
         for (nrid, nlex) in self.from_top.get(lhs, []):
             rule = self.grammar.rules[nrid]
             _, pushes = rule.fn(nlex, push)
             nleaves = frozenset(l for l in (nlex, push) if not l is None and not l in pushes)
+            if nleaves and min(nleaves) < leftmost: continue
+            if nleaves and min(nleaves) == leftmost:
+                leftmost = leftmost+1
             if not rule.rhs:
                 yield PassiveItem(lhs, nleaves, push), backtrace(nrid, nlex, ())
             else:
-                yield ActiveItem(lhs, tuple(zip(rule.rhs, pushes)), nleaves, nlex, push), (nrid,)
+                yield ActiveItem(lhs, tuple(zip(rule.rhs, pushes)), nleaves, nlex, push, leftmost), (nrid,)
 
 
     def _active_step(self, actives, passives):
         for aitem, abt in actives:
             for pitem in passives:
-                if not aitem.leaves.isdisjoint(pitem.leaves): continue
+                if not aitem.leaves.isdisjoint(pitem.leaves) or \
+                        min(pitem.leaves) < aitem.leftmost:
+                    continue
                 nleaves = aitem.leaves.union(pitem.leaves)
                 nbacktrace = abt + ((pitem.leaves, pitem.pushed),)
                 if len(aitem.successors) > 1:
-                    yield ActiveItem(aitem.lhs, aitem.successors[1:], nleaves, aitem.lex, aitem.pushed), nbacktrace
+                    nleftmost = next(spans(nleaves))[1]+1
+                    yield ActiveItem(aitem.lhs, aitem.successors[1:], nleaves, aitem.lex, aitem.pushed, nleftmost), nbacktrace
                 else:
                     rid, *nlvs = nbacktrace
                     yield PassiveItem(aitem.lhs, nleaves, aitem.pushed), backtrace(rid, aitem.lex, nlvs)
@@ -264,15 +317,14 @@ class LeftCornerParser:
         actives = {}
         passives = {}
         backtraces = {}
-        initialized = {(self.grammar.root, None)}
+        initialized = {(self.grammar.root, None): 0}
         seen = set()
-        queue = list(self._initial_items(self.grammar.root, None))
+        queue = list(self._initial_items(self.grammar.root, None, 0))
         while queue:
             item, backtrace = queue.pop(0)
             if item in seen:
                 continue
             seen.add(item)
-            print("item:", item, backtrace)
             match item:
                 case PassiveItem(lhs, leaves, push):
                     backtraces[(lhs, leaves, push)] = backtrace
@@ -282,7 +334,6 @@ class LeftCornerParser:
                         break
 
                     passives.setdefault((lhs, push), []).append(item)
-                    print("completing atives:", actives.get((lhs, push), []))
                     queue.extend(filter(
                         lambda i: not i[0] in seen,
                         self._active_step(
@@ -291,12 +342,11 @@ class LeftCornerParser:
                         )
                     ))
 
-                case ActiveItem(lhs, successors, leaves, lex, pushed):
-                    if not successors[0] in initialized:
-                        initialized.add(successors[0])
-                        queue.extend(self._initial_items(*successors[0]))
+                case ActiveItem(lhs, successors, leaves, lex, pushed, lm):
+                    if initialized.get(successors[0], self.len) > lm:
+                        initialized[successors[0]] = lm
+                        queue.extend(self._initial_items(*successors[0], lm))
                     else:
-                        print("completing active with", passives.get(successors[0], []))
                         queue.extend(filter(
                             lambda i: not i[0] in seen,
                             self._active_step(
@@ -305,9 +355,6 @@ class LeftCornerParser:
                             )
                         ))
                     actives.setdefault(successors[0], []).append((item, backtrace))
-            print("queue:", queue)
-            print("actives:", actives)
-            print("passives:", passives)
         self.chart = backtraces
 
 

@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Callable
+from optparse import Option
+from typing import Callable, Optional, Tuple
 
 from responses import Call
 from .sdcp import grammar, rule, sdcp_clause
@@ -206,6 +207,21 @@ class TopdownParser:
         return tree
 
 
+@dataclass(frozen=True)
+class ActiveItem:
+    lhs: str
+    successors: Tuple[Tuple[str, Optional[int]]]
+    leaves: set
+    lex: int
+    pushed: Optional[int]
+
+@dataclass(frozen=True)
+class PassiveItem:
+    lhs: str
+    leaves: set
+    pushed: Optional[int]
+
+
 class LeftCornerParser:
     def __init__(self, grammar: grammar, score: Callable = numgaps):
         self.grammar = grammar
@@ -219,27 +235,29 @@ class LeftCornerParser:
             for rid in rules:
                 self.from_top.setdefault(self.grammar.rules[rid].lhs, []).append((rid, i))
 
-    def _active_step(self, actives, passives):
-        for (rid, lex, leaves, push, i), obacktrace in actives:
-            rule = self.grammar.rules[rid]
-            for (_, nleaves, _, npush) in passives:
-                if not leaves.isdisjoint(nleaves): continue
-                nnleaves = leaves.union(nleaves)
-                nbacktrace = obacktrace + ((nleaves, npush),)
-                if i+1 == len(rule.as_tuple()[1]):
-                    yield (rule.lhs, nnleaves, lex, push), backtrace(rid, lex, nbacktrace)
-                else:
-                    yield (rid, lex, nnleaves, push, i+1), nbacktrace
-
 
     def _initial_items(self, lhs, push):
         for (nrid, nlex) in self.from_top.get(lhs, []):
-            _, pushes = self.grammar.rules[nrid].fn(nlex, push)
+            rule = self.grammar.rules[nrid]
+            _, pushes = rule.fn(nlex, push)
             nleaves = frozenset(l for l in (nlex, push) if not l is None and not l in pushes)
-            if len(self.grammar.rules[nrid].rhs) == 0:
-                yield (lhs, nleaves, nlex, push), backtrace(nrid, nlex, ())
+            if not rule.rhs:
+                yield PassiveItem(lhs, nleaves, push), backtrace(nrid, nlex, ())
             else:
-                yield (nrid, nlex, nleaves, push, 0), ()
+                yield ActiveItem(lhs, tuple(zip(rule.rhs, pushes)), nleaves, nlex, push), (nrid,)
+
+
+    def _active_step(self, actives, passives):
+        for aitem, abt in actives:
+            for pitem in passives:
+                if not aitem.leaves.isdisjoint(pitem.leaves): continue
+                nleaves = aitem.leaves.union(pitem.leaves)
+                nbacktrace = abt + ((pitem.leaves, pitem.pushed),)
+                if len(aitem.successors) > 1:
+                    yield ActiveItem(aitem.lhs, aitem.successors[1:], nleaves, aitem.lex, aitem.pushed), nbacktrace
+                else:
+                    rid, *nlvs = nbacktrace
+                    yield PassiveItem(aitem.lhs, nleaves, aitem.pushed), backtrace(rid, aitem.lex, nlvs)
 
 
     def fill_chart(self):
@@ -247,33 +265,46 @@ class LeftCornerParser:
         passives = {}
         backtraces = {}
         initialized = {(self.grammar.root, None)}
+        seen = set()
         queue = list(self._initial_items(self.grammar.root, None))
         while queue:
-            item, backtrace = queue.pop()
+            item, backtrace = queue.pop(0)
+            if item in seen:
+                continue
+            seen.add(item)
             print("item:", item, backtrace)
             match item:
-                case (lhs, leaves, lex, push):
-                    backtraces.setdefault((lhs, leaves, push), []).append(backtrace)
+                case PassiveItem(lhs, leaves, push):
+                    backtraces[(lhs, leaves, push)] = backtrace
+                    if lhs == self.grammar.root and \
+                            leaves == frozenset(range(self.len)) and \
+                            push is None:
+                        break
+
                     passives.setdefault((lhs, push), []).append(item)
                     print("completing atives:", actives.get((lhs, push), []))
-                    queue.extend(self._active_step(
-                        actives.get((lhs, push), []),
-                        [item],
+                    queue.extend(filter(
+                        lambda i: not i[0] in seen,
+                        self._active_step(
+                            actives.get((lhs, push), []),
+                            [item],
+                        )
                     ))
 
-                case (rid, lex, leaves, push, i):
-                    rule = self.grammar.rules[rid]
-                    _, ps = rule.fn(lex, push)
-                    if not (rule.rhs[i], ps[i]) in initialized:
-                        initialized.add((rule.rhs[i], ps[i]))
-                        queue.extend(self._initial_items(rule.rhs[i], ps[i]))
+                case ActiveItem(lhs, successors, leaves, lex, pushed):
+                    if not successors[0] in initialized:
+                        initialized.add(successors[0])
+                        queue.extend(self._initial_items(*successors[0]))
                     else:
-                        print("completing active with", passives.get((rule.rhs[i], ps[i]), []))
-                        queue.extend(self._active_step(
-                            [(item, backtrace)],
-                            passives.get((rule.rhs[i], ps[i]), [])
+                        print("completing active with", passives.get(successors[0], []))
+                        queue.extend(filter(
+                            lambda i: not i[0] in seen,
+                            self._active_step(
+                                [(item, backtrace)],
+                                passives.get(successors[0], [])
+                            )
                         ))
-                    actives.setdefault((rule.rhs[i], ps[i]), []).append((item, backtrace))
+                    actives.setdefault(successors[0], []).append((item, backtrace))
             print("queue:", queue)
             print("actives:", actives)
             print("passives:", passives)
@@ -283,7 +314,7 @@ class LeftCornerParser:
     def get_best(self, item = None, pushed: int = None):
         if item is None:
             item = self.grammar.root, frozenset(range(0,self.len)), None
-        bt = self.chart[item][0]
+        bt = self.chart[item]
         fn, push = self.grammar.rules[bt.rid].fn(bt.leaf, pushed)
         match bt.as_tuple():
             case (rid, ()):

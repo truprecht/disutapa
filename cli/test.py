@@ -1,6 +1,6 @@
 from argparse import ArgumentParser, Namespace
 from sdcp.grammar.sdcp import rule, sdcp_clause, grammar
-from sdcp.grammar.parser import parser, TopdownParser, LeftCornerParser
+from sdcp.grammar.parser import parser, TopdownParser, LeftCornerParser, spans
 from sdcp.autotree import AutoTree
 from discodop.eval import Evaluator, readparam
 from discodop.tree import ParentedTree
@@ -15,7 +15,6 @@ def main(config: Namespace):
     p = LeftCornerParser(grammar([eval(str_hr) for str_hr in data.features["supertag"].feature.names]))
     idtopos = data.features["pos"].feature.names
     for i, sample in enumerate(data):
-        print("starting", i, "with sentence len", len(sample["sentence"]))
         p.init(
             *([i] for i in sample["supertag"]),
         )

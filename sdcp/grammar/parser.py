@@ -211,39 +211,6 @@ class TopdownParser:
         return tree
 
 
-# @dataclass(init=False, frozen=True)
-# class ItemFilter:
-#     hard: bool
-#     leftmost: int
-#     rightmost: Optional[int]
-
-#     def __init__(self, leftmost: int, soft: bool = False, rightmost: Optional[int] = None):
-#         self.hard = soft
-#         self.leftmost = leftmost
-#         self.rightmost = rightmost
-
-#     def compatible(self, positions: set, last: bool):
-#         mip, map = min(positions), max(positions)
-#         mifits = mip == self.leftmost or \
-#             (not self.hard and mip > self.leftmost)
-#         mafits = not last or self.rightmost is None or map == self.rightmost
-#         return mafits and mifits
-
-#     def next(self, positions: set):
-#         if not positions: return self
-#         spanit = iter(spans(positions))
-#         start, end = next(spanit)
-#         leftmost = end+1 if start == self.leftmost else self.leftmost
-#         soft = soft or (start == leftmost and self.rightmost is None)
-#         if not self.rightmost is None:
-#             for start, end in spanit:
-#                 continue
-#             rightmost = start-1 if end == self.rightmost else self.rightmost
-#         else:
-#             rightmost = None
-#         return ItemFilter(leftmost, soft, rightmost)
-
-
 @dataclass(frozen=True)
 class ActiveItem:
     lhs: str
@@ -274,22 +241,22 @@ class qelement:
     bt: backtrace
     weight: float
 
-    def __init__(self, item, bt):
+    def __init__(self, item, bt, w = None):
         self.item = item
         self.bt = bt
-        self.weight = item.weight()
+        self.weight = item.weight() if w is None else w
 
     def __gt__(self, other):
         return self.weight > other.weight
 
     def tup(self):
-        return self.item, self.bt
+        return self.item, self.bt, self.weight
 
 
 class LeftCornerParser:
-    def __init__(self, grammar: grammar, score: Callable = numgaps):
+    def __init__(self, grammar: grammar, gamma: float = 0.5):
         self.grammar = grammar
-        self.score = score
+        self.gamma = gamma
 
 
     def init(self, *rules_per_position):
@@ -308,14 +275,14 @@ class LeftCornerParser:
             nleaves = frozenset(l for l in (nlex, push) if not l is None and not l in pushes)
             nleftmost = leftmost+1 if nleaves and min(nleaves) == leftmost else leftmost
             if not rule.rhs:
-                yield qelement(PassiveItem(lhs, nleaves, push), backtrace(nrid, nlex, ()))
+                yield qelement(PassiveItem(lhs, nleaves, push), backtrace(nrid, nlex, ()), numgaps(nleaves))
             else:
-                yield qelement(ActiveItem(lhs, tuple(zip(rule.rhs, pushes)), nleaves, nlex, push, leftmost), (nrid,))
+                yield qelement(ActiveItem(lhs, tuple(zip(rule.rhs, pushes)), nleaves, nlex, push, nleftmost), (nrid,), 0)
 
 
     def _active_step(self, actives, passives):
-        for aitem, abt in actives:
-            for pitem in passives:
+        for aitem, abt, aw in actives:
+            for pitem, pw in passives:
                 if not aitem.leaves.isdisjoint(pitem.leaves) or \
                         min(pitem.leaves) < aitem.leftmost:
                     continue
@@ -323,10 +290,10 @@ class LeftCornerParser:
                 nbacktrace = abt + ((pitem.leaves, pitem.pushed),)
                 if len(aitem.successors) > 1:
                     nleftmost = next(spans(nleaves))[1]+1
-                    yield qelement(ActiveItem(aitem.lhs, aitem.successors[1:], nleaves, aitem.lex, aitem.pushed, nleftmost), nbacktrace)
+                    yield qelement(ActiveItem(aitem.lhs, aitem.successors[1:], nleaves, aitem.lex, aitem.pushed, nleftmost), nbacktrace, pw)
                 else:
                     rid, *nlvs = nbacktrace
-                    yield qelement(PassiveItem(aitem.lhs, nleaves, aitem.pushed), backtrace(rid, aitem.lex, nlvs))
+                    yield qelement(PassiveItem(aitem.lhs, nleaves, aitem.pushed), backtrace(rid, aitem.lex, nlvs), self.gamma*(aw+pw) + numgaps(nleaves))
 
 
     def fill_chart(self):
@@ -339,7 +306,7 @@ class LeftCornerParser:
         for i in self._initial_items(self.grammar.root, None, 0):
             queue.put(i)
         while not queue.empty():
-            item, backtrace = queue.get_nowait().tup()
+            item, backtrace, w = queue.get_nowait().tup()
             if item in seen:
                 continue
             seen.add(item)
@@ -351,8 +318,8 @@ class LeftCornerParser:
                             push is None:
                         break
 
-                    passives.setdefault((lhs, push), []).append(item)
-                    for it in self._active_step(actives.get((lhs, push), []), [item]):
+                    passives.setdefault((lhs, push), []).append((item, w))
+                    for it in self._active_step(actives.get((lhs, push), []), [(item, w)]):
                         if not it.item in seen:
                             queue.put(it)
 
@@ -361,10 +328,10 @@ class LeftCornerParser:
                         initialized[successors[0]] = lm
                         for i in self._initial_items(*successors[0], lm):
                             queue.put(i)
-                    for it in self._active_step([(item, backtrace)], passives.get(successors[0], [])):
+                    for it in self._active_step([(item, backtrace, w)], passives.get(successors[0], [])):
                         if not it.item in seen:
                             queue.put(it)
-                    actives.setdefault(successors[0], []).append((item, backtrace))
+                    actives.setdefault(successors[0], []).append((item, backtrace, w))
         self.chart = backtraces
 
 

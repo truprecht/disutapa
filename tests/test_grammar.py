@@ -99,7 +99,6 @@ def test_lc_parser():
     parse = LeftCornerParser(grammar(rules, "SBAR+S"))
     parse.init(*([rid] for rid in range(6)))
     parse.fill_chart()
-    print(parse.chart)
     assert AutoTree(parse.get_best()) == AutoTree("(SBAR+S (VP (VP 0 4 5) 3) (NP 1 2))")
 
 

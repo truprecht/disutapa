@@ -19,7 +19,6 @@ def main(config: Namespace):
             *([i] for i in sample["supertag"]),
         )
         p.fill_chart()
-        print("chart filled", flush=True)
         prediction = p.get_best()
         prediction = AutoTree(prediction)
         evaluator.add(i, ParentedTree.convert(AutoTree(sample["tree"]).tree([idtopos[i] for i in sample["pos"]])), list(sample["sentence"]),

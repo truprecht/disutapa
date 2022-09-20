@@ -1,5 +1,5 @@
-from sdcp.grammar.extract import rule, sdcp_clause, extract, __extract_tree, singleton
-from sdcp.grammar.parser import parser, grammar
+from sdcp.grammar.extract import rule, extract, __extract_tree, singleton
+from sdcp.grammar.parser import LeftCornerParser, grammar
 from sdcp.corpus import corpus_extractor
 from sdcp.autotree import AutoTree, Tree
 
@@ -48,7 +48,7 @@ def test_corpus_extractor():
         rule("VP|<VBN,RP>", ()),
     ]
     
-    parse = parser(grammar(list(c.rules)))
+    parse = LeftCornerParser(grammar(list(c.rules)))
     for rs, gold, gpos in zip(c.goldrules, c.goldtrees, c.goldpos):
         parse.init(*([r] for r in rs))
         parse.fill_chart()
@@ -66,7 +66,7 @@ def test_corpus_extractor():
         rule("ROOT", (), fn_node="ROOT+S"),
     ]
     
-    parse = parser(grammar(list(c.rules)))
+    parse = LeftCornerParser(grammar(list(c.rules)))
     for rs, gold, gpos in zip(c.goldrules, c.goldtrees, c.goldpos):
         parse.init(*([r] for r in rs))
         parse.fill_chart()
@@ -79,7 +79,7 @@ def test_sample():
     c.read()
     assert len(c.goldtrees) == len(c.goldrules) == len(c.sentences) == 3
     
-    parse = parser(grammar(list(c.rules)))
+    parse = LeftCornerParser(grammar(list(c.rules)))
     for rs, gold, pos in zip(c.goldrules, c.goldtrees, c.goldpos):
         parse.init(*([r] for r in rs))
         parse.fill_chart()

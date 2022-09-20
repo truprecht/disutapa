@@ -1,12 +1,16 @@
+from ctypes import Union
 from dataclasses import dataclass, field
 from optparse import Option
-from typing import Callable, Optional, Tuple
+from typing import Callable, Iterable, Optional, Tuple
 
 from responses import Call
 from .sdcp import grammar, rule, sdcp_clause
 from queue import PriorityQueue
 from itertools import product
 from discodop.tree import Tree
+from bitarray import frozenbitarray
+from bitarray.util import count_and
+from collections import defaultdict
 
 @dataclass
 class backtrace:
@@ -212,39 +216,185 @@ class TopdownParser:
 
 
 @dataclass(frozen=True)
+class Spans:
+    tups: Tuple[Tuple[int, int]]
+
+    # def __contains__(self, position: int) -> bool:
+    #     return any(l <= position <= r for l,r in self.tups)
+
+    def isdisjoint(self, other: Optional["Spans"]) -> bool:
+        if other is None:
+            return True
+        ospans = iter(other.tups)
+        ole, ori = next(ospans)
+        for l, r in self.tups:
+            while ori < l:
+                if not (m := next(ospans, None)) is None:
+                    ole, ori = m
+                else:
+                    return True
+            if r >= ole: return False
+        return True
+
+    @classmethod
+    def _addspan(cls, l: list[int], s: Tuple[int, int]):
+        if not l or l[-1][1]+1 < s[0]:
+            l.append(s)
+            return
+        l[-1] = (l[-1][0], s[1])
+
+    def union(self, other: Optional["Spans"]) -> bool:
+        if other is None:
+            return self
+        spans = []
+        ospans = iter(other.tups)
+        sspans = iter(self.tups)
+        ole, ori = next(ospans)
+        for l, r in sspans:
+            while ole < l:
+                self.__class__._addspan(spans, (ole, ori))
+                if not (m := next(ospans, None)) is None:
+                    ole, ori = m
+                else:
+                    self.__class__._addspan(spans, (l,r))
+                    spans.extend(sspans)
+                    return Spans(tuple(spans))
+            self.__class__._addspan(spans, (l,r))
+        self.__class__._addspan(spans, (ole, ori))
+        spans.extend(ospans)
+        return Spans(tuple(spans))
+
+    def leftmost(self) -> int:
+        return self.tups[0][0]
+
+    def firstgap(self) -> int:
+        return self.tups[0][1]+1
+
+    @classmethod
+    def fromit(cls, ps: Iterable[int]):
+        obj = None
+        for p in ps:
+            news = cls(((p,p),))
+            if obj is None:
+                obj = news
+                continue
+            obj = obj.union(news)
+        return obj
+
+    def numgaps(self):
+        return len(self.tups)-1
+
+    def __iter__(self):
+        return (i for r in self.tups for i in range(r[0], r[1]+1))
+
+a01 = frozenbitarray('01')
+a1 = frozenbitarray('1')
+a0 = frozenbitarray('0')
+@dataclass(frozen=True)
+class BitSpan:
+    leaves: frozenbitarray
+    leftmost: int = field(init=False, repr=False, hash=False, compare=False)
+
+    def __post_init__(self):
+        self.__dict__["leftmost"] = self._leftmost()
+
+    def isdisjoint(self, other: "BitSpan") -> bool:
+        return count_and(self.leaves, other.leaves) == 0
+
+    def union(self, other: "BitSpan") -> "BitSpan":
+        return BitSpan(self.leaves | other.leaves)
+
+    def _leftmost(self) -> int:
+        return self.leaves.find(a1)
+
+    def firstgap(self) -> int:
+        if (m := self.leaves[self.leftmost:].find(a0)) != -1:
+            return self.leftmost+m
+        return len(self.leaves)
+
+    @classmethod
+    def fromit(cls, ps: Iterable[int], len: int):
+        bv = [False] * len
+        for p in ps:
+            bv[p] = True
+        return cls(frozenbitarray(bv))
+
+    def numgaps(self):
+        return sum(1 for _ in self.leaves[self.leftmost:].itersearch(a01))
+
+    def __bool__(self):
+        return self.leaves.any()
+
+    def __iter__(self):
+        return (i for i,b in enumerate(self.leaves) if b)
+
+    def __str__(self):
+        return str(self.leaves)
+
+    def __repr__(self) -> str:
+        return str(self.leaves)
+
+
+
+@dataclass(frozen=True, init=False)
+class SetSpans:
+    positions: frozenset[int]
+
+    def __init__(self, s):
+        if isinstance(s, SetSpans):
+            s = s.positions
+        self.__dict__["positions"] = s
+
+    def isdisjoint(self, other: Optional["SetSpans"]) -> bool:
+        return self.positions.isdisjoint(other.positions)
+
+    def union(self, other: Optional["SetSpans"]) -> bool:
+        return self.__class__(self.positions.union(other.positions))
+
+    def leftmost(self) -> int:
+        return min(self.positions)
+
+    def firstgap(self) -> int:
+        return next(spans(self.positions))[1]+1
+
+    @classmethod
+    def fromit(cls, ps: Iterable[int]):
+        return cls(frozenset(ps))
+
+    def numgaps(self):
+        return numgaps(self.positions)
+
+    def __bool__(self):
+        return bool(self.positions)
+
+    def __iter__(self):
+        return iter(sorted(self.positions))
+
+
+
+
+@dataclass(frozen=True)
 class ActiveItem:
     lhs: str
     successors: Tuple[Tuple[str, Optional[int]]]
-    leaves: set
+    leaves: Spans
     lex: int
     pushed: Optional[int]
-    # successorfilter: ItemFilter
     leftmost: int
-
-    def weight(self):
-        return numgaps(self.leaves)
 
 
 @dataclass(frozen=True)
 class PassiveItem:
     lhs: str
-    leaves: set
+    leaves: Spans
     pushed: Optional[int]
 
-    def weight(self):
-        return numgaps(self.leaves)
 
-
-@dataclass(eq=False, order=False, init=False)
+@dataclass(eq=False, order=False)
 class qelement:
     item: ActiveItem | PassiveItem
     bt: backtrace
     weight: float
-
-    def __init__(self, item, bt, w = None):
-        self.item = item
-        self.bt = bt
-        self.weight = item.weight() if w is None else w
 
     def __gt__(self, other):
         return self.weight > other.weight
@@ -265,6 +415,7 @@ class LeftCornerParser:
         for i, rules in enumerate(rules_per_position):
             for rid in rules:
                 self.from_top.setdefault(self.grammar.rules[rid].lhs, []).append((rid, i))
+        self._rootitem = PassiveItem(self.grammar.root, BitSpan(frozenbitarray([1]*self.len)), None)
 
 
     def _initial_items(self, lhs: str, push: Optional[int], leftmost: int):
@@ -272,28 +423,28 @@ class LeftCornerParser:
             if push == nlex or (not push is None and push < leftmost) or nlex < leftmost: continue
             rule = self.grammar.rules[nrid]
             _, pushes = rule.fn(nlex, push)
-            nleaves = frozenset(l for l in (nlex, push) if not l is None and not l in pushes)
-            nleftmost = leftmost+1 if nleaves and min(nleaves) == leftmost else leftmost
+            nleaves = BitSpan.fromit((l for l in (nlex, push) if not l is None and not l in pushes), self.len)
+            nleftmost = leftmost+1 if nleaves and nleaves.leftmost == leftmost else leftmost
             if not rule.rhs:
-                yield qelement(PassiveItem(lhs, nleaves, push), backtrace(nrid, nlex, ()), numgaps(nleaves))
+                yield qelement(PassiveItem(lhs, nleaves, push), backtrace(nrid, nlex, ()), nleaves.numgaps())
             else:
                 yield qelement(ActiveItem(lhs, tuple(zip(rule.rhs, pushes)), nleaves, nlex, push, nleftmost), (nrid,), 0)
 
 
-    def _active_step(self, actives, passives):
+    def _active_step(self, actives, pitems, ppush):
         for aitem, abt, aw in actives:
-            for pitem, pw in passives:
-                if not aitem.leaves.isdisjoint(pitem.leaves) or \
-                        min(pitem.leaves) < aitem.leftmost:
+            for pleaves, pitemid, pw in pitems:
+                if not pleaves.isdisjoint(aitem.leaves) or \
+                        pleaves.leftmost < aitem.leftmost:
                     continue
-                nleaves = aitem.leaves.union(pitem.leaves)
-                nbacktrace = abt + ((pitem.leaves, pitem.pushed),)
+                nleaves = pleaves.union(aitem.leaves)
+                nbacktrace = abt + (pitemid,)
                 if len(aitem.successors) > 1:
-                    nleftmost = next(spans(nleaves))[1]+1
+                    nleftmost = nleaves.firstgap()
                     yield qelement(ActiveItem(aitem.lhs, aitem.successors[1:], nleaves, aitem.lex, aitem.pushed, nleftmost), nbacktrace, pw)
                 else:
                     rid, *nlvs = nbacktrace
-                    yield qelement(PassiveItem(aitem.lhs, nleaves, aitem.pushed), backtrace(rid, aitem.lex, nlvs), self.gamma*(aw+pw) + numgaps(nleaves))
+                    yield qelement(PassiveItem(aitem.lhs, nleaves, aitem.pushed), backtrace(rid, aitem.lex, nlvs), self.gamma*(aw+pw) + nleaves.numgaps())
 
 
     def fill_chart(self):
@@ -301,25 +452,24 @@ class LeftCornerParser:
         passives = {}
         backtraces = {}
         initialized = {(self.grammar.root, None): 0}
-        seen = set()
+        seen = defaultdict(lambda: len(seen))
         queue = PriorityQueue()
         for i in self._initial_items(self.grammar.root, None, 0):
             queue.put(i)
         while not queue.empty():
             item, backtrace, w = queue.get_nowait().tup()
-            if item in seen:
+            newitemid = len(seen)
+            if (itemid := seen[item]) != newitemid:
                 continue
-            seen.add(item)
             match item:
                 case PassiveItem(lhs, leaves, push):
-                    backtraces[(lhs, leaves, push)] = backtrace
-                    if lhs == self.grammar.root and \
-                            leaves == frozenset(range(self.len)) and \
-                            push is None:
+                    backtraces[itemid] = backtrace
+                    if item == self._rootitem:
+                        self.rootid = itemid
                         break
 
-                    passives.setdefault((lhs, push), []).append((item, w))
-                    for it in self._active_step(actives.get((lhs, push), []), [(item, w)]):
+                    passives.setdefault((lhs, push), []).append((leaves, itemid, w))
+                    for it in self._active_step(actives.get((lhs, push), []), [(leaves, itemid, w)], push):
                         if not it.item in seen:
                             queue.put(it)
 
@@ -328,7 +478,7 @@ class LeftCornerParser:
                         initialized[successors[0]] = lm
                         for i in self._initial_items(*successors[0], lm):
                             queue.put(i)
-                    for it in self._active_step([(item, backtrace, w)], passives.get(successors[0], [])):
+                    for it in self._active_step([(item, backtrace, w)], passives.get(successors[0], []), successors[0][1]):
                         if not it.item in seen:
                             queue.put(it)
                     actives.setdefault(successors[0], []).append((item, backtrace, w))
@@ -337,16 +487,13 @@ class LeftCornerParser:
 
     def get_best(self, item = None, pushed: int = None):
         if item is None:
-            item = self.grammar.root, frozenset(range(0,self.len)), None
+            item = self.rootid
         bt = self.chart[item]
         fn, push = self.grammar.rules[bt.rid].fn(bt.leaf, pushed)
         match bt.as_tuple():
             case (rid, ()):
                 return fn()
             case (rid, (pos,)):
-                childitem = self.grammar.rules[rid].rhs[0], *pos
-                return fn(self.get_best(childitem, push[0]))
+                return fn(self.get_best(pos, push[0]))
             case (rid, (pos1,pos2)):
-                childitem1 = self.grammar.rules[rid].rhs[0], *pos1
-                childitem2 = self.grammar.rules[rid].rhs[1], *pos2
-                return fn(self.get_best(childitem1, push[0]), self.get_best(childitem2, push[1]))
+                return fn(self.get_best(pos1, push[0]), self.get_best(pos2, push[1]))

@@ -19,6 +19,7 @@ def main(config: Namespace):
             *([i] for i in sample["supertag"]),
         )
         p.fill_chart()
+        print("chart filled", flush=True)
         prediction = p.get_best()
         prediction = AutoTree(prediction)
         evaluator.add(i, ParentedTree.convert(AutoTree(sample["tree"]).tree([idtopos[i] for i in sample["pos"]])), list(sample["sentence"]),
@@ -30,3 +31,10 @@ def subcommand(sub: ArgumentParser):
     sub.add_argument("corpus", help="file containing gold tags", type=str)
     sub.add_argument("--param", help="evalb parameter file for score calculation", type=str, required=False, default="../disco-dop/proper.prm")
     sub.set_defaults(func=lambda args: main(args))
+
+
+if __name__ == "__main__":
+    args = ArgumentParser()
+    subcommand(args)
+    parsed_args = args.parse_args()
+    parsed_args.func(parsed_args)

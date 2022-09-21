@@ -1,26 +1,39 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, MISSING
 from argparse import ArgumentParser
+from pathlib import Path
 from typing import Iterable
 from datasets import Dataset, DatasetDict, Features, Value, ClassLabel, Sequence
 from tqdm import tqdm
 from sdcp.corpus import corpus_extractor, Split
 
+def splitstr(s: str) -> dict:
+    return eval(s)
+
 @dataclass
 class ExtractionParameter:
     corpus: str
-    output: str
-    split: dict = field(default_factory=lambda: { "train": range(1), "dev": range(1), "test": range(1) })
+    output: str = None
+    split: splitstr = None # e.g. "dict(train=range(18602), dev=range(18602, 19602), test=range(19602, 20602))"
     hmarkov: int = 0
     vmarkov: int = 1
+
+
+preset_splits = {
+    "negra": { "train": range(18602), "dev": range(18602, 19602), "test": range(19602, 20602) },
+    "dptb": { "train": range(3914, 43746), "dev": range(43746, 45446), "test": range(45446, 47862) },
+    "tiger": { "train": range(40472), "dev": range(40472, 45472), "test": range(45472, 50472) },
+    "alpinosample": { "train": range(2), "dev": range(2), "test": range(2, 3) },
+}
         
 
 def main(config: ExtractionParameter):
     ex = corpus_extractor(config.corpus, horzmarkov=config.hmarkov, vertmarkov=config.vmarkov)
-    for r in Split(**config.split).nonoverlapping():
+    splitdict = config.split or next(preset_splits[k] for k in preset_splits if k in config.corpus.lower())
+    for r in Split(**splitdict).nonoverlapping():
         ex.read(r)
     rules = list(ex.rules)
     datasets = {}
-    for split, portion in config.split.items():
+    for split, portion in splitdict.items():
         dataset = { "sentence": [], "supertag": [], "pos": [], "tree": [] }
         total = portion.stop-portion.start
         desc = f"extracting {split} portion"
@@ -37,7 +50,7 @@ def main(config: ExtractionParameter):
             "pos": set(tag for tagseq in datasets["train"]["pos"] for tag in tagseq)
         }
     }
-    for split in config.split:
+    for split in splitdict:
         if split == "train": continue
         tagsets[split] = {}
         for field in ("supertag", "pos"):
@@ -53,9 +66,13 @@ def main(config: ExtractionParameter):
         }))
         for split, dataset in datasets.items()
     }
-    DatasetDict(**datasets).save_to_disk(config.output)
+    DatasetDict(**datasets).save_to_disk(config.output or f"/tmp/{Path(config.corpus).stem}")
 
-    
+
 def subcommand(sub: ArgumentParser):
-    sub.add_argument("config", type=open)
-    sub.set_defaults(func=lambda args: main(eval(args.config.read())))
+    for f in fields(ExtractionParameter):
+        required = f.default is MISSING and f.default_factory is MISSING
+        name = f.name if required else f"--{f.name}"
+        default = None if required else (f.default if not f.default is MISSING else f.default_factory())
+        sub.add_argument(name, type=f.type, default=default)
+    sub.set_defaults(func=lambda args: main(args))

@@ -1,6 +1,6 @@
 from argparse import ArgumentParser, Namespace
 from sdcp.grammar.sdcp import rule, sdcp_clause, grammar
-from sdcp.grammar.parser import parser, TopdownParser, LeftCornerParser, spans
+from sdcp.grammar.parser import LeftCornerParser
 from sdcp.autotree import AutoTree
 from discodop.eval import Evaluator, readparam
 from discodop.tree import ParentedTree

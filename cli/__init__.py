@@ -1,4 +1,4 @@
-from . import extract, test
+from . import extract, test, train
 from argparse import ArgumentParser
 
 def main():
@@ -9,7 +9,7 @@ def main():
         subcommands.add_parser(name="extract", description="Extract supertags from corpora"))
     test.subcommand(
         subcommands.add_parser(name="test", description="Test extracted gold supertags and report parsing score"))
-    # train.subcommand(
-    #     subcommands.add_parser(name="train", description="Train discriminative model for supertagging"))
+    train.subcommand(
+        subcommands.add_parser(name="train", description="Train discriminative model for supertagging"))
     parsed_args = args.parse_args()
     parsed_args.func(parsed_args)

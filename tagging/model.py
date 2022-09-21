@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 class ModelParameters:
     embeddings: str = "Supervised"
     ktags: int = 10
-    dropout: float = 0.0
+    dropout: float = 0.1
     evalparam: Optional[dict] = None
 
     def __post_init__(self):

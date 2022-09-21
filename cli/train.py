@@ -12,10 +12,10 @@ from tagging.data import CorpusWrapper
 class TrainingParameter:
     corpus: str
     epochs: int = 10
-    lr: float = 0.1
+    lr: float = 1e-4
     batch: int = 4
     micro_batch: int = None
-    weight_decay: float = 0.0
+    weight_decay: float = 0.01
     optimizer: str = "AdamW"
     output_dir: str = "/tmp/sdcp-training"
 

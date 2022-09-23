@@ -14,14 +14,14 @@ def main(config: Namespace):
     data = DatasetDict.load_from_disk(config.corpus)["dev"]
     p = LeftCornerParser(grammar([eval(str_hr) for str_hr in data.features["supertag"].feature.names]))
     idtopos = data.features["pos"].feature.names
-    for i, sample in enumerate(data):
+    for i, sample in tqdm(enumerate(data), total=len(data)):
         p.init(
             *([i] for i in sample["supertag"]),
         )
         p.fill_chart()
         prediction = p.get_best()
         prediction = AutoTree(prediction)
-        evaluator.add(i, ParentedTree.convert(AutoTree(sample["tree"]).tree([idtopos[i] for i in sample["pos"]])), list(sample["sentence"]),
+        evaluator.add(i, ParentedTree(sample["tree"]), list(sample["sentence"]),
                 ParentedTree.convert(prediction.tree([idtopos[i] for i in sample["pos"]])), list(sample["sentence"]))
     print(evaluator.summary())
 

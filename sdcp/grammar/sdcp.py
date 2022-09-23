@@ -55,12 +55,14 @@ class rule:
     lhs: str
     fn: sdcp_clause
     rhs: tuple[str] = ()
+    fanout_hint: int = 1
 
 
-    def __init__(self, lhs: str, rhs: Tuple[str,...], fn_node: str = None, fn_push: int = -1):
+    def __init__(self, lhs: str, rhs: Tuple[str,...], fn_node: str = None, fn_push: int = -1, fanout: int = 1):
         object.__setattr__(self, "lhs", lhs)
         object.__setattr__(self, "rhs", rhs)
         object.__setattr__(self, "fn", sdcp_clause(fn_node, len(self.rhs), fn_push))
+        object.__setattr__(self, "fanout_hint", fanout)
 
 
     def as_tuple(self):
@@ -70,7 +72,8 @@ class rule:
     def __repr__(self):
         fn = f", fn_node={repr(self.fn.label)}" if not self.fn.label is None else ""
         fp = f", fn_push={repr(self.fn.push_idx)}" if not self.fn.push_idx == -1 and not (self.fn.arity==2 and self.fn.push_idx == 1) else ""
-        return f"rule({repr(self.lhs)}, {repr(self.rhs)}{fn}{fp})"
+        fh = f", fanout={self.fanout_hint}" if not self.fanout_hint == 1 else ""
+        return f"rule({repr(self.lhs)}, {repr(self.rhs)}{fn}{fp}{fh})"
 
 
 @dataclass

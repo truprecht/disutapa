@@ -62,8 +62,8 @@ def test_lc_parser():
         rule("L-VP", ()),
         rule("SBAR+S", ("VP", "NP"), fn_node="SBAR+S"),
         rule("NP", (), fn_node="NP"),
-        rule("VP", ("VP",), fn_node="VP"),
-        rule("VP", ("L-VP", "VP|<>"), fn_node="VP"),
+        rule("VP", ("VP",), fn_node="VP", fanout=2),
+        rule("VP", ("L-VP", "VP|<>"), fn_node="VP", fanout=2),
         rule("VP|<>", ()),
     ]
     parse = LeftCornerParser(grammar(rules, "SBAR+S"))

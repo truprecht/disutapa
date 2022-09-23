@@ -7,12 +7,17 @@ def singleton(tree: Tree, nonterminal: str = "ROOT"):
     return (rule(nonterminal, (), fn_node=label),), (pos,)
 
 
+def fanout(leaves: set[int]) -> int:
+    ol = sorted(leaves)
+    return 1+sum(1 for x,y in zip(ol[:-1], ol[1:]) if x+1 != y)
+
+
 def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = None):
     if not isinstance(tree, Tree):
         if tree in exclude:
             return None
         lhs = override_lhs if override_lhs else f"L-{parent}"
-        return Tree((tree, rule(lhs, ())), [])
+        return Tree((tree, rule(lhs, (), fanout=1)), [])
     lex = min(tree[1].leaves()) if isinstance(tree[1], Tree) else tree[1]
     exclude.add(lex)
     rules = []
@@ -25,7 +30,7 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
     nodestr = None if "|<" in tree.label else tree.label.split("^")[0]
     lhs = override_lhs if override_lhs else tree.label
     push_idx = 1 if len(rules) == 2 else (-1 if not isinstance(tree[1], Tree) else 0)
-    return Tree((lex, rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx)), rules)
+    return Tree((lex, rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx, fanout=fanout(tree.leaves()))), rules)
 
 
 def extract(tree: Tree, override_root: str = "ROOT"):

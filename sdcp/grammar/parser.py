@@ -76,6 +76,7 @@ class ActiveItem:
     lex: int
     pushed: Optional[int]
     leftmost: int
+    maxfo: int
 
 
 @dataclass(frozen=True)
@@ -99,9 +100,9 @@ class qelement:
 
 
 class LeftCornerParser:
-    def __init__(self, grammar: grammar, gamma: float = 0.5):
+    def __init__(self, grammar: grammar, fanout_discount: float = 0.5, max_fanout: int = 2):
         self.grammar = grammar
-        self.gamma = gamma
+        self.gamma = fanout_discount
 
 
     def init(self, *rules_per_position):
@@ -109,21 +110,25 @@ class LeftCornerParser:
         self.from_top = {}
         for i, rules in enumerate(rules_per_position):
             for rid in rules:
-                self.from_top.setdefault(self.grammar.rules[rid].lhs, []).append((rid, i))
+                ruleobj = self.grammar.rules[rid]
+                self.from_top.setdefault(ruleobj.lhs, []).append((rid, i, ruleobj.fanout_hint))
         self._rootitem = PassiveItem(self.grammar.root, BitSpan(frozenbitarray([1]*self.len)), None)
 
 
     def _initial_items(self, lhs: str, push: Optional[int], leftmost: int):
-        for (nrid, nlex) in self.from_top.get(lhs, []):
+        for (nrid, nlex, maxfo) in self.from_top.get(lhs, []):
             if push == nlex or (not push is None and push < leftmost) or nlex < leftmost: continue
             rule = self.grammar.rules[nrid]
             _, pushes = rule.fn(nlex, push)
             nleaves = BitSpan.fromit((l for l in (nlex, push) if not l is None and not l in pushes), self.len)
+            weight = nleaves.numgaps()
+            if weight >= maxfo:
+                continue
             nleftmost = leftmost+1 if nleaves and nleaves.leftmost == leftmost else leftmost
             if not rule.rhs:
-                yield qelement(PassiveItem(lhs, nleaves, push), backtrace(nrid, nlex, ()), nleaves.numgaps())
+                yield qelement(PassiveItem(lhs, nleaves, push), backtrace(nrid, nlex, ()), weight)
             else:
-                yield qelement(ActiveItem(lhs, tuple(zip(rule.rhs, pushes)), nleaves, nlex, push, nleftmost), (nrid,), 0)
+                yield qelement(ActiveItem(lhs, tuple(zip(rule.rhs, pushes)), nleaves, nlex, push, nleftmost, maxfo), (nrid,), weight)
 
 
     def _active_step(self, actives, pitems):
@@ -136,10 +141,13 @@ class LeftCornerParser:
                 nbacktrace = abt + (pitemid,)
                 if len(aitem.successors) > 1:
                     nleftmost = nleaves.firstgap()
-                    yield qelement(ActiveItem(aitem.lhs, aitem.successors[1:], nleaves, aitem.lex, aitem.pushed, nleftmost), nbacktrace, pw1)
+                    yield qelement(ActiveItem(aitem.lhs, aitem.successors[1:], nleaves, aitem.lex, aitem.pushed, nleftmost, aitem.maxfo), nbacktrace, pw1)
                 else:
+                    if (gaps := nleaves.numgaps()) >= aitem.maxfo:
+                        continue
+                    weight = self.gamma*(aw1+pw1) + gaps
                     rid, *nlvs = nbacktrace
-                    yield qelement(PassiveItem(aitem.lhs, nleaves, aitem.pushed), backtrace(rid, aitem.lex, nlvs), self.gamma*(aw1+pw1) + nleaves.numgaps())
+                    yield qelement(PassiveItem(aitem.lhs, nleaves, aitem.pushed), backtrace(rid, aitem.lex, nlvs), weight)
 
 
     def fill_chart(self):

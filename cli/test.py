@@ -7,6 +7,13 @@ from discodop.tree import ParentedTree
 from tqdm import tqdm
 
 from datasets import DatasetDict
+from random import sample, shuffle
+
+def rule_vector(total: int, k: int, hot: int):
+    vec = sample(range(total), k-1)
+    vec.append(hot)
+    shuffle(vec)
+    return [(rid, -abs(hot-rid)) for rid in vec]
 
 
 def main(config: Namespace):
@@ -16,7 +23,7 @@ def main(config: Namespace):
     idtopos = data.features["pos"].feature.names
     for i, sample in tqdm(enumerate(data), total=len(data)):
         p.init(
-            *([i] for i in sample["supertag"]),
+            *(rule_vector(len(p.grammar.rules), config.weighted, i) for i in sample["supertag"]),
         )
         p.fill_chart()
         prediction = p.get_best()
@@ -29,6 +36,7 @@ def main(config: Namespace):
 def subcommand(sub: ArgumentParser):
     sub.add_argument("corpus", help="file containing gold tags", type=str)
     sub.add_argument("--param", help="evalb parameter file for score calculation", type=str, required=False, default="../disco-dop/proper.prm")
+    sub.add_argument("--weighted", type=int, default=1)
     sub.set_defaults(func=lambda args: main(args))
 
 

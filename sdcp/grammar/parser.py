@@ -5,7 +5,6 @@ from .sdcp import grammar
 from queue import PriorityQueue
 from bitarray import frozenbitarray
 from bitarray.util import count_and
-from collections import defaultdict
 
 @dataclass
 class backtrace:
@@ -67,23 +66,34 @@ class BitSpan:
     def numleaves(self):
         return self.leaves.count(1)
 
+    def __lt__(self, other: "BitSpan"):
+        return self.leaves < other.leaves
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, order=False)
 class ActiveItem:
     lhs: str
     successors: Tuple[Tuple[str, Optional[int]]]
     leaves: BitSpan
     lex: int
     pushed: Optional[int]
-    leftmost: int
+    leftmost: int = field(compare=False, hash=False, repr=False)
     maxfo: int
 
+    def __gt__(self, other: "ActiveItem"):
+        if isinstance(other, PassiveItem): return True
+        return (other.leaves, self.maxfo, self.lhs, self.pushed or 0, self.lex, self.successors) > (self.leaves, other.maxfo, other.lhs, other.pushed or 0, other.lex, other.successors)
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, order=False)
 class PassiveItem:
     lhs: str
     leaves: BitSpan
     pushed: Optional[int]
+
+    def __gt__(self, other: "PassiveItem"):
+        if isinstance(other, ActiveItem): return False
+        return (other.leaves, self.lhs, self.pushed or 0) > (self.leaves, other.lhs, other.pushed or 0)
 
 
 @dataclass(eq=False, order=False)
@@ -91,49 +101,57 @@ class qelement:
     item: ActiveItem | PassiveItem
     bt: backtrace
     weight: float
+    wheuristic: float
+    gapscore: float
 
     def __gt__(self, other):
-        return self.weight > other.weight
+        return (other.wheuristic, self.gapscore, self.item) > (self.wheuristic, other.gapscore, other.item)
 
     def tup(self):
-        return self.item, self.bt, self.weight
+        return self.item, self.bt, self.weight, self.gapscore
 
 
 class LeftCornerParser:
-    def __init__(self, grammar: grammar, fanout_discount: float = 0.5, max_fanout: int = 2):
+    def __init__(self, grammar: grammar, fanout_discount: float = 0.5):
         self.grammar = grammar
         self.gamma = fanout_discount
 
 
     def init(self, *rules_per_position):
         self.len = len(rules_per_position)
+        self.bestweights = []
         self.from_top = {}
         for i, rules in enumerate(rules_per_position):
-            for rid in rules:
+            for rid, w in rules:
                 ruleobj = self.grammar.rules[rid]
-                self.from_top.setdefault(ruleobj.lhs, []).append((rid, i, ruleobj.fanout_hint))
+                self.from_top.setdefault(ruleobj.lhs, []).append((rid, i, ruleobj.fanout_hint, w))
+            self.bestweights.append(max(w for _, w in rules))
         self._rootitem = PassiveItem(self.grammar.root, BitSpan(frozenbitarray([1]*self.len)), None)
 
 
+    def _heuristic(self, span: BitSpan):
+        return sum(self.bestweights[i] for i in range(self.len) if span.leaves[i] == 0)
+
+
     def _initial_items(self, lhs: str, push: Optional[int], leftmost: int):
-        for (nrid, nlex, maxfo) in self.from_top.get(lhs, []):
+        for (nrid, nlex, maxfo, w) in self.from_top.get(lhs, []):
             if push == nlex or (not push is None and push < leftmost) or nlex < leftmost: continue
             rule = self.grammar.rules[nrid]
             _, pushes = rule.fn(nlex, push)
             nleaves = BitSpan.fromit((l for l in (nlex, push) if not l is None and not l in pushes), self.len)
-            weight = nleaves.numgaps()
-            if weight >= maxfo:
+            if (gapscore := nleaves.numgaps()) >= maxfo:
                 continue
             nleftmost = leftmost+1 if nleaves and nleaves.leftmost == leftmost else leftmost
+            wh = w+self._heuristic(nleaves)
             if not rule.rhs:
-                yield qelement(PassiveItem(lhs, nleaves, push), backtrace(nrid, nlex, ()), weight)
+                yield qelement(PassiveItem(lhs, nleaves, push), backtrace(nrid, nlex, ()), w, wh, gapscore)
             else:
-                yield qelement(ActiveItem(lhs, tuple(zip(rule.rhs, pushes)), nleaves, nlex, push, nleftmost, maxfo), (nrid,), weight)
+                yield qelement(ActiveItem(lhs, tuple(zip(rule.rhs, pushes)), nleaves, nlex, push, nleftmost, maxfo), (nrid,), w, wh, gapscore)
 
 
     def _active_step(self, actives, pitems):
-        for aitem, abt, aw1 in actives:
-            for pleaves, pitemid, pw1 in pitems:
+        for aitem, abt, aw, ags in actives:
+            for pleaves, pitemid, pw, pgs in pitems:
                 if not pleaves.isdisjoint(aitem.leaves) or \
                         pleaves.leftmost < aitem.leftmost:
                     continue
@@ -141,38 +159,41 @@ class LeftCornerParser:
                 nbacktrace = abt + (pitemid,)
                 if len(aitem.successors) > 1:
                     nleftmost = nleaves.firstgap()
-                    yield qelement(ActiveItem(aitem.lhs, aitem.successors[1:], nleaves, aitem.lex, aitem.pushed, nleftmost, aitem.maxfo), nbacktrace, pw1)
+                    wh = aw+pw+self._heuristic(nleaves)
+                    yield qelement(ActiveItem(aitem.lhs, aitem.successors[1:], nleaves, aitem.lex, aitem.pushed, nleftmost, aitem.maxfo), nbacktrace, aw+pw, wh, pgs)
                 else:
                     if (gaps := nleaves.numgaps()) >= aitem.maxfo:
                         continue
-                    weight = self.gamma*(aw1+pw1) + gaps
+                    gapscore = self.gamma*(ags+pgs) + gaps
                     rid, *nlvs = nbacktrace
-                    yield qelement(PassiveItem(aitem.lhs, nleaves, aitem.pushed), backtrace(rid, aitem.lex, nlvs), weight)
+                    wh = aw+pw+self._heuristic(nleaves)
+                    yield qelement(PassiveItem(aitem.lhs, nleaves, aitem.pushed), backtrace(rid, aitem.lex, nlvs), aw+pw, wh, gapscore)
 
 
     def fill_chart(self):
         actives = {}
         passives = {}
-        backtraces = {}
+        backtraces = []
         initialized = {(self.grammar.root, None): 0}
-        seen = defaultdict(lambda: len(seen))
+        seen = set()
         queue = PriorityQueue()
         for i in self._initial_items(self.grammar.root, None, 0):
             queue.put(i)
         while not queue.empty():
-            item, backtrace, w = queue.get_nowait().tup()
-            newitemid = len(seen)
-            if (itemid := seen[item]) != newitemid:
+            item, backtrace, w, gs = queue.get_nowait().tup()
+            if item in seen:
                 continue
+            seen.add(item)
             match item:
                 case PassiveItem(lhs, leaves, push):
-                    backtraces[itemid] = backtrace
+                    itemid = len(backtraces)
+                    backtraces.append(backtrace)
                     if item == self._rootitem:
                         self.rootid = itemid
                         break
 
-                    passives.setdefault((lhs, push), []).append((leaves, itemid, w))
-                    for it in self._active_step(actives.get((lhs, push), []), [(leaves, itemid, w)]):
+                    passives.setdefault((lhs, push), []).append((leaves, itemid, w, gs))
+                    for it in self._active_step(actives.get((lhs, push), []), [(leaves, itemid, w, gs)]):
                         if not it.item in seen:
                             queue.put(it)
 
@@ -181,10 +202,10 @@ class LeftCornerParser:
                         initialized[successors[0]] = lm
                         for i in self._initial_items(*successors[0], lm):
                             queue.put(i)
-                    for it in self._active_step([(item, backtrace, w)], passives.get(successors[0], [])):
+                    for it in self._active_step([(item, backtrace, w, gs)], passives.get(successors[0], [])):
                         if not it.item in seen:
                             queue.put(it)
-                    actives.setdefault(successors[0], []).append((item, backtrace, w))
+                    actives.setdefault(successors[0], []).append((item, backtrace, w, gs))
         self.chart = backtraces
 
 

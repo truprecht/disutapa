@@ -1,5 +1,4 @@
 from sdcp.grammar.extract import rule, extract, __extract_tree, singleton, fanout
-from sdcp.grammar.parser import LeftCornerParser, grammar
 from sdcp.corpus import corpus_extractor
 from sdcp.autotree import AutoTree, Tree
 
@@ -38,7 +37,6 @@ def test_extract():
     ]
 
 
-
 def test_corpus_extractor():
     c = corpus_extractor([(Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))"), "where the survey was carried out".split())])
     c.read()
@@ -56,13 +54,6 @@ def test_corpus_extractor():
         rule("VP|<VBN,RP>", ()),
     ]
     
-    parse = LeftCornerParser(grammar(list(c.rules)))
-    for rs, gold, gpos in zip(c.goldrules, c.goldtrees, c.goldpos):
-        parse.init(*([r] for r in rs))
-        parse.fill_chart()
-        assert AutoTree(parse.get_best()).tree(override_postags=gpos) == gold
-
-    
     c = corpus_extractor([(Tree("(ROOT (S ($. 0)))"), ".".split())])
     c.read()
 
@@ -73,25 +64,6 @@ def test_corpus_extractor():
     assert list(c.rules) == [
         rule("ROOT", (), fn_node="ROOT+S"),
     ]
-    
-    parse = LeftCornerParser(grammar(list(c.rules)))
-    for rs, gold, gpos in zip(c.goldrules, c.goldtrees, c.goldpos):
-        parse.init(*([r] for r in rs))
-        parse.fill_chart()
-        assert parse.get_best() == "(ROOT+S 0)"
-        assert AutoTree(parse.get_best()) == AutoTree("(ROOT+S 0)")
-        assert AutoTree(parse.get_best()).tree(override_postags=gpos) == gold
-
-def test_sample():
-    c = corpus_extractor("tests/sample.export", vertmarkov=1)
-    c.read()
-    assert len(c.goldtrees) == len(c.goldrules) == len(c.sentences) == 3
-    
-    parse = LeftCornerParser(grammar(list(c.rules)))
-    for rs, gold, pos in zip(c.goldrules, c.goldtrees, c.goldpos):
-        parse.init(*([r] for r in rs))
-        parse.fill_chart()
-        assert AutoTree(parse.get_best()).tree(override_postags=pos) == gold
 
 
 def test_derivations():

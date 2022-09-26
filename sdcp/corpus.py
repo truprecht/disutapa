@@ -78,7 +78,7 @@ class Split:
         self.test = test
 
     def nonoverlapping(self) -> Iterable[range]:
-        bymin = iter(sorted((r for r in (self.train, self.dev, self.test)), key=lambda x: x.start))
+        bymin = iter(sorted((r for r in (self.train, self.dev, self.test)), key=lambda x: (x.start, x.stop)))
         crange = next(bymin)
         for r in bymin:
             if r.start > crange.stop:

@@ -82,7 +82,7 @@ class ActiveItem:
 
     def __gt__(self, other: "ActiveItem"):
         if isinstance(other, PassiveItem): return True
-        return (other.leaves, self.maxfo, self.lhs, self.pushed or 0, self.lex, self.successors) > (self.leaves, other.maxfo, other.lhs, other.pushed or 0, other.lex, other.successors)
+        return (self.leaves, self.maxfo, self.lhs, self.pushed or 0, self.lex, self.successors) > (other.leaves, other.maxfo, other.lhs, other.pushed or 0, other.lex, other.successors)
 
 
 @dataclass(frozen=True, order=False)
@@ -93,7 +93,7 @@ class PassiveItem:
 
     def __gt__(self, other: "PassiveItem"):
         if isinstance(other, ActiveItem): return False
-        return (other.leaves, self.lhs, self.pushed or 0) > (self.leaves, other.lhs, other.pushed or 0)
+        return (self.leaves, self.lhs, self.pushed or 0) > (other.leaves, other.lhs, other.pushed or 0)
 
 
 @dataclass(eq=False, order=False)

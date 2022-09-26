@@ -76,7 +76,7 @@ class OneHotEmbeddingBuilder(TokenEmbeddingBuilder):
 
 
 class EmbeddingPresets(Enum):
-    Supervised = [OneHotEmbeddingBuilder("text")]
+    Supervised = [OneHotEmbeddingBuilder("text"), CharacterEmbeddingBuilder()]
 
     Bert = [PretrainedBuilder("bert-base-cased", tune=True)]
     GBert = [PretrainedBuilder("bert-base-german-cased", tune=True)]

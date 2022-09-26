@@ -82,7 +82,8 @@ class ActiveItem:
 
     def __gt__(self, other: "ActiveItem"):
         if isinstance(other, PassiveItem): return True
-        return (self.leaves, self.maxfo, self.lhs, self.pushed or 0, self.lex, self.successors) > (other.leaves, other.maxfo, other.lhs, other.pushed or 0, other.lex, other.successors)
+        return (self.leaves, self.maxfo, self.lhs, self.pushed or 0, self.lex, *((n,i or 0) for n,i in self.successors)) > \
+            (other.leaves, other.maxfo, other.lhs, other.pushed or 0, other.lex, *((n,i or 0) for n,i in self.successors))
 
 
 @dataclass(frozen=True, order=False)
@@ -127,6 +128,7 @@ class LeftCornerParser:
                 self.from_top.setdefault(ruleobj.lhs, []).append((rid, i, ruleobj.fanout_hint, w))
             self.bestweights.append(max(w for _, w in rules))
         self._rootitem = PassiveItem(self.grammar.root, BitSpan(frozenbitarray([1]*self.len)), None)
+        self.rootid = None
 
 
     def _heuristic(self, span: BitSpan):
@@ -211,6 +213,8 @@ class LeftCornerParser:
 
     def get_best(self, item = None, pushed: int = None):
         if item is None:
+            if self.rootid is None:
+                return f"(NOPARSE {' '.join(str(p) for p in range(self.len))})"
             item = self.rootid
         bt = self.chart[item]
         fn, push = self.grammar.rules[bt.rid].fn(bt.leaf, pushed)

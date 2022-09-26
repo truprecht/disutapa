@@ -79,7 +79,7 @@ def test_derivations():
 
     t = AutoTree("(SBAR+S (VP (VP (WRB 0) (VP|<> (VBN 4) (RP 5))) (VBD 3)) (NP (PT 1) (NN 2)))")
     assert __extract_tree(t, "ROOT", set()) == Tree(
-        (1, rule("SBAR+S", ("VP", "NP"), fn_node="SBAR+S")), [
+        (1, rule("SBAR", ("VP", "NP"), fn_node="SBAR+S")), [
             Tree((3, rule("VP", ("VP",), fn_node="VP", fanout=2)), [
                 Tree((4, rule("VP", ("L-VP", "VP|<>"), fn_node="VP", fanout=2)), [
                     Tree((0, rule("L-VP", ()),), []),

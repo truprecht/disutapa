@@ -16,7 +16,8 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
     if not isinstance(tree, Tree):
         if tree in exclude:
             return None
-        lhs = override_lhs if override_lhs else f"L-{parent}"
+        lhs = override_lhs if not override_lhs is None else \
+            "L-" + parent.split("+")[0]
         return Tree((tree, rule(lhs, (), fanout=1)), [])
     lex = min(tree[1].leaves()) if isinstance(tree[1], Tree) else tree[1]
     exclude.add(lex)
@@ -28,7 +29,11 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
             rhs.append(crules.label[1].lhs)
             rules.append(crules)
     nodestr = None if "|<" in tree.label else tree.label.split("^")[0]
-    lhs = override_lhs if override_lhs else tree.label
+    lhs = tree.label
+    if not override_lhs is None:
+        lhs = override_lhs
+    elif "+" in tree.label:
+        lhs = tree.label.split("+")[0] + ("|<>" if "|<" in tree.label else "")
     push_idx = 1 if len(rules) == 2 else (-1 if not isinstance(tree[1], Tree) else 0)
     return Tree((lex, rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx, fanout=fanout(tree.leaves()))), rules)
 

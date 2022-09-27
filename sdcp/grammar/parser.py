@@ -131,8 +131,8 @@ class LeftCornerParser:
         self.rootid = None
 
 
-    def _heuristic(self, span: BitSpan):
-        return sum(self.bestweights[i] for i in range(self.len) if span.leaves[i] == 0)
+    def _heuristic(self, span: BitSpan, leaf: int, pushed: int):
+        return sum(self.bestweights[i] for i in range(self.len) if (i != leaf and span.leaves[i] == 0) or i == pushed)
 
 
     def _initial_items(self, lhs: str, push: Optional[int], leftmost: int):
@@ -144,7 +144,7 @@ class LeftCornerParser:
             if (gapscore := nleaves.numgaps()) >= maxfo:
                 continue
             nleftmost = leftmost+1 if nleaves and nleaves.leftmost == leftmost else leftmost
-            wh = w+self._heuristic(nleaves)
+            wh = w+self._heuristic(nleaves, nlex, push)
             if not rule.rhs:
                 yield qelement(PassiveItem(lhs, nleaves, push), backtrace(nrid, nlex, ()), w, wh, gapscore)
             else:
@@ -161,14 +161,14 @@ class LeftCornerParser:
                 nbacktrace = abt + (pitemid,)
                 if len(aitem.successors) > 1:
                     nleftmost = nleaves.firstgap()
-                    wh = aw+pw+self._heuristic(nleaves)
+                    wh = aw+pw+self._heuristic(nleaves, aitem.lex, aitem.pushed)
                     yield qelement(ActiveItem(aitem.lhs, aitem.successors[1:], nleaves, aitem.lex, aitem.pushed, nleftmost, aitem.maxfo), nbacktrace, aw+pw, wh, pgs)
                 else:
                     if (gaps := nleaves.numgaps()) >= aitem.maxfo:
                         continue
                     gapscore = self.gamma*(ags+pgs) + gaps
                     rid, *nlvs = nbacktrace
-                    wh = aw+pw+self._heuristic(nleaves)
+                    wh = aw+pw+self._heuristic(nleaves, aitem.lex, aitem.pushed)
                     yield qelement(PassiveItem(aitem.lhs, nleaves, aitem.pushed), backtrace(rid, aitem.lex, nlvs), aw+pw, wh, gapscore)
 
 

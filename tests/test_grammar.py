@@ -75,7 +75,7 @@ def test_lc_parser():
 
 
 def rule_weight_vector(totallen: int, hot: int):
-    vec = [(rid, -abs(rid-hot)) for rid in range(totallen)]
+    vec = [(rid, totallen-abs(rid-hot)) for rid in range(totallen)]
     shuffle(vec)
     return vec
 

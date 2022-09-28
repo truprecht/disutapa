@@ -23,7 +23,9 @@ def main(config: Namespace):
     p = LeftCornerParser(grammar([eval(str_hr) for str_hr in data.features["supertag"].feature.names]))
     idtopos = data.features["pos"].feature.names
     datalen = len(data) if config.range is None else config.range[1]-config.range[0]
-    data = ((i,s) for i,s in enumerate(data) if i in range(*config.range))
+    data = enumerate(data)
+    if not config.range is None:
+        data = ((i,s) for i,s in data if i in range(*config.range))
     for i, sample in tqdm(data, total=datalen):
         p.init(
             *(rule_vector(len(p.grammar.rules), config.weighted, i) for i in sample["supertag"]),

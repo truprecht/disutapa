@@ -1,6 +1,6 @@
 from argparse import ArgumentParser, Namespace
 from sdcp.grammar.sdcp import rule, sdcp_clause, grammar
-from sdcp.grammar.parser import LeftCornerParser
+from sdcp.grammar.buparser import BuParser
 from sdcp.autotree import AutoTree
 from discodop.eval import Evaluator, readparam
 from discodop.tree import ParentedTree
@@ -20,7 +20,7 @@ def main(config: Namespace):
     seed(config.seed )
     evaluator = Evaluator(readparam(config.param))
     data = DatasetDict.load_from_disk(config.corpus)["dev"]
-    p = LeftCornerParser(grammar([eval(str_hr) for str_hr in data.features["supertag"].feature.names]))
+    p = BuParser(grammar([eval(str_hr) for str_hr in data.features["supertag"].feature.names]))
     idtopos = data.features["pos"].feature.names
     datalen = len(data) if config.range is None else config.range[1]-config.range[0]
     data = enumerate(data)

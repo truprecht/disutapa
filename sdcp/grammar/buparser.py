@@ -188,8 +188,8 @@ class BuParser:
                 for qi_ in self.from_lhs.get(rule.rhs[1], []):
                     # TODO push leafs before checking leftmost 
                     if i in qi_.item.leaves \
-                            or not qi_.item.leaves.isdisjoint(qi.item.leaves): #\
-                            # or not qi.item.leaves.leftmost < qi_.item.leaves.leftmost:
+                            or not qi_.item.leaves.isdisjoint(qi.item.leaves) \
+                            or qi.item.maxfo == 1 and not qi.item.leaves.leftmost < qi_.item.leaves.leftmost:
                         continue
                     newpos = qi.item.leaves.union(qi_.item.leaves, and_leaf=i)
                     if (gapscore := newpos.numgaps()) >= rule.fanout_hint:
@@ -208,8 +208,8 @@ class BuParser:
                 for qi_ in self.from_lhs.get(rule.rhs[0], []):
                     # TODO push leafs before checking leftmost 
                     if i in qi_.item.leaves \
-                            or not qi_.item.leaves.isdisjoint(qi.item.leaves): #\
-                            # or not qi.item.leaves.leftmost > qi_.item.leaves.leftmost:
+                            or not qi_.item.leaves.isdisjoint(qi.item.leaves) \
+                            or qi_.item.maxfo == 1 and not qi_.item.leaves.leftmost < qi.item.leaves.leftmost:
                         continue
                     newpos = qi.item.leaves.union(qi_.item.leaves, and_leaf=i)
                     if (gapscore := newpos.numgaps()) >= rule.fanout_hint:

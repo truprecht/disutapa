@@ -6,7 +6,7 @@ CPU = torch.device("cpu")
 
 from typing import Tuple, Optional
 from sdcp.grammar.sdcp import grammar
-from sdcp.grammar.parser import LeftCornerParser
+from sdcp.grammar.buparser import BuParser
 from sdcp.autotree import AutoTree
 
 from discodop.eval import readparam
@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 @dataclass
 class ModelParameters:
     embeddings: str = "Supervised"
-    ktags: int = 10
+    ktags: int = 1
     dropout: float = 0.1
     evalparam: Optional[dict] = None
 
@@ -159,7 +159,7 @@ class TaggerModel(flair.nn.Model):
         get_label_name = lambda x: f"{label_name}-{x}"
 
         with torch.no_grad():
-            parser = LeftCornerParser(self.__grammar__)
+            parser = BuParser(self.__grammar__)
             scores = dict(self.forward(batch, batch_first=True))
             tagscores = scores["supertag"].cpu()
             tags = argpartition(-tagscores, self.ktags, axis=2)[:, :, 0:self.ktags]

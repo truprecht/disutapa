@@ -126,7 +126,7 @@ class BuParser:
         self.from_right = {}
         self.queue = PriorityQueue()
         for i, rules in enumerate(rules_per_position):
-            maxweight = max(w for _, w in rules)
+            maxweight = max(w for _, w in (rules or [(0,0)]))
             for rid, weight in rules:
                 weight = maxweight - weight
                 rule = self.grammar.rules[rid]
@@ -147,14 +147,10 @@ class BuParser:
 
 
     def fill_chart(self):
-        iterations = 0
-        qmax = 0
         expanded = set()
         self.from_lhs: dict[str, qelement] = {}
         self.backtraces = []
         while not self.queue.empty():
-            qmax = max(qmax, self.queue.qsize())
-            iterations += 1
             qi: qelement = self.queue.get_nowait()
             fritem = qi.item.freeze()
             if fritem in expanded:

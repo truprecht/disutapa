@@ -11,9 +11,9 @@ from tagging.data import CorpusWrapper
 @dataclass
 class TrainingParameter:
     corpus: str
-    epochs: int = 10
-    lr: float = 1e-4
-    batch: int = 4
+    epochs: int = 32
+    lr: float = 1e-5
+    batch: int = 16
     micro_batch: int = None
     weight_decay: float = 0.01
     optimizer: str = "AdamW"
@@ -40,7 +40,7 @@ def main(config: TrainingParameter):
         max_epochs=config.epochs,
         weight_decay=config.weight_decay,
         optimizer=torch.optim.__dict__[config.optimizer],
-        scheduler=torch.optim.lr_scheduler.OneCycleLR
+        #scheduler=torch.optim.lr_scheduler.OneCycleLR
     )
 
 

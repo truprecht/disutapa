@@ -168,7 +168,7 @@ class TaggerModel(flair.nn.Model):
             for sentence, senttags, sentweights, postag in zip(batch, tags, tagscores.gather(2, tags), postags):
                 # store tags in tokens
                 sentence.store_raw_prediction("supertag-k", senttags[:len(sentence)])
-                sentence.store_raw_prediction("supertag", senttags.gather(1, sentweights.argmin(dim=1, keepdim=True)).squeeze()[:len(sentence)])
+                sentence.store_raw_prediction("supertag", senttags.gather(1, sentweights.argmax(dim=1, keepdim=True)).squeeze()[:len(sentence)])
                 sentence.store_raw_prediction("pos", postag[:len(sentence)])
 
                 # parse sentence and store parse tree in sentence

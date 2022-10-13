@@ -8,12 +8,15 @@ from tqdm import tqdm
 
 from datasets import DatasetDict
 from random import sample, shuffle, random, seed
+from math import exp, log
 
 def rule_vector(total: int, k: int, hot: int):
     vec = sample(range(total), k-1)
     vec.append(hot)
     shuffle(vec)
-    return [(rid, (total-abs(hot-rid))*random()) for rid in vec]
+    weights = [exp(((total-abs(hot-rid))/total)*random()) for rid in vec]
+    denom = sum(weights)
+    return [(rid, log(w/denom)) for rid, w in zip(vec, weights)]
 
 
 def main(config: Namespace):

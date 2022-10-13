@@ -172,7 +172,7 @@ class TaggerModel(flair.nn.Model):
                 sentence.store_raw_prediction("pos", postag[:len(sentence)])
 
                 # parse sentence and store parse tree in sentence
-                sentweights = sentweights[:len(sentence)]
+                sentweights = torch.nn.functional.log_softmax(sentweights[:len(sentence)], dim=-1)
                 predicted_tags = [
                     [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
                     for ktags, kweights in zip(senttags[:len(sentence)], sentweights)]
@@ -299,7 +299,7 @@ class TaggerModel(flair.nn.Model):
         scores["pos"] = scores["pos"].item() / predictions
 
         result_args = dict(
-            main_score=scores['F1-all'],
+            main_score=scores['supertag'],
             log_header="\t".join(f"{mode}" for mode in scores),
             log_line="\t".join(f"{s}" for s in scores.values()),
             detailed_results='\n\n'.join(evaluator.summary() for evaluator in evaluators.values()))

@@ -105,7 +105,7 @@ class qelement:
     gapscore: float
 
     def __gt__(self, other):
-        return (other.wheuristic, self.gapscore, self.item) > (self.wheuristic, other.gapscore, other.item)
+        return (self.wheuristic, self.gapscore, self.item) > (other.wheuristic, other.gapscore, other.item)
 
     def tup(self):
         return self.item, self.bt, self.weight, self.gapscore
@@ -126,7 +126,9 @@ class BuParser:
         self.from_right = {}
         self.queue = PriorityQueue()
         for i, rules in enumerate(rules_per_position):
+            maxweight = max(w for _, w in rules)
             for rid, weight in rules:
+                weight = maxweight - weight
                 rule = self.grammar.rules[rid]
                 match rule.as_tuple():
                     case (lhs, ()):
@@ -179,7 +181,7 @@ class BuParser:
                     backtrace(rid, i, (backtrace_id,)),
                     qi.weight+weight,
                     qi.weight+weight,
-                    gapscore
+                    gapscore + qi.gapscore
                 ))
             for rid, i, weight in self.from_left.get(qi.item.lhs, []):
                 if i in qi.item.leaves:
@@ -199,7 +201,7 @@ class BuParser:
                         backtrace(rid, i, (backtrace_id, qi_.bt)),
                         qi.weight+qi_.weight+weight,
                         qi.weight+qi_.weight+weight,
-                        gapscore
+                        gapscore + qi.gapscore + qi_.gapscore
                     ))
             for rid, i, weight in self.from_right.get(qi.item.lhs, []):
                 if i in qi.item.leaves:
@@ -219,7 +221,7 @@ class BuParser:
                         backtrace(rid, i, (qi_.bt, backtrace_id)),
                         qi.weight+qi_.weight+weight,
                         qi.weight+qi_.weight+weight,
-                        gapscore
+                        gapscore + qi.gapscore + qi_.gapscore
                     ))
 
 

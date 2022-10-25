@@ -5,6 +5,7 @@ from .sdcp import grammar
 from queue import PriorityQueue
 from bitarray import frozenbitarray, bitarray
 from bitarray.util import count_and
+from time import time
 
 
 a01 = frozenbitarray('01')
@@ -14,9 +15,11 @@ a0 = frozenbitarray('0')
 class BitSpan:
     leaves: bitarray
     leftmost: int = field(init=False, repr=False, hash=False, compare=False)
+    gaps: int = field(init=False, repr=False, hash=False, compare=False)
 
     def __post_init__(self):
         self.__dict__["leftmost"] = self._leftmost()
+        self.__dict__["gaps"] = self.numgaps()
 
     def isdisjoint(self, other: "BitSpan") -> bool:
         return count_and(self.leaves, other.leaves) == 0
@@ -74,6 +77,9 @@ class BitSpan:
     def freeze(self) -> bytes:
         return self.leaves.tobytes()
 
+    def __len__(self) -> int:
+        return self.leaves.count(1)
+
 @dataclass
 class PassiveItem:
     lhs: str
@@ -105,15 +111,16 @@ class qelement:
     gapscore: float
 
     def __gt__(self, other):
-        return (self.wheuristic, self.gapscore, self.item) > (other.wheuristic, other.gapscore, other.item)
+        return (self.gapscore, self.wheuristic, self.item) > (other.gapscore, other.wheuristic, other.item)
 
     def tup(self):
         return self.item, self.bt, self.weight, self.gapscore
 
 
 class BuParser:
-    def __init__(self, grammar: grammar):
+    def __init__(self, grammar: grammar, gamma: float = 0.1):
         self.grammar = grammar
+        self.discount = gamma
 
 
     def init(self, *rules_per_position):
@@ -147,11 +154,17 @@ class BuParser:
 
 
     def fill_chart(self):
+        startt = time()
         expanded = set()
-        self.from_lhs: dict[str, qelement] = {}
+        self.from_lhs: dict[str, tuple[BitSpan, int, int, float, float]] = {}
         self.backtraces = []
+        iterations = 0
+        maxq = self.queue._qsize()
         while not self.queue.empty():
+            iterations += 1
+            maxq = max(maxq, self.queue._qsize())
             qi: qelement = self.queue.get_nowait()
+            # print(qi)
             fritem = qi.item.freeze()
             if fritem in expanded:
                 continue
@@ -159,10 +172,11 @@ class BuParser:
             backtrace_id = len(self.backtraces)
             self.backtraces.append(qi.bt)
             qi.bt = backtrace_id
-            self.from_lhs.setdefault(qi.item.lhs, []).append(qi)
+            self.from_lhs.setdefault(qi.item.lhs, []).append((qi.item.leaves, qi.item.maxfo, qi.bt, qi.weight, qi.gapscore))
 
             if qi.item.lhs == self.grammar.root and qi.item.leaves.leaves.all():
                 self.rootid = -1
+                # print("done after", iterations, "(", time()-startt, ")iterations with qmax", maxq, "and len", self.len)
                 return
 
             for rid, i, weight in self.unaries.get(qi.item.lhs, []):
@@ -170,55 +184,56 @@ class BuParser:
                     continue
                 rule = self.grammar.rules[rid]
                 newpos = qi.item.leaves.with_leaf(i)
-                if (gapscore := newpos.numgaps()) >= rule.fanout_hint:
+                if newpos.gaps >= rule.fanout_hint:
                     continue
                 self.queue.put_nowait(qelement(
                     PassiveItem(rule.lhs, newpos, rule.fanout_hint),
                     backtrace(rid, i, (backtrace_id,)),
                     qi.weight+weight,
                     qi.weight+weight,
-                    gapscore + qi.gapscore
+                    newpos.gaps + self.discount*qi.gapscore
                 ))
             for rid, i, weight in self.from_left.get(qi.item.lhs, []):
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]
-                for qi_ in self.from_lhs.get(rule.rhs[1], []):
+                for (_leaves, _maxfo, _bt, _weight, _gapscore) in self.from_lhs.get(rule.rhs[1], []):
                     # TODO push leafs before checking leftmost 
-                    if i in qi_.item.leaves \
-                            or not qi_.item.leaves.isdisjoint(qi.item.leaves) \
-                            or qi.item.maxfo == 1 and not qi.item.leaves.leftmost < qi_.item.leaves.leftmost:
+                    if i in _leaves \
+                            or not _leaves.isdisjoint(qi.item.leaves) \
+                            or (qi.item.leaves.gaps+1 == qi.item.maxfo) and not qi.item.leaves.leftmost < _leaves.leftmost:
                         continue
-                    newpos = qi.item.leaves.union(qi_.item.leaves, and_leaf=i)
-                    if (gapscore := newpos.numgaps()) >= rule.fanout_hint:
+                    newpos = qi.item.leaves.union(_leaves, and_leaf=i)
+                    if newpos.gaps >= rule.fanout_hint:
                         continue
                     self.queue.put_nowait(qelement(
                         PassiveItem(rule.lhs, newpos, rule.fanout_hint),
-                        backtrace(rid, i, (backtrace_id, qi_.bt)),
-                        qi.weight+qi_.weight+weight,
-                        qi.weight+qi_.weight+weight,
-                        gapscore + qi.gapscore + qi_.gapscore
+                        backtrace(rid, i, (backtrace_id, _bt)),
+                        qi.weight+_weight+weight,
+                        qi.weight+_weight+weight,
+                        newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))
             for rid, i, weight in self.from_right.get(qi.item.lhs, []):
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]
-                for qi_ in self.from_lhs.get(rule.rhs[0], []):
+                for (_leaves, _maxfo, _bt, _weight, _gapscore) in self.from_lhs.get(rule.rhs[0], []):
                     # TODO push leafs before checking leftmost 
-                    if i in qi_.item.leaves \
-                            or not qi_.item.leaves.isdisjoint(qi.item.leaves) \
-                            or qi_.item.maxfo == 1 and not qi_.item.leaves.leftmost < qi.item.leaves.leftmost:
+                    if i in _leaves \
+                            or not _leaves.isdisjoint(qi.item.leaves) \
+                            or (_leaves.gaps+1 == _maxfo) and not _leaves.leftmost < qi.item.leaves.leftmost:
                         continue
-                    newpos = qi.item.leaves.union(qi_.item.leaves, and_leaf=i)
-                    if (gapscore := newpos.numgaps()) >= rule.fanout_hint:
+                    newpos = qi.item.leaves.union(_leaves, and_leaf=i)
+                    if newpos.gaps >= rule.fanout_hint:
                         continue
                     self.queue.put_nowait(qelement(
                         PassiveItem(rule.lhs, newpos, rule.fanout_hint),
-                        backtrace(rid, i, (qi_.bt, backtrace_id)),
-                        qi.weight+qi_.weight+weight,
-                        qi.weight+qi_.weight+weight,
-                        gapscore + qi.gapscore + qi_.gapscore
+                        backtrace(rid, i, (_bt, backtrace_id)),
+                        qi.weight+_weight+weight,
+                        qi.weight+_weight+weight,
+                        newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))
+        # print("failed after", iterations, "(", time()-startt, ")iterations with qmax", maxq, "and len", self.len)
 
 
     def get_best(self, item = None, pushed: int = None):

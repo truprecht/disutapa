@@ -5,7 +5,8 @@ from .sdcp import grammar
 from queue import PriorityQueue
 from bitarray import frozenbitarray, bitarray
 from bitarray.util import count_and
-from time import time
+from sortedcontainers import SortedList
+from collections import defaultdict
 
 
 a01 = frozenbitarray('01')
@@ -16,10 +17,12 @@ class BitSpan:
     leaves: bitarray
     leftmost: int = field(init=False, repr=False, hash=False, compare=False)
     gaps: int = field(init=False, repr=False, hash=False, compare=False)
+    firstgap: int = field(init=False, repr=False, hash=False, compare=False)
 
     def __post_init__(self):
         self.__dict__["leftmost"] = self._leftmost()
         self.__dict__["gaps"] = self.numgaps()
+        self.__dict__["firstgap"] = self._firstgap()
 
     def isdisjoint(self, other: "BitSpan") -> bool:
         return count_and(self.leaves, other.leaves) == 0
@@ -33,7 +36,7 @@ class BitSpan:
     def _leftmost(self) -> int:
         return self.leaves.find(a1)
 
-    def firstgap(self) -> int:
+    def _firstgap(self) -> int:
         if (m := self.leaves[self.leftmost:].find(a0)) != -1:
             return self.leftmost+m
         return len(self.leaves)
@@ -154,9 +157,8 @@ class BuParser:
 
 
     def fill_chart(self):
-        startt = time()
         expanded = set()
-        self.from_lhs: dict[str, tuple[BitSpan, int, int, float, float]] = {}
+        self.from_lhs: dict[str, list[tuple[BitSpan, int, int, float, float]]] = defaultdict(SortedList)
         self.backtraces = []
         iterations = 0
         maxq = self.queue._qsize()
@@ -164,7 +166,6 @@ class BuParser:
             iterations += 1
             maxq = max(maxq, self.queue._qsize())
             qi: qelement = self.queue.get_nowait()
-            # print(qi)
             fritem = qi.item.freeze()
             if fritem in expanded:
                 continue
@@ -172,17 +173,17 @@ class BuParser:
             backtrace_id = len(self.backtraces)
             self.backtraces.append(qi.bt)
             qi.bt = backtrace_id
-            self.from_lhs.setdefault(qi.item.lhs, []).append((qi.item.leaves, qi.item.maxfo, qi.bt, qi.weight, qi.gapscore))
+            self.from_lhs[qi.item.lhs].add((qi.item.leaves, qi.item.maxfo, qi.bt, qi.weight, qi.gapscore))
 
             if qi.item.lhs == self.grammar.root and qi.item.leaves.leaves.all():
                 self.rootid = -1
-                # print("done after", iterations, "(", time()-startt, ")iterations with qmax", maxq, "and len", self.len)
                 return
 
             for rid, i, weight in self.unaries.get(qi.item.lhs, []):
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]
+                # TODO: check gaps first?
                 newpos = qi.item.leaves.with_leaf(i)
                 if newpos.gaps >= rule.fanout_hint:
                     continue
@@ -197,11 +198,14 @@ class BuParser:
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]
-                for (_leaves, _maxfo, _bt, _weight, _gapscore) in self.from_lhs.get(rule.rhs[1], []):
+                for (_leaves, _maxfo, _bt, _weight, _gapscore) in self.from_lhs[rule.rhs[1]]:
+                    if rule.fanout_hint == 1 and not ((qi.item.leaves.firstgap == i or qi.item.leaves.firstgap == _leaves.leftmost) \
+                            or qi.item.leaves.gaps+1 < qi.item.maxfo and (_leaves.firstgap == i == qi.item.leaves.leftmost-1 or _leaves.firstgap == qi.item.leaves.leftmost)):
+                        continue
                     # TODO push leafs before checking leftmost 
                     if i in _leaves \
-                            or not _leaves.isdisjoint(qi.item.leaves) \
-                            or (qi.item.leaves.gaps+1 == qi.item.maxfo) and not qi.item.leaves.leftmost < _leaves.leftmost:
+                            or (qi.item.leaves.gaps+1 == qi.item.maxfo) and not qi.item.leaves.leftmost < _leaves.leftmost \
+                            or not _leaves.isdisjoint(qi.item.leaves):
                         continue
                     newpos = qi.item.leaves.union(_leaves, and_leaf=i)
                     if newpos.gaps >= rule.fanout_hint:
@@ -217,11 +221,14 @@ class BuParser:
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]
-                for (_leaves, _maxfo, _bt, _weight, _gapscore) in self.from_lhs.get(rule.rhs[0], []):
+                for (_leaves, _maxfo, _bt, _weight, _gapscore) in self.from_lhs[rule.rhs[0]]:
+                    if rule.fanout_hint == 1 and not ((_leaves.firstgap == i or _leaves.firstgap == qi.item.leaves.leftmost) \
+                            or _leaves.gaps+1 < _maxfo and (qi.item.leaves.firstgap == i == _leaves.leftmost-1 or qi.item.leaves.firstgap == _leaves.leftmost)):
+                        continue
                     # TODO push leafs before checking leftmost 
                     if i in _leaves \
-                            or not _leaves.isdisjoint(qi.item.leaves) \
-                            or (_leaves.gaps+1 == _maxfo) and not _leaves.leftmost < qi.item.leaves.leftmost:
+                            or (_leaves.gaps+1 == _maxfo) and not _leaves.leftmost < qi.item.leaves.leftmost \
+                            or not _leaves.isdisjoint(qi.item.leaves):
                         continue
                     newpos = qi.item.leaves.union(_leaves, and_leaf=i)
                     if newpos.gaps >= rule.fanout_hint:
@@ -233,7 +240,6 @@ class BuParser:
                         qi.weight+_weight+weight,
                         newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))
-        # print("failed after", iterations, "(", time()-startt, ")iterations with qmax", maxq, "and len", self.len)
 
 
     def get_best(self, item = None, pushed: int = None):

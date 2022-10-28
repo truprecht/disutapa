@@ -110,11 +110,10 @@ class qelement:
     item: PassiveItem
     bt: backtrace
     weight: float
-    wheuristic: float
     gapscore: float
 
     def __gt__(self, other):
-        return (self.gapscore, self.wheuristic, self.item) > (other.gapscore, other.wheuristic, other.item)
+        return (self.weight, self.gapscore, self.item) > (other.weight, other.gapscore, other.item)
 
     def tup(self):
         return self.item, self.bt, self.weight, self.gapscore
@@ -146,7 +145,6 @@ class BuParser:
                             PassiveItem(lhs, BitSpan.fromit((i,), self.len), rule.fanout_hint),
                             backtrace(rid, i, ()),
                             weight,
-                            weight,
                             0   
                         ))
                     case (lhs, (r1,)):
@@ -158,13 +156,9 @@ class BuParser:
 
     def fill_chart(self):
         expanded = set()
-        self.from_lhs: dict[str, list[tuple[BitSpan, int, int, float, float]]] = defaultdict(SortedList)
+        self.from_lhs: dict[str, list[tuple[BitSpan, int, float, float]]] = defaultdict(SortedList)
         self.backtraces = []
-        iterations = 0
-        maxq = self.queue._qsize()
         while not self.queue.empty():
-            iterations += 1
-            maxq = max(maxq, self.queue._qsize())
             qi: qelement = self.queue.get_nowait()
             fritem = qi.item.freeze()
             if fritem in expanded:
@@ -173,7 +167,7 @@ class BuParser:
             backtrace_id = len(self.backtraces)
             self.backtraces.append(qi.bt)
             qi.bt = backtrace_id
-            self.from_lhs[qi.item.lhs].add((qi.item.leaves, qi.item.maxfo, qi.bt, qi.weight, qi.gapscore))
+            self.from_lhs[qi.item.lhs].add((qi.item.leaves, qi.bt, qi.weight, qi.gapscore))
 
             if qi.item.lhs == self.grammar.root and qi.item.leaves.leaves.all():
                 self.rootid = -1
@@ -191,20 +185,17 @@ class BuParser:
                     PassiveItem(rule.lhs, newpos, rule.fanout_hint),
                     backtrace(rid, i, (backtrace_id,)),
                     qi.weight+weight,
-                    qi.weight+weight,
                     newpos.gaps + self.discount*qi.gapscore
                 ))
             for rid, i, weight in self.from_left.get(qi.item.lhs, []):
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]
-                for (_leaves, _maxfo, _bt, _weight, _gapscore) in self.from_lhs[rule.rhs[1]]:
-                    if rule.fanout_hint == 1 and not ((qi.item.leaves.firstgap == i or qi.item.leaves.firstgap == _leaves.leftmost) \
-                            or qi.item.leaves.gaps+1 < qi.item.maxfo and (_leaves.firstgap == i == qi.item.leaves.leftmost-1 or _leaves.firstgap == qi.item.leaves.leftmost)):
+                for (_leaves, _bt, _weight, _gapscore) in self.from_lhs[rule.rhs[1]]:
+                    if rule.fanout_hint == 1 and not (qi.item.leaves.firstgap == i or qi.item.leaves.firstgap == _leaves.leftmost):
                         continue
-                    # TODO push leafs before checking leftmost 
                     if i in _leaves \
-                            or (qi.item.leaves.gaps+1 == qi.item.maxfo) and not qi.item.leaves.leftmost < _leaves.leftmost \
+                            or not qi.item.leaves.leftmost < _leaves.leftmost \
                             or not _leaves.isdisjoint(qi.item.leaves):
                         continue
                     newpos = qi.item.leaves.union(_leaves, and_leaf=i)
@@ -214,20 +205,17 @@ class BuParser:
                         PassiveItem(rule.lhs, newpos, rule.fanout_hint),
                         backtrace(rid, i, (backtrace_id, _bt)),
                         qi.weight+_weight+weight,
-                        qi.weight+_weight+weight,
                         newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))
             for rid, i, weight in self.from_right.get(qi.item.lhs, []):
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]
-                for (_leaves, _maxfo, _bt, _weight, _gapscore) in self.from_lhs[rule.rhs[0]]:
-                    if rule.fanout_hint == 1 and not ((_leaves.firstgap == i or _leaves.firstgap == qi.item.leaves.leftmost) \
-                            or _leaves.gaps+1 < _maxfo and (qi.item.leaves.firstgap == i == _leaves.leftmost-1 or qi.item.leaves.firstgap == _leaves.leftmost)):
+                for (_leaves, _bt, _weight, _gapscore) in self.from_lhs[rule.rhs[0]]:
+                    if rule.fanout_hint == 1 and not (_leaves.firstgap == i or _leaves.firstgap == qi.item.leaves.leftmost):
                         continue
-                    # TODO push leafs before checking leftmost 
                     if i in _leaves \
-                            or (_leaves.gaps+1 == _maxfo) and not _leaves.leftmost < qi.item.leaves.leftmost \
+                            or not _leaves.leftmost < qi.item.leaves.leftmost \
                             or not _leaves.isdisjoint(qi.item.leaves):
                         continue
                     newpos = qi.item.leaves.union(_leaves, and_leaf=i)
@@ -236,7 +224,6 @@ class BuParser:
                     self.queue.put_nowait(qelement(
                         PassiveItem(rule.lhs, newpos, rule.fanout_hint),
                         backtrace(rid, i, (_bt, backtrace_id)),
-                        qi.weight+_weight+weight,
                         qi.weight+_weight+weight,
                         newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))

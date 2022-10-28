@@ -21,10 +21,10 @@ def test_singleton():
 def test_extract():
     tree = AutoTree("(SBAR+S (VP (VP 0 (VP|<> 4 5)) 3) (NP 1 2))")
     
-    assert __extract_tree(tree[(0,0,1)], "VP", {4}) == Tree((5, rule("VP|<>", ())), [])
-    assert __extract_tree(tree[(0,0)], "VP", set()) == Tree((4, rule("VP", ("L-VP", "VP|<>"), fn_node="VP", fanout=2)), [
-        Tree((0, rule("L-VP", ())), []),
-        Tree((5, rule("VP|<>", ())),[])
+    assert __extract_tree(tree[(0,0,1)], "VP", {4}) == Tree((5, 5, rule("VP|<>", ())), [])
+    assert __extract_tree(tree[(0,0)], "VP", set()) == Tree((4, 0, rule("VP", ("L-VP", "VP|<>"), fn_node="VP", fanout=2)), [
+        Tree((0, 0, rule("L-VP", ())), []),
+        Tree((5, 5, rule("VP|<>", ())),[])
     ])
     
     assert list(extract(tree)) == [
@@ -71,7 +71,7 @@ def test_derivations():
     from discodop.tree import Tree
 
     def eval_derivation(deriv, p = None):
-        lex, rul = deriv.label
+        lex, _, rul = deriv.label
         clause, ps = rul.fn(lex, p)
         cs = (eval_derivation(c_, p_) for c_, p_ in zip(deriv, ps))
         return clause(*cs)
@@ -79,14 +79,14 @@ def test_derivations():
 
     t = AutoTree("(SBAR+S (VP (VP (WRB 0) (VP|<> (VBN 4) (RP 5))) (VBD 3)) (NP (PT 1) (NN 2)))")
     assert __extract_tree(t, "ROOT", set()) == Tree(
-        (1, rule("SBAR", ("VP", "NP"), fn_node="SBAR+S")), [
-            Tree((3, rule("VP", ("VP",), fn_node="VP", fanout=2)), [
-                Tree((4, rule("VP", ("L-VP", "VP|<>"), fn_node="VP", fanout=2)), [
-                    Tree((0, rule("L-VP", ()),), []),
-                    Tree((5, rule("VP|<>", ())), [])
+        (1, 0, rule("SBAR", ("VP", "NP"), fn_node="SBAR+S")), [
+            Tree((3, 0, rule("VP", ("VP",), fn_node="VP", fanout=2)), [
+                Tree((4, 0, rule("VP", ("L-VP", "VP|<>"), fn_node="VP", fanout=2)), [
+                    Tree((0, 0, rule("L-VP", ()),), []),
+                    Tree((5, 5, rule("VP|<>", ())), [])
                 ])
             ]),
-            Tree((2, rule("NP", (), fn_node="NP")), [])
+            Tree((2, 2, rule("NP", (), fn_node="NP")), [])
         ]
     )
     assert AutoTree(eval_derivation(__extract_tree(t, "ROOT", set()))) == AutoTree("(SBAR+S (VP (VP 0 4 5) 3) (NP 1 2))")
@@ -94,17 +94,17 @@ def test_derivations():
 
     t = AutoTree("(ROOT (DU (PP 0 1) (DU|<> 2 (SMAIN (NP 3 8) (PP 4 (NP 5 6))))) 7)")
     assert __extract_tree(t, "ROOT", set()) == Tree(
-        (7,rule("ROOT", ("DU",), fn_node="ROOT")), [
-            Tree((2, rule("DU", ("PP", "DU|<>"), fn_node="DU", fanout=2)), [
-                Tree((1, rule("PP", ("L-PP",), fn_node="PP")), [
-                    Tree((0, rule("L-PP", ())), [])
+        (7, 0, rule("ROOT", ("DU",), fn_node="ROOT")), [
+            Tree((2, 0, rule("DU", ("PP", "DU|<>"), fn_node="DU", fanout=2)), [
+                Tree((1, 0, rule("PP", ("L-PP",), fn_node="PP")), [
+                    Tree((0, 0, rule("L-PP", ())), [])
                 ]),
-                Tree((3, rule("DU|<>", ("SMAIN",), fn_push=0, fanout=2)), [
-                    Tree((4, rule("SMAIN", ("NP", "PP"), fn_node="SMAIN", fanout=2)), [
-                        Tree((8, rule("NP", (), fn_node="NP", fanout=2)), []),
-                        Tree((5, rule("PP", ("NP",), fn_node="PP", fn_push=0)), [
-                            Tree((6, rule("NP", (), fn_node="NP")), [])
-                        ])
+                Tree((3, 3, rule("DU|<>", ("SMAIN",), fn_push=0, fanout=2)), [
+                    Tree((4, 4, rule("SMAIN", ("PP", "NP"), fn_node="SMAIN", fn_push=0, fanout=2)), [
+                        Tree((5, 5, rule("PP", ("NP",), fn_node="PP", fn_push=0)), [
+                            Tree((6, 6, rule("NP", (), fn_node="NP")), [])
+                        ]),
+                        Tree((8, 8, rule("NP", (), fn_node="NP")), []),
                     ])
                 ])
             ])

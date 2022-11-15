@@ -16,6 +16,7 @@ class ExtractionParameter:
     split: splitstr = None # e.g. "dict(train=range(18602), dev=range(18602, 19602), test=range(19602, 20602))"
     hmarkov: int = 0
     vmarkov: int = 1
+    headrules: str = None
 
 
 preset_splits = {
@@ -27,7 +28,7 @@ preset_splits = {
         
 
 def main(config: ExtractionParameter):
-    ex = corpus_extractor(config.corpus, horzmarkov=config.hmarkov, vertmarkov=config.vmarkov)
+    ex = corpus_extractor(config.corpus, horzmarkov=config.hmarkov, vertmarkov=config.vmarkov, headrules=config.headrules)
     splitdict = config.split or next(preset_splits[k] for k in preset_splits if k in config.corpus.lower())
     for r in Split(**splitdict).nonoverlapping():
         ex.read(r)

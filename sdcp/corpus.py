@@ -6,17 +6,19 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from .grammar.extract import extract, singleton
+from .grammar.extract_head import extract_head
 from .autotree import AutoTree
+from .headed_tree import HeadedTree
 
 
 class corpus_extractor:
-    def __init__(self, filename_or_iterator: str | Iterable[Tuple[Tree, Iterable[str]]], **binparams):
+    def __init__(self, filename_or_iterator: str | Iterable[Tuple[Tree, Iterable[str]]], headrules: str = None, mode="head", **binparams):
         if isinstance(filename_or_iterator, str):
             filetype = filename_or_iterator.split(".")[-1]
             if filetype == "xml":
                 filetype = "tiger"
             encoding = "iso-8859-1" if filetype == "export" else "utf8"
-            self.trees = READERS[filetype](filename_or_iterator, encoding=encoding, punct="move")
+            self.trees = READERS[filetype](filename_or_iterator, encoding=encoding, punct="move", headrules=headrules)
         else:
             self.trees = filename_or_iterator
         self.rules = defaultdict(lambda: len(self.rules))
@@ -26,6 +28,7 @@ class corpus_extractor:
         self.goldpos = []
         self.idx = {}
         self._binparams = binparams
+        self.mode = "head" if not headrules is None else "inorder"
 
     def read(self, lrange: range = None):
         if isinstance(self.trees, CorpusReader):
@@ -40,17 +43,22 @@ class corpus_extractor:
         for i, (tree, sent) in treeit:
             if not isinstance(self.trees, CorpusReader) and not (lrange is None or i in lrange): continue
             self.idx[i] = len(self.goldtrees)
-            if len(sent) == 1:
-                stree = collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True)
-                rules, pos = singleton(stree)
-                rules = tuple(self.rules[gr] for gr in rules)
+            if self.mode == "head":
+                ht = HeadedTree.convert(tree)
+                rules = tuple(self.rules[gr] for gr in extract_head(ht))
+                pos = tuple(p for _, p in sorted(ht.postags.items()))
             else:
-                bintree = binarize(
-                    collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True),
-                    **self._binparams)
-                bintree = AutoTree.convert(bintree)
-                rules = tuple(self.rules[gr] for gr in extract(bintree))
-                pos = tuple(p for _, p in sorted(bintree.postags.items()))
+                if len(sent) == 1:
+                    stree = collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True)
+                    rules, pos = singleton(stree)
+                    rules = tuple(self.rules[gr] for gr in rules)
+                else:
+                    bintree = binarize(
+                        collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True),
+                        **self._binparams)
+                    bintree = AutoTree.convert(bintree)
+                    rules = tuple(self.rules[gr] for gr in extract(bintree))
+                    pos = tuple(p for _, p in sorted(bintree.postags.items()))
             self.goldtrees.append(tree)
             self.sentences.append(tuple(sent))
             self.goldpos.append(pos)

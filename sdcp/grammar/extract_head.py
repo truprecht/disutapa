@@ -20,6 +20,8 @@ class headed_clause:
     def __call__(self, lex: int):
         return (lambda *args: self.subst(lex, *args))
 
+concat_clause = lambda _: (lambda *args: Tree("_|<>", *args))
+
 
 @dataclass(frozen=True, init=False)
 class headed_rule:
@@ -31,7 +33,7 @@ class headed_rule:
     def __init__(self, lhs, rhs, clause, fanout):
         if isinstance(clause, headed_clause):
             clause = str(clause.spine)
-        self.__dict__["lhs"], self.__dict__["rhs"], self.__dict__["clause"], self.__dict__["fanout"] = lhs, rhs, clause, fanout
+        self.__dict__["lhs"], self.__dict__["rhs"], self.__dict__["clause"], self.__dict__["fanout"] = lhs, tuple(rhs), clause, fanout
 
     @property
     def hclause(self):
@@ -48,11 +50,20 @@ def extract_node(tree: HeadedTree, overridelhs: str = None):
     children = []
     rhs_nts = []
     c, succs, _ = read_spine(tree)
-    for succ in succs:
-        children.append(extract_node(succ))
+    for node, succ in succs:
+        children.append(extract_nodes(succ, node))
         rhs_nts.append(children[-1].label[1].lhs)
     lhs = overridelhs if not overridelhs is None else topmost
     return Tree((lex, headed_rule(lhs, tuple(rhs_nts), headed_clause(c), 0)), children)
+
+def extract_nodes(trees: list[HeadedTree], parent: str):
+    llabel= f"{parent}|<>>"
+    rlabel = f"{parent}|<>"
+    implicit_rule = headed_rule(rlabel, (llabel, rlabel), concat_clause, 0)
+    deriv = extract_node(trees[-1], overridelhs=rlabel)
+    for child in (extract_node(t, overridelhs=llabel) for t in trees[-2::-1]):
+        deriv = Tree((None, implicit_rule), [child, deriv])
+    return deriv
 
 
 def read_spine(tree: HeadedTree, firstvar: int = 1):
@@ -60,19 +71,21 @@ def read_spine(tree: HeadedTree, firstvar: int = 1):
         return 0, [], firstvar
     children = []
     successors = []
-    for i, child in enumerate(tree):
-        if tree.headidx == i:
-            child, successors_, firstvar = read_spine(child, firstvar)
-            successors.extend(successors_)
-            children.append(child)
-        else:
-            children.append(firstvar)
-            successors.append(child)
-            firstvar += 1
+    if tree.headidx > 0:
+        successors.append((tree.label, tree[:tree.headidx]))
+        children.append(firstvar)
+        firstvar+=1
+    child, successors_, firstvar = read_spine(tree[tree.headidx], firstvar)
+    successors.extend(successors_)
+    children.append(child)
+    if tree.headidx < len(tree)-1:
+        successors.append((tree.label, tree[tree.headidx+1:]))
+        children.append(firstvar)
+        firstvar+=1
     return Tree(tree.label, children), successors, firstvar
 
 
 
 def extract_head(tree: Tree, override_root: str = "ROOT"):
     derivation = extract_node(tree, override_root)
-    return (r for _, r in sorted(node.label for node in derivation.subtrees()))
+    return (r for _, r in sorted(node.label for node in derivation.subtrees() if not node.label[0] is None))

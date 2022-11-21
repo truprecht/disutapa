@@ -2,6 +2,7 @@ from discodop.tree import Tree
 from dataclasses import dataclass, field
 
 from ..headed_tree import HeadedTree, HEAD
+from .extract import fanout
 
 
 @dataclass
@@ -44,7 +45,7 @@ def extract_node(tree: HeadedTree, overridelhs: str = None):
     if not isinstance(tree, HeadedTree):
         # TODO: use pos symbol?
         lhs = overridelhs if not overridelhs is None else "ARG"
-        return Tree((tree, headed_rule(lhs, (), headed_clause(0), 0)), [])
+        return Tree((tree, headed_rule(lhs, (), headed_clause(0), 1)), [])
     lex = tree.headterm
     topmost = tree.label.split("+")[0]
     children = []
@@ -54,15 +55,18 @@ def extract_node(tree: HeadedTree, overridelhs: str = None):
         children.append(extract_nodes(succ, node))
         rhs_nts.append(children[-1].label[1].lhs)
     lhs = overridelhs if not overridelhs is None else topmost
-    return Tree((lex, headed_rule(lhs, tuple(rhs_nts), headed_clause(c), 0)), children)
+    return Tree((lex, headed_rule(lhs, tuple(rhs_nts), headed_clause(c), fanout(sorted(tree.leaves())))), children)
 
 def extract_nodes(trees: list[HeadedTree], parent: str):
     llabel= f"{parent}|<>>"
     rlabel = f"{parent}|<>"
-    implicit_rule = headed_rule(rlabel, (llabel, rlabel), concat_clause, 0)
+    implicit_rule = lambda ls: headed_rule(rlabel, (llabel, rlabel), concat_clause, fanout(ls))
     deriv = extract_node(trees[-1], overridelhs=rlabel)
-    for child in (extract_node(t, overridelhs=llabel) for t in trees[-2::-1]):
-        deriv = Tree((None, implicit_rule), [child, deriv])
+    yd = trees[-1].leaves() if isinstance(trees[-1], Tree) else [trees[-1]]
+    for tree in trees[-2::-1]:
+        yd += tree.leaves() if isinstance(tree, Tree) else [tree]
+        child = extract_node(tree, overridelhs=llabel)
+        deriv = Tree((None, implicit_rule(sorted(yd))), [child, deriv])
     return deriv
 
 

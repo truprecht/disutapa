@@ -130,6 +130,6 @@ def read_spine(tree: HeadedTree, firstvar: int = 1):
     return Tree(tree.label, children), successors, firstvar
 
 
-def extract_head(tree: Tree, override_root: str = "ROOT", hmarkov: int = 999, markendpoint: bool = True):
-    derivation = extract_node(tree, override_root, hmarkov, markendpoint)
+def extract_head(tree: Tree, override_root: str = "ROOT", horzmarkov: int = 999, vertmarkov: int = 0, rightmostunary: bool = True):
+    derivation = extract_node(tree, override_root, horzmarkov, rightmostunary)
     return (r for _, _, r in sorted(node.label for node in derivation.subtrees()))

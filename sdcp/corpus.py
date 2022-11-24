@@ -45,7 +45,7 @@ class corpus_extractor:
             self.idx[i] = len(self.goldtrees)
             if self.mode == "head":
                 ht = HeadedTree.convert(tree)
-                rules = tuple(self.rules[gr] for gr in extract_head(ht))
+                rules = tuple(self.rules[gr] for gr in extract_head(ht, **self._binparams))
                 pos = tuple(p for _, p in sorted(ht.postags.items()))
             else:
                 if len(sent) == 1:

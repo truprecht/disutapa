@@ -70,11 +70,20 @@ def test_extract():
     assert deriv[1].label == (2, 1, headed_rule("S|<>", ["NP|<>"], headed_clause(Tree("NP", [1, 0])), 1))
     assert deriv[(1,0)].label == (1, 1, headed_rule("NP|<>", [], headed_clause(0), 1))
 
+
+    deriv = extract_node(t, "ROOT", hmarkov=0, markendpoint=False)
+    assert deriv.label == (3, 0, headed_rule("ROOT", ["VP", "NP"], headed_clause(Tree("SBAR", [Tree("S", [Tree("VP", [1, 0]), 2])])), 1))
+    assert deriv[0].label == (4, 0, headed_rule("VP", ["ARG", "ARG"], headed_clause(Tree("VP", [1, 0, 2])), 2))
+    assert deriv[(0,0)].label == (0, 0, headed_rule("ARG", [], headed_clause(0), 1))
+    assert deriv[(0,1)].label == (5, 5, headed_rule("ARG", [], headed_clause(0), 1))
+    assert deriv[1].label == (2, 1, headed_rule("NP", ["ARG"], headed_clause(Tree("NP", [1, 0])), 1))
+    assert deriv[(1,0)].label == (1, 1, headed_rule("ARG", [], headed_clause(0), 1))
+
 def test_nonbin_extraction():
     t = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4))")
     t[1].type = HEAD
     t = HeadedTree.convert(t)
-    assert list(extract_head(t, hmarkov=0)) == [
+    assert list(extract_head(t, horzmarkov=0)) == [
         headed_rule("S|<>", ()),
         headed_rule("ROOT", ("S|<>", "S|<>"), clause="(S 1 0 2)"),
         headed_rule("S|<>", ("S|<>",), clause="(_|<> 0 1)"),
@@ -86,7 +95,7 @@ def test_nonbin_extraction():
     t[1].type = HEAD
     t[(2,1)].type = HEAD
     t = HeadedTree.convert(t)
-    assert list(extract_head(t, hmarkov=0)) == [
+    assert list(extract_head(t, horzmarkov=0)) == [
         headed_rule("S|<>", ()),
         headed_rule("ROOT", ("S|<>", "S|<>"), clause="(S 1 0 2)"),
         headed_rule("T|<>", ()),
@@ -96,12 +105,11 @@ def test_nonbin_extraction():
         headed_rule("S|<>", ()),
     ]
 
-    
     t = Tree("(S (A 0) (B 1) (T (C 2) (D 3) (E 6)) (D 4) (E 5))")
     t[1].type = HEAD
     t[(2,1)].type = HEAD
     t = HeadedTree.convert(t)
-    assert list(extract_head(t, hmarkov=0)) == [
+    assert list(extract_head(t, horzmarkov=0)) == [
         headed_rule("S|<>", ()),
         headed_rule("ROOT", ("S|<>", "S|<>"), clause="(S 1 0 2)"),
         headed_rule("T|<>", ()),
@@ -109,6 +117,20 @@ def test_nonbin_extraction():
         headed_rule("S|<>", ("S|<>",), clause="(_|<> 0 1)"),
         headed_rule("S|<>", ()),
         headed_rule("T|<>", ()),
+    ]
+    
+    t = Tree("(S (A 0) (B 1) (T (C 2) (D 3) (E 6)) (D 4) (E 5))")
+    t[1].type = HEAD
+    t[(2,1)].type = HEAD
+    t = HeadedTree.convert(t)
+    assert list(extract_head(t, horzmarkov=0, rightmostunary=False)) == [
+        headed_rule("ARG", ()),
+        headed_rule("ROOT", ("ARG", "S|<>"), clause="(S 1 0 2)"),
+        headed_rule("ARG", ()),
+        headed_rule("S|<>", ("ARG", "S|<>", "ARG",), clause="(_|<> (T 1 0 3) 2)"),
+        headed_rule("S|<>", ("ARG",), clause="(_|<> 0 1)"),
+        headed_rule("ARG", ()),
+        headed_rule("ARG", ()),
     ]
 
 def test_assembly():

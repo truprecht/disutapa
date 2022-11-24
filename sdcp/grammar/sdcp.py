@@ -65,10 +65,6 @@ class rule:
         object.__setattr__(self, "fanout_hint", fanout)
 
 
-    def as_tuple(self):
-        return self.lhs, self.rhs
-
-
     def __repr__(self):
         fn = f", fn_node={repr(self.fn.label)}" if not self.fn.label is None else ""
         fp = f", fn_push={repr(self.fn.push_idx)}" if not self.fn.push_idx == -1 and not (self.fn.arity==2 and self.fn.push_idx == 1) else ""

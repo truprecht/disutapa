@@ -49,3 +49,16 @@ class AutoTree(Tree):
 
     def parented(self):
         return ImmutableParentedTree(self.tree())
+
+
+def fix_rotation(tree: Tree):
+    if not isinstance(tree, Tree):
+        return tree, tree
+    leftmosts, children = zip(*sorted(fix_rotation(c) for c in tree))
+    return leftmosts[0], Tree(tree.label, children)
+
+
+def with_pos(tree: Tree, pos: tuple[str, ...]):
+    if not isinstance(tree, Tree):
+        return Tree(pos[tree], [tree])
+    return Tree(tree.label, [with_pos(t, pos) for t in tree])

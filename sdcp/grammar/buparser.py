@@ -17,6 +17,7 @@ class BitSpan:
     leaves: bitarray
     leftmost: int = field(init=False, repr=False, hash=False, compare=False)
     gaps: int = field(init=False, repr=False, hash=False, compare=False)
+    gapslen: int = field(init=False, repr=False, hash=False, compare=False)
     firstgap: int = field(init=False, repr=False, hash=False, compare=False)
 
     def __post_init__(self):
@@ -67,7 +68,7 @@ class BitSpan:
         return self.leaves.count(1)
 
     def __lt__(self, other: "BitSpan"):
-        return self.leaves < other.leaves
+        return (self.leftmost, self.leaves[self.leftmost:]) > (other.leftmost, other.leaves[other.leftmost:])
 
     def __contains__(self, i: int) -> bool:
         return self.leaves[i] == 1

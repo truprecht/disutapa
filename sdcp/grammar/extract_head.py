@@ -30,6 +30,12 @@ class headed_clause:
         return (lambda *args: self.subst(lex, *args))
 
 
+def subvars(tree: ImmutableTree, newvars: dict[int, int]):
+    if not isinstance(tree, Tree):
+        return newvars[tree]
+    return ImmutableTree(tree.label, (subvars(c, newvars) for c in tree))
+
+
 @dataclass(frozen=True, init=False)
 class headed_rule:
     lhs: str
@@ -51,6 +57,15 @@ class headed_rule:
     def fn(self, lex, _):
         return self.clause(lex), [None]*len(self.rhs)
 
+    def reorder(self, leftmosts: tuple[int]):
+        if all(i < j for i, j in zip(leftmosts[:-1], leftmosts[1:])): return self
+        reordered_idx = {oldi+1: newi+1 for newi, oldi in enumerate(sorted(range(len(leftmosts)), key=leftmosts.__getitem__))}
+        reordered_idx[0] = 0
+        clause = subvars(self._clause, reordered_idx)
+        rhs = (self.rhs[reordered_idx[i+1]-1] for i in range(len(self.rhs)))
+        return self.__class__(self.lhs, rhs, clause, self.fanout)
+
+
 
 def extract_node(tree: HeadedTree, overridelhs: str = None, hmarkov: int = 999, markendpoint: bool = True):
     if not isinstance(tree, HeadedTree):
@@ -66,19 +81,20 @@ def extract_node(tree: HeadedTree, overridelhs: str = None, hmarkov: int = 999, 
         rhs_nts.append(children[-1].label[2].lhs)
     lhs = overridelhs if not overridelhs is None else tree.label
     leftmost = min(lex, *(c.label[1] for c in children)) if children else lex
-    return Tree((lex, leftmost, headed_rule(lhs, tuple(rhs_nts), headed_clause(c), fanout(sorted(tree.leaves())))), children)
+    rule = headed_rule(lhs, tuple(rhs_nts), headed_clause(c), fanout(sorted(tree.leaves()))).reorder(tuple(c.label[1] for c in children))
+    return Tree((lex, leftmost, rule), children)
 
 
 def fuse_modrule(mod_deriv: Tree, successor_mods: Tree, all_leaves):
-    # TODO: reorder vars according to leftmost position
     toprule = mod_deriv.label[2]
     botrule = successor_mods.label[2]
+    children = [*mod_deriv.children, successor_mods]
     newrule = headed_rule(
         toprule.lhs,
         toprule.rhs+(botrule.lhs,),
         clause=ImmutableTree(RMLABEL, [toprule._clause, len(toprule.rhs)+1]),
-        fanout=fanout(sorted(all_leaves)))
-    return Tree((*mod_deriv.label[:2], newrule), [*mod_deriv.children, successor_mods])
+        fanout=fanout(sorted(all_leaves))).reorder(tuple(c.label[1] for c in children))
+    return Tree((*mod_deriv.label[:2], newrule), children)
  
 
 def extract_nodes(trees: list[HeadedTree], parent: str, hmarkov: int = 999, markendpoint: bool = True):

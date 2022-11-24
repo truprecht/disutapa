@@ -24,6 +24,17 @@ def test_read_spine():
     assert clause == Tree("SBAR+S", [Tree("VP", [1, 0]), 2])
     assert succs == [("VP", [t[(0,0)]]), ("SBAR+S", [t[1]])]
 
+
+def test_reorder():
+    r = headed_rule("A", "abcd", "(A 4 3 (B 0) 2 1)")
+    positions = (1,2,3,4)
+    assert r.reorder(positions) == r
+    positions = (1,3,2,4)
+    assert r.reorder(positions) == headed_rule("A", "acbd", "(A 4 2 (B 0) 3 1)")
+    positions = (4,3,2,1)
+    assert r.reorder(positions) == headed_rule("A", "dcba", "(A 1 2 (B 0) 3 4)")
+
+
 def test_extract():
     t = HeadedTree("(WRB 0)")
     clause = headed_clause(Tree("WRB", [0]))

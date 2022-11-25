@@ -40,7 +40,7 @@ def subvars(tree: ImmutableTree, newvars: dict[int, int]):
 class headed_rule:
     lhs: str
     rhs: tuple[str]
-    _clause: ImmutableTree
+    clause: ImmutableTree
     fanout: int
 
     def __init__(self, lhs, rhs, clause: str | headed_clause = 0, fanout = 1):
@@ -48,20 +48,17 @@ class headed_rule:
             clause = ImmutableTree(clause)
         if isinstance(clause, headed_clause):
             clause = ImmutableTree.convert(clause.spine)
-        self.__dict__["lhs"], self.__dict__["rhs"], self.__dict__["_clause"], self.__dict__["fanout"] = lhs, tuple(rhs), clause, fanout
+        self.__dict__["lhs"], self.__dict__["rhs"], self.__dict__["clause"], self.__dict__["fanout"] = lhs, tuple(rhs), clause, fanout
 
-    @property
-    def clause(self):
-        return headed_clause(self._clause)
 
     def fn(self, lex, _):
-        return self.clause(lex), [None]*len(self.rhs)
+        return headed_clause(self.clause)(lex), [None]*len(self.rhs)
 
     def reorder(self, leftmosts: tuple[int]):
         if all(i < j for i, j in zip(leftmosts[:-1], leftmosts[1:])): return self
         reordered_idx = {oldi+1: newi+1 for newi, oldi in enumerate(sorted(range(len(leftmosts)), key=leftmosts.__getitem__))}
         reordered_idx[0] = 0
-        clause = subvars(self._clause, reordered_idx)
+        clause = subvars(self.clause, reordered_idx)
         rhs = (self.rhs[reordered_idx[i+1]-1] for i in range(len(self.rhs)))
         return self.__class__(self.lhs, rhs, clause, self.fanout)
 
@@ -92,7 +89,7 @@ def fuse_modrule(mod_deriv: Tree, successor_mods: Tree, all_leaves):
     newrule = headed_rule(
         toprule.lhs,
         toprule.rhs+(botrule.lhs,),
-        clause=ImmutableTree(RMLABEL, [toprule._clause, len(toprule.rhs)+1]),
+        clause=ImmutableTree(RMLABEL, [toprule.clause, len(toprule.rhs)+1]),
         fanout=fanout(sorted(all_leaves))).reorder(tuple(c.label[1] for c in children))
     return Tree((*mod_deriv.label[:2], newrule), children)
  

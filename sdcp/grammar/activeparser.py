@@ -32,6 +32,7 @@ class ActiveItem:
     leaves: BitSpan
     maxfo: int
     remaining: tuple[str]
+    # todo: mark when leaf is inserted into bitspan
 
     def freeze(self):
         return (self.lhs, self.leaf, self.leaves.freeze(), self.maxfo, self.remaining)
@@ -74,9 +75,7 @@ class ActiveParser:
             qi: qelement = self.queue.get_nowait()
             # todo leaf should be a part of activeitem
             fritem = qi.item.freeze()
-            print(qi)
             if fritem in expanded:
-                print("was already expanded")
                 continue
             expanded.add(fritem)
 
@@ -105,10 +104,8 @@ class ActiveParser:
                 continue
 
             assert isinstance(qi.item, ActiveItem)
-            # print(qi.item.remaining)
             if not qi.item.remaining:
                 leaves = qi.item.leaves.with_leaf(qi.item.leaf)
-                # print(leaves, leaves.numgaps(), qi.item.maxfo)
                 if not leaves.numgaps() < qi.item.maxfo: continue
                 self.queue.put_nowait(qelement(
                     PassiveItem(qi.item.lhs, leaves),

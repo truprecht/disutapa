@@ -68,7 +68,8 @@ class BitSpan:
         return self.leaves.count(1)
 
     def __lt__(self, other: "BitSpan"):
-        return (self.leftmost, self.leaves[self.leftmost:]) > (other.leftmost, other.leaves[other.leftmost:])
+        #return (self.leftmost, self.leaves[self.leftmost:]) > (other.leftmost, other.leaves[other.leftmost:])
+        return self.leaves > other.leaves
 
     def __contains__(self, i: int) -> bool:
         return self.leaves[i] == 1

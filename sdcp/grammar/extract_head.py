@@ -31,6 +31,8 @@ class headed_clause:
 
 
 def subvars(tree: ImmutableTree, newvars: dict[int, int]):
+    if tree == 0:
+        return tree
     if not isinstance(tree, Tree):
         return newvars[tree]
     return ImmutableTree(tree.label, (subvars(c, newvars) for c in tree))
@@ -42,26 +44,34 @@ class headed_rule:
     rhs: tuple[str]
     clause: ImmutableTree
     fanout: int
+    lexidx: int
 
-    def __init__(self, lhs, rhs, clause: str | headed_clause = 0, fanout = 1):
+    def __init__(self, lhs, rhs, clause: str | headed_clause = 0, fanout: int = 1, lexidx: int = None):
         if isinstance(clause, str):
             clause = ImmutableTree(clause)
         if isinstance(clause, headed_clause):
             clause = ImmutableTree.convert(clause.spine)
         self.__dict__["lhs"], self.__dict__["rhs"], self.__dict__["clause"], self.__dict__["fanout"] = lhs, tuple(rhs), clause, fanout
-
+        if lexidx is None:
+            lexidx = 0
+            while clause != 0:
+                for c in clause:
+                    if isinstance(c, Tree) or c == 0:
+                        clause = c
+                        break
+                    lexidx = max(lexidx, c)
+        self.__dict__["lexidx"] = lexidx
 
     def fn(self, lex, _):
         return headed_clause(self.clause)(lex), [None]*len(self.rhs)
 
     def reorder(self, leftmosts: tuple[int]):
-        if all(i < j for i, j in zip(leftmosts[:-1], leftmosts[1:])): return self
-        reordered_idx = {oldi+1: newi+1 for newi, oldi in enumerate(sorted(range(len(leftmosts)), key=leftmosts.__getitem__))}
-        reordered_idx[0] = 0
-        clause = subvars(self.clause, reordered_idx)
-        rhs = (self.rhs[reordered_idx[i+1]-1] for i in range(len(self.rhs)))
-        return self.__class__(self.lhs, rhs, clause, self.fanout)
-
+        srti = sorted(range(len(leftmosts)), key=leftmosts.__getitem__)
+        rordi = {o: i+1 for i, o in enumerate(i for i in srti if not i == 0)}
+        lxidx = next(i for i, o in enumerate(srti) if o == 0)
+        clause = subvars(self.clause, rordi)
+        rhs = (self.rhs[i-1] for i in srti if not i == 0)
+        return self.__class__(self.lhs, rhs, clause, self.fanout, lxidx)
 
 
 def extract_node(tree: HeadedTree, overridelhs: str = None, hmarkov: int = 999, markendpoint: bool = True):
@@ -78,19 +88,20 @@ def extract_node(tree: HeadedTree, overridelhs: str = None, hmarkov: int = 999, 
         rhs_nts.append(children[-1].label[2].lhs)
     lhs = overridelhs if not overridelhs is None else tree.label
     leftmost = min(lex, *(c.label[1] for c in children)) if children else lex
-    rule = headed_rule(lhs, tuple(rhs_nts), headed_clause(c), fanout(sorted(tree.leaves()))).reorder(tuple(c.label[1] for c in children))
+    rule = headed_rule(lhs, tuple(rhs_nts), headed_clause(c), fanout(sorted(tree.leaves()))).reorder((lex,) + tuple(c.label[1] for c in children))
     return Tree((lex, leftmost, rule), children)
 
 
 def fuse_modrule(mod_deriv: Tree, successor_mods: Tree, all_leaves):
     toprule = mod_deriv.label[2]
     botrule = successor_mods.label[2]
+    lex = mod_deriv.label[0]
     children = [*mod_deriv.children, successor_mods]
     newrule = headed_rule(
         toprule.lhs,
         toprule.rhs+(botrule.lhs,),
         clause=ImmutableTree(RMLABEL, [toprule.clause, len(toprule.rhs)+1]),
-        fanout=fanout(sorted(all_leaves))).reorder(tuple(c.label[1] for c in children))
+        fanout=fanout(sorted(all_leaves))).reorder((lex,) + tuple(c.label[1] for c in children))
     return Tree((*mod_deriv.label[:2], newrule), children)
  
 

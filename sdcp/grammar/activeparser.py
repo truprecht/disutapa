@@ -32,7 +32,7 @@ class ActiveItem:
     leaves: BitSpan
     maxfo: int
     remaining: tuple[str]
-    # todo: mark when leaf is inserted into bitspan
+    lexidx: int
 
     def freeze(self):
         return (self.lhs, self.leaf, self.leaves.freeze(), self.maxfo, self.remaining)
@@ -60,7 +60,7 @@ class ActiveParser:
                 weight = maxweight - weight
                 rule: headed_rule = self.grammar.rules[rid]
                 self.queue.put_nowait(qelement(
-                        ActiveItem(rule.lhs, i, BitSpan.fromit((), self.len), rule.fanout, rule.rhs),
+                        ActiveItem(rule.lhs, i, BitSpan.fromit((), self.len), rule.fanout, rule.rhs, rule.lexidx),
                         backtrace(rid, i, ()),
                         weight, 0
                 ))
@@ -73,7 +73,6 @@ class ActiveParser:
         self.backtraces = []
         while not self.queue.empty():
             qi: qelement = self.queue.get_nowait()
-            # todo leaf should be a part of activeitem
             fritem = qi.item.freeze()
             if fritem in expanded:
                 continue
@@ -90,13 +89,14 @@ class ActiveParser:
                 self.from_lhs[qi.item.lhs].add((qi.item.leaves, qi.bt, qi.weight, qi.gapscore))
                 
                 for active, abt, _weight, _gapscore in self.actives.get(qi.item.lhs, []):
-                    if not active.leaves.leftmost < qi.item.leaves.leftmost or \
+                    if active.lexidx > 0 and not qi.item.leaves.leftmost < active.leaf or \
+                            not active.leaves.leftmost < qi.item.leaves.leftmost or \
                             abt.leaf in qi.item.leaves or \
                             not active.leaves.isdisjoint(qi.item.leaves):
                         continue
                     newpos = active.leaves.union(qi.item.leaves)
                     self.queue.put_nowait(qelement(
-                        ActiveItem(active.lhs, active.leaf, newpos, active.maxfo, active.remaining[1:]),
+                        ActiveItem(active.lhs, active.leaf, newpos, active.maxfo, active.remaining[1:], active.lexidx-1),
                         backtrace(abt.rid, abt.leaf, abt.children+(backtrace_id,)),
                         qi.weight+_weight,
                         newpos.gaps + self.discount*(qi.gapscore+_gapscore)
@@ -104,11 +104,21 @@ class ActiveParser:
                 continue
 
             assert isinstance(qi.item, ActiveItem)
-            if not qi.item.remaining:
+            if qi.item.lexidx == 0:
                 leaves = qi.item.leaves.with_leaf(qi.item.leaf)
-                if not leaves.numgaps() < qi.item.maxfo: continue
+                gapchange = leaves.numgaps() - qi.item.leaves.numgaps()
                 self.queue.put_nowait(qelement(
-                    PassiveItem(qi.item.lhs, leaves),
+                    ActiveItem(qi.item.lhs, qi.item.leaf, leaves, qi.item.maxfo, qi.item.remaining, -1),
+                    qi.bt,
+                    qi.weight,
+                    qi.gapscore + gapchange
+                ))
+                continue
+
+            if not qi.item.remaining:
+                if not qi.item.leaves.numgaps() < qi.item.maxfo: continue
+                self.queue.put_nowait(qelement(
+                    PassiveItem(qi.item.lhs, qi.item.leaves),
                     qi.bt,
                     qi.weight,
                     qi.gapscore
@@ -117,13 +127,14 @@ class ActiveParser:
 
             self.actives.setdefault(qi.item.remaining[0], []).append((qi.item, qi.bt, qi.weight, qi.gapscore))
             for (span, pbt, pweight, pgaps) in self.from_lhs.get(qi.item.remaining[0], []):
-                if not qi.item.leaves.leftmost < span.leftmost or \
+                if qi.item.lexidx > 0 and not span.leftmost < qi.item.leaf or \
+                        not qi.item.leaves.leftmost < span.leftmost or \
                         qi.bt.leaf in span or \
                         not qi.item.leaves.isdisjoint(span):
                     continue
                 newpos = qi.item.leaves.union(span)
                 self.queue.put_nowait(qelement(
-                    ActiveItem(qi.item.lhs, qi.item.leaf, newpos, qi.item.maxfo, qi.item.remaining[1:]),
+                    ActiveItem(qi.item.lhs, qi.item.leaf, newpos, qi.item.maxfo, qi.item.remaining[1:], qi.item.lexidx-1),
                     backtrace(qi.bt.rid, qi.bt.leaf, qi.bt.children+(pbt,)),
                     qi.weight+pweight,
                     newpos.gaps + self.discount*(qi.gapscore+pgaps)
@@ -134,7 +145,7 @@ class ActiveParser:
         if item is None:
             item = self.rootid
             if self.rootid is None:
-                return f"(NOPARSE {' '.join(str(p) for p in range(self.len))})"
+                return [Tree("NOPARSE", list(range(self.len)))]
         bt: backtrace = self.backtraces[item]
         fn, push = self.grammar.rules[bt.rid].fn(bt.leaf, pushed)
         # match bt.as_tuple():

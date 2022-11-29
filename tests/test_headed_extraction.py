@@ -27,12 +27,12 @@ def test_read_spine():
 
 def test_reorder():
     r = headed_rule("A", "abcd", "(A 4 3 (B 0) 2 1)")
-    positions = (1,2,3,4)
-    assert r.reorder(positions) == r
-    positions = (1,3,2,4)
-    assert r.reorder(positions) == headed_rule("A", "acbd", "(A 4 2 (B 0) 3 1)")
-    positions = (4,3,2,1)
-    assert r.reorder(positions) == headed_rule("A", "dcba", "(A 1 2 (B 0) 3 4)")
+    positions = (2,0,1,3,4)
+    assert r.reorder(positions) ==headed_rule("A", "abcd", "(A 4 3 (B 0) 2 1)", lexidx=2)
+    positions = (0,1,3,2,4)
+    assert r.reorder(positions) == headed_rule("A", "acbd", "(A 4 2 (B 0) 3 1)", lexidx=0)
+    positions = (3,5,4,2,1)
+    assert r.reorder(positions) == headed_rule("A", "dcba", "(A 1 2 (B 0) 3 4)", lexidx=2)
 
 
 def test_extract():
@@ -63,7 +63,7 @@ def test_extract():
     t[(0,1, 1)].type = HEAD
     t = HeadedTree.convert(t)
     deriv = extract_node(t, "ROOT", hmarkov=0)
-    assert deriv.label == (3, 0, headed_rule("ROOT", ["VP|<>", "S|<>"], headed_clause(Tree("SBAR", [Tree("S", [Tree("VP", [1, 0]), 2])])), 1))
+    assert deriv.label == (3, 0, headed_rule("ROOT", ["VP|<>", "S|<>"], headed_clause(Tree("SBAR", [Tree("S", [Tree("VP", [1, 0]), 2])])), 1, lexidx=2))
     assert deriv[0].label == (4, 0, headed_rule("VP|<>", ["VP|<>", "VP|<>"], headed_clause(Tree("VP", [1, 0, 2])), 2))
     assert deriv[(0,0)].label == (0, 0, headed_rule("VP|<>", [], headed_clause(0), 1))
     assert deriv[(0,1)].label == (5, 5, headed_rule("VP|<>", [], headed_clause(0), 1))
@@ -72,7 +72,7 @@ def test_extract():
 
 
     deriv = extract_node(t, "ROOT", hmarkov=0, markendpoint=False)
-    assert deriv.label == (3, 0, headed_rule("ROOT", ["VP", "NP"], headed_clause(Tree("SBAR", [Tree("S", [Tree("VP", [1, 0]), 2])])), 1))
+    assert deriv.label == (3, 0, headed_rule("ROOT", ["VP", "NP"], headed_clause(Tree("SBAR", [Tree("S", [Tree("VP", [1, 0]), 2])])), 1,  lexidx=2))
     assert deriv[0].label == (4, 0, headed_rule("VP", ["ARG", "ARG"], headed_clause(Tree("VP", [1, 0, 2])), 2))
     assert deriv[(0,0)].label == (0, 0, headed_rule("ARG", [], headed_clause(0), 1))
     assert deriv[(0,1)].label == (5, 5, headed_rule("ARG", [], headed_clause(0), 1))

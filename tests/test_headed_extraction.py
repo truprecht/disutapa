@@ -1,18 +1,19 @@
-from sdcp.grammar.extract_head import read_spine, extract_node, headed_clause, headed_rule, extract_head
+from sdcp.grammar.extract_head import headed_clause, headed_rule, Extractor
 from sdcp.headed_tree import HeadedTree, Tree, HEAD
 
 def test_read_spine():
+    e = Extractor()
     t = HeadedTree("(WRB 0)")
-    clause, succs, _ = read_spine(t)
+    clause, succs, _ = e.read_spine(t, ())
     assert clause == Tree("WRB", [0])
     assert succs == []
 
     t = Tree("(S (WRB 0) (NN 1))")
     t[1].type = HEAD
     t = HeadedTree.convert(t)
-    clause, succs, _ = read_spine(t)
+    clause, succs, _ = e.read_spine(t, ())
     assert clause == Tree("S", [1, 0])
-    assert succs == [("S", [t[0]])]
+    assert succs == [(("S",), [t[0]])]
 
     t = Tree("(SBAR+S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2)))")
     t[0].type = HEAD
@@ -20,9 +21,9 @@ def test_read_spine():
     t[(0, 0, 1)].type = HEAD
     t[(1, 1)].type = HEAD
     t = HeadedTree.convert(t)
-    clause, succs, _ = read_spine(t)
+    clause, succs, _ = e.read_spine(t, ())
     assert clause == Tree("SBAR+S", [Tree("VP", [1, 0]), 2])
-    assert succs == [("VP", [t[(0,0)]]), ("SBAR+S", [t[1]])]
+    assert succs == [(("SBAR+S", "VP"), [t[(0,0)]]), (("SBAR+S",), [t[1]])]
 
 
 def test_reorder():
@@ -36,16 +37,17 @@ def test_reorder():
 
 
 def test_extract():
+    e = Extractor(horzmarkov=0)
     t = HeadedTree("(WRB 0)")
     clause = headed_clause(Tree("WRB", [0]))
-    assert extract_node(t, "ROOT", hmarkov=0) == Tree((0, 0, headed_rule("ROOT", (), clause, 1)), [])
+    assert e.extract_node(t, "ROOT") == Tree((0, 0, headed_rule("ROOT", (), clause, 1)), [])
 
     t = Tree("(S (WRB 0) (NN 1))")
     t[1].type = HEAD
     t = HeadedTree.convert(t)
     r1 = headed_rule("ROOT", ["S|<>"], headed_clause(Tree("S", [1, 0])), 1)
     r2 = headed_rule("S|<>", [], headed_clause(0), 1)
-    assert extract_node(t, "ROOT", hmarkov=0) == Tree((1, 0, r1), [Tree((0, 0, r2), [])])
+    assert e.extract_node(t, "ROOT") == Tree((1, 0, r1), [Tree((0, 0, r2), [])])
 
     t = Tree("(S (SBAR (WRB 0)) (NN 1))")
     t[1].type = HEAD
@@ -53,7 +55,7 @@ def test_extract():
     t = HeadedTree.convert(t)
     r1 = headed_rule("ROOT", ["S|<>"], "(S 1 0)")
     r2 = headed_rule("S|<>", [], "(SBAR 0)")
-    assert extract_node(t, "ROOT", hmarkov=0) == Tree((1, 0, r1), [Tree((0, 0, r2), [])])
+    assert e.extract_node(t, "ROOT") == Tree((1, 0, r1), [Tree((0, 0, r2), [])])
 
     t = Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))")
     t[0].type = HEAD
@@ -62,7 +64,7 @@ def test_extract():
     t[(0,0, 0, 1)].type = HEAD
     t[(0,1, 1)].type = HEAD
     t = HeadedTree.convert(t)
-    deriv = extract_node(t, "ROOT", hmarkov=0)
+    deriv = e.extract_node(t, "ROOT")
     assert deriv.label == (3, 0, headed_rule("ROOT", ["VP|<>", "S|<>"], headed_clause(Tree("SBAR", [Tree("S", [Tree("VP", [1, 0]), 2])])), 1, lexidx=2))
     assert deriv[0].label == (4, 0, headed_rule("VP|<>", ["VP|<>", "VP|<>"], headed_clause(Tree("VP", [1, 0, 2])), 2))
     assert deriv[(0,0)].label == (0, 0, headed_rule("VP|<>", [], headed_clause(0), 1))
@@ -70,8 +72,8 @@ def test_extract():
     assert deriv[1].label == (2, 1, headed_rule("S|<>", ["NP|<>"], headed_clause(Tree("NP", [1, 0])), 1))
     assert deriv[(1,0)].label == (1, 1, headed_rule("NP|<>", [], headed_clause(0), 1))
 
-
-    deriv = extract_node(t, "ROOT", hmarkov=0, markendpoint=False)
+    e = Extractor(horzmarkov=0, rightmostunary=False)
+    deriv = e.extract_node(t, "ROOT")
     assert deriv.label == (3, 0, headed_rule("ROOT", ["VP", "NP"], headed_clause(Tree("SBAR", [Tree("S", [Tree("VP", [1, 0]), 2])])), 1,  lexidx=2))
     assert deriv[0].label == (4, 0, headed_rule("VP", ["ARG", "ARG"], headed_clause(Tree("VP", [1, 0, 2])), 2))
     assert deriv[(0,0)].label == (0, 0, headed_rule("ARG", [], headed_clause(0), 1))
@@ -80,10 +82,11 @@ def test_extract():
     assert deriv[(1,0)].label == (1, 1, headed_rule("ARG", [], headed_clause(0), 1))
 
 def test_nonbin_extraction():
+    e = Extractor(horzmarkov=0)
     t = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4))")
     t[1].type = HEAD
     t = HeadedTree.convert(t)
-    assert list(extract_head(t, horzmarkov=0)) == [
+    assert list(e(t)) == [
         headed_rule("S|<>", ()),
         headed_rule("ROOT", ("S|<>", "S|<>"), clause="(S 1 0 2)"),
         headed_rule("S|<>", ("S|<>",), clause="(_|<> 0 1)"),
@@ -95,7 +98,7 @@ def test_nonbin_extraction():
     t[1].type = HEAD
     t[(2,1)].type = HEAD
     t = HeadedTree.convert(t)
-    assert list(extract_head(t, horzmarkov=0)) == [
+    assert list(e(t)) == [
         headed_rule("S|<>", ()),
         headed_rule("ROOT", ("S|<>", "S|<>"), clause="(S 1 0 2)"),
         headed_rule("T|<>", ()),
@@ -109,7 +112,7 @@ def test_nonbin_extraction():
     t[1].type = HEAD
     t[(2,1)].type = HEAD
     t = HeadedTree.convert(t)
-    assert list(extract_head(t, horzmarkov=0)) == [
+    assert list(e(t)) == [
         headed_rule("S|<>", ()),
         headed_rule("ROOT", ("S|<>", "S|<>"), clause="(S 1 0 2)"),
         headed_rule("T|<>", ()),
@@ -119,11 +122,12 @@ def test_nonbin_extraction():
         headed_rule("T|<>", ()),
     ]
     
+    e = Extractor(horzmarkov=0, rightmostunary=False)
     t = Tree("(S (A 0) (B 1) (T (C 2) (D 3) (E 6)) (D 4) (E 5))")
     t[1].type = HEAD
     t[(2,1)].type = HEAD
     t = HeadedTree.convert(t)
-    assert list(extract_head(t, horzmarkov=0, rightmostunary=False)) == [
+    assert list(e(t)) == [
         headed_rule("ARG", ()),
         headed_rule("ROOT", ("ARG", "S|<>"), clause="(S 1 0 2)"),
         headed_rule("ARG", ()),

@@ -74,70 +74,90 @@ class headed_rule:
         return self.__class__(self.lhs, rhs, clause, self.fanout, lxidx)
 
 
-def extract_node(tree: HeadedTree, overridelhs: str = None, hmarkov: int = 999, markendpoint: bool = True):
-    if not isinstance(tree, HeadedTree):
-        # TODO: use pos symbol?
-        lhs = overridelhs if not overridelhs is None else "ARG"
-        return Tree((tree, tree, headed_rule(lhs, (), headed_clause(0), 1)), [])
-    lex = tree.headterm
-    children = []
-    rhs_nts = []
-    c, succs, _ = read_spine(tree)
-    for node, succ in succs:
-        children.append(extract_nodes(succ, node, hmarkov, markendpoint))
-        rhs_nts.append(children[-1].label[2].lhs)
-    lhs = overridelhs if not overridelhs is None else tree.label
-    leftmost = min(lex, *(c.label[1] for c in children)) if children else lex
-    rule = headed_rule(lhs, tuple(rhs_nts), headed_clause(c), fanout(sorted(tree.leaves()))).reorder((lex,) + tuple(c.label[1] for c in children))
-    return Tree((lex, leftmost, rule), children)
+@dataclass(init=False)
+class Extractor:
+    hmarkov: int = 999
+    vmarkov: int = 1
+    rightmostunary: bool = True
+    markrepeats: bool = True
+    root: str = "ROOT"
+
+    def __init__(self, horzmarkov=999, vertmarkov=1, rightmostunary=True, markrepeats=True, root="ROOT"):
+        if vertmarkov < 1:
+            raise ValueError("vertical markovization should be ≥ 1")
+        self.hmarkov = horzmarkov
+        self.vmarkov = vertmarkov
+        self.rightmostunary = rightmostunary
+        self.markrepeats = markrepeats
+        self.root = root
+
+    @classmethod
+    def read_spine(cls, tree: HeadedTree, parents: tuple[str, ...], firstvar: int = 1):
+        if not isinstance(tree, HeadedTree):
+            return 0, [], firstvar
+        children = []
+        successors = []
+        parents += (tree.label,)
+        if tree.headidx > 0:
+            successors.append((parents, tree[:tree.headidx]))
+            children.append(firstvar)
+            firstvar+=1
+        child, successors_, firstvar = cls.read_spine(tree[tree.headidx], parents, firstvar)
+        successors.extend(successors_)
+        children.append(child)
+        if tree.headidx < len(tree)-1:
+            successors.append((parents, tree[tree.headidx+1:]))
+            children.append(firstvar)
+            firstvar+=1
+        return Tree(tree.label, children), successors, firstvar
 
 
-def fuse_modrule(mod_deriv: Tree, successor_mods: Tree, all_leaves):
-    toprule = mod_deriv.label[2]
-    botrule = successor_mods.label[2]
-    lex = mod_deriv.label[0]
-    children = [*mod_deriv.children, successor_mods]
-    newrule = headed_rule(
-        toprule.lhs,
-        toprule.rhs+(botrule.lhs,),
-        clause=ImmutableTree(RMLABEL, [toprule.clause, len(toprule.rhs)+1]),
-        fanout=fanout(sorted(all_leaves))).reorder((lex,) + tuple(c.label[1] for c in children))
-    return Tree((*mod_deriv.label[:2], newrule), children)
+    def extract_node(self, tree: HeadedTree, overridelhs: str = None, parents: tuple[str, ...] = ()):
+        if not isinstance(tree, HeadedTree):
+            # TODO: use pos symbol?
+            lhs = overridelhs if not overridelhs is None else "ARG"
+            return Tree((tree, tree, headed_rule(lhs, (), headed_clause(0), 1)), [])
+        lex = tree.headterm
+        children = []
+        rhs_nts = []
+        c, succs, _ = self.__class__.read_spine(tree, parents)
+        for nparents, succ in succs:
+            children.append(self.extract_nodes(succ, nparents))
+            rhs_nts.append(children[-1].label[2].lhs)
+        lhs = overridelhs if not overridelhs is None else \
+                (";".join((parents+(tree.label,))[-self.vmarkov:]) if parents else tree.label)
+        leftmost = min(lex, *(c.label[1] for c in children)) if children else lex
+        rule = headed_rule(lhs, tuple(rhs_nts), headed_clause(c), fanout(sorted(tree.leaves()))).reorder((lex,) + tuple(c.label[1] for c in children))
+        return Tree((lex, leftmost, rule), children)
+
+
+    def _fuse_modrule(_self, mod_deriv: Tree, successor_mods: Tree, all_leaves):
+        toprule = mod_deriv.label[2]
+        botrule = successor_mods.label[2]
+        lex = mod_deriv.label[0]
+        children = [*mod_deriv.children, successor_mods]
+        newrule = headed_rule(
+            toprule.lhs,
+            toprule.rhs+(botrule.lhs,),
+            clause=ImmutableTree(RMLABEL, [toprule.clause, len(toprule.rhs)+1]),
+            fanout=fanout(sorted(all_leaves))).reorder((lex,) + tuple(c.label[1] for c in children))
+        return Tree((*mod_deriv.label[:2], newrule), children)
  
 
-def extract_nodes(trees: list[HeadedTree], parent: str, hmarkov: int = 999, markendpoint: bool = True):
-    markovnts = [trees[-1].label if isinstance(trees[-1], Tree) else "POS"]
-    lhsnt = lambda: f"{parent}|<{','.join(markovnts[:hmarkov])}>"
-    deriv = extract_node(trees[-1], lhsnt() if markendpoint else None, hmarkov, markendpoint)
-    yd = trees[-1].leaves() if isinstance(trees[-1], Tree) else [trees[-1]]
-    for tree in trees[-2::-1]:
-        markovnts.append(tree.label if isinstance(tree, Tree) else "POS")
-        yd += tree.leaves() if isinstance(tree, Tree) else [tree]
-        child = extract_node(tree, lhsnt(), hmarkov, markendpoint)
-        deriv = fuse_modrule(child, deriv, yd)
-    return deriv
+    def extract_nodes(self, trees: list[HeadedTree], parents: tuple[str, ...]):
+        markovnts = [trees[-1].label if isinstance(trees[-1], Tree) else "POS"]
+        parentstr = ";".join(parents[-self.vmarkov:])
+        lhsnt = lambda: f"{parentstr}|<{','.join(markovnts[:self.hmarkov])}>"
+        deriv = self.extract_node(trees[-1], lhsnt() if self.rightmostunary else None, parents)
+        yd = trees[-1].leaves() if isinstance(trees[-1], Tree) else [trees[-1]]
+        for tree in trees[-2::-1]:
+            markovnts.append(tree.label if isinstance(tree, Tree) else "POS")
+            yd += tree.leaves() if isinstance(tree, Tree) else [tree]
+            child = self.extract_node(tree, lhsnt(), parents)
+            deriv = self._fuse_modrule(child, deriv, yd)
+        return deriv
 
 
-def read_spine(tree: HeadedTree, firstvar: int = 1):
-    # TODO: reorder vars according to leftmost position
-    if not isinstance(tree, HeadedTree):
-        return 0, [], firstvar
-    children = []
-    successors = []
-    if tree.headidx > 0:
-        successors.append((tree.label, tree[:tree.headidx]))
-        children.append(firstvar)
-        firstvar+=1
-    child, successors_, firstvar = read_spine(tree[tree.headidx], firstvar)
-    successors.extend(successors_)
-    children.append(child)
-    if tree.headidx < len(tree)-1:
-        successors.append((tree.label, tree[tree.headidx+1:]))
-        children.append(firstvar)
-        firstvar+=1
-    return Tree(tree.label, children), successors, firstvar
-
-
-def extract_head(tree: Tree, override_root: str = "ROOT", horzmarkov: int = 999, vertmarkov: int = 0, rightmostunary: bool = True):
-    derivation = extract_node(tree, override_root, horzmarkov, rightmostunary)
-    return (r for _, _, r in sorted(node.label for node in derivation.subtrees()))
+    def __call__(self, tree):
+        derivation = self.extract_node(tree, self.root)
+        return (r for _, _, r in sorted(node.label for node in derivation.subtrees()))

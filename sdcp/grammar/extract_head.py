@@ -26,6 +26,16 @@ class headed_clause:
             return [Tree(tree.label, children)]
         return _subst(self.spine, lex, *args)
 
+    def guess_lex_position(self) -> int:
+        lexidx, clause = 0, self.spine
+        while clause != 0:
+            for c in clause:
+                if isinstance(c, Tree) or c == 0:
+                    clause = c
+                    break
+                lexidx = max(lexidx, c)
+        return lexidx
+
     def __call__(self, lex: int):
         return (lambda *args: self.subst(lex, *args))
 
@@ -38,7 +48,7 @@ def subvars(tree: ImmutableTree, newvars: dict[int, int]):
     return ImmutableTree(tree.label, (subvars(c, newvars) for c in tree))
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True, init=False, repr=False)
 class headed_rule:
     lhs: str
     rhs: tuple[str]
@@ -52,15 +62,7 @@ class headed_rule:
         if isinstance(clause, headed_clause):
             clause = ImmutableTree.convert(clause.spine)
         self.__dict__["lhs"], self.__dict__["rhs"], self.__dict__["clause"], self.__dict__["fanout"] = lhs, tuple(rhs), clause, fanout
-        if lexidx is None:
-            lexidx = 0
-            while clause != 0:
-                for c in clause:
-                    if isinstance(c, Tree) or c == 0:
-                        clause = c
-                        break
-                    lexidx = max(lexidx, c)
-        self.__dict__["lexidx"] = lexidx
+        self.__dict__["lexidx"] = lexidx if not lexidx is None else headed_clause(clause).guess_lex_position()
 
     def fn(self, lex, _):
         return headed_clause(self.clause)(lex), [None]*len(self.rhs)
@@ -72,6 +74,12 @@ class headed_rule:
         clause = subvars(self.clause, rordi)
         rhs = (self.rhs[i-1] for i in srti if not i == 0)
         return self.__class__(self.lhs, rhs, clause, self.fanout, lxidx)
+
+    def __repr__(self) -> str:
+        clausestr = f", '{self.clause}'" if self.clause != 0 else ""
+        fostr = f", fanout={self.fanout}" if self.fanout > 1 else ""
+        lexposstr = f", lexidx={self.lexidx}" if self.lexidx != headed_clause(self.clause).guess_lex_position() else ""
+        return f"{self.__class__.__name__}({repr(self.lhs)}, {repr(self.rhs)}{clausestr}{fostr}{lexposstr})"
 
 
 @dataclass(init=False)

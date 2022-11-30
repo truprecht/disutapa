@@ -5,6 +5,7 @@ import flair
 import torch
 
 from sdcp.grammar.sdcp import grammar, sdcp_clause, rule
+from sdcp.grammar.extract_head import headed_clause, headed_rule
 from tagging.model import ModelParameters, TaggerModel
 from tagging.data import CorpusWrapper
 

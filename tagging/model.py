@@ -7,7 +7,8 @@ CPU = torch.device("cpu")
 from typing import Tuple, Optional
 from sdcp.grammar.sdcp import grammar
 from sdcp.grammar.buparser import BuParser
-from sdcp.autotree import AutoTree
+from sdcp.grammar.activeparser import ActiveParser
+from sdcp.autotree import AutoTree, with_pos
 
 from discodop.eval import readparam
 
@@ -159,7 +160,7 @@ class TaggerModel(flair.nn.Model):
         get_label_name = lambda x: f"{label_name}-{x}"
 
         with torch.no_grad():
-            parser = BuParser(self.__grammar__)
+            parser = ActiveParser(self.__grammar__)
             scores = dict(self.forward(batch, batch_first=True))
             tagscores = scores["supertag"].cpu()
             tags = argpartition(-tagscores, self.ktags, axis=2)[:, :, 0:self.ktags]
@@ -180,7 +181,7 @@ class TaggerModel(flair.nn.Model):
 
                 parser.init(*predicted_tags)
                 parser.fill_chart()
-                sentence.set_label(label_name, str(AutoTree(parser.get_best()).tree(pos)))
+                sentence.set_label(label_name, str(with_pos(parser.get_best()[0], pos)))
 
             store_embeddings(batch, storage_mode=embedding_storage_mode)
             if return_loss:

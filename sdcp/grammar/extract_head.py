@@ -147,6 +147,8 @@ class Extractor:
     def extract_nodes(self, trees: list[HeadedTree], parents: tuple[str, ...]):
         markovnts = [trees[-1].label if isinstance(trees[-1], Tree) else "POS"]
         parentstr = ";".join(parents[-self.vmarkov:])
+        if self.markrepeats and len(parents) >= 2 and parents[-1] == parents[-2]:
+            parentstr += "+"
         lhsnt = lambda: f"{parentstr}|<{','.join(markovnts[:self.hmarkov])}>"
         deriv = self.extract_node(trees[-1], lhsnt() if self.rightmostunary else None, parents)
         yd = trees[-1].leaves() if isinstance(trees[-1], Tree) else [trees[-1]]

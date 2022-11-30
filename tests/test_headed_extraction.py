@@ -66,9 +66,9 @@ def test_extract():
     t = HeadedTree.convert(t)
     deriv = e.extract_node(t, "ROOT")
     assert deriv.label == (3, 0, headed_rule("ROOT", ["VP|<>", "S|<>"], headed_clause(Tree("SBAR", [Tree("S", [Tree("VP", [1, 0]), 2])])), 1, lexidx=2))
-    assert deriv[0].label == (4, 0, headed_rule("VP|<>", ["VP|<>", "VP|<>"], headed_clause(Tree("VP", [1, 0, 2])), 2))
-    assert deriv[(0,0)].label == (0, 0, headed_rule("VP|<>", [], headed_clause(0), 1))
-    assert deriv[(0,1)].label == (5, 5, headed_rule("VP|<>", [], headed_clause(0), 1))
+    assert deriv[0].label == (4, 0, headed_rule("VP|<>", ["VP+|<>", "VP+|<>"], headed_clause(Tree("VP", [1, 0, 2])), 2))
+    assert deriv[(0,0)].label == (0, 0, headed_rule("VP+|<>", [], headed_clause(0), 1))
+    assert deriv[(0,1)].label == (5, 5, headed_rule("VP+|<>", [], headed_clause(0), 1))
     assert deriv[1].label == (2, 1, headed_rule("S|<>", ["NP|<>"], headed_clause(Tree("NP", [1, 0])), 1))
     assert deriv[(1,0)].label == (1, 1, headed_rule("NP|<>", [], headed_clause(0), 1))
 

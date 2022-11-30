@@ -35,13 +35,9 @@ def main(config: Namespace):
         )
         p.fill_chart()
         prediction = p.get_best()[0]
-        prediction = with_pos(prediction, [idtopos[i] for i in sample["pos"]])
+        _, prediction = fix_rotation(with_pos(prediction, [idtopos[i] for i in sample["pos"]]))
         evaluator.add(i, ParentedTree(sample["tree"]), list(sample["sentence"]),
                 ParentedTree.convert(prediction), list(sample["sentence"]))
-        if len(sample["pos"]) < 15 and (prediction != ParentedTree(sample["tree"])):
-            print("gold", sample["tree"])
-            print("pred", prediction)
-            print("derv", p.get_best_deriv())
     print(evaluator.summary())
 
 

@@ -18,6 +18,8 @@ class ExtractionParameter:
     vmarkov: int = 1
     rightmostunary: bool = False
     headrules: str = None
+    coarsents: str = None
+    labelbyhead: bool = False
 
 
 preset_splits = {
@@ -29,7 +31,7 @@ preset_splits = {
         
 
 def main(config: ExtractionParameter):
-    ex = corpus_extractor(config.corpus, horzmarkov=config.hmarkov, vertmarkov=config.vmarkov, headrules=config.headrules, rightmostunary=config.rightmostunary)
+    ex = corpus_extractor(config.corpus, horzmarkov=config.hmarkov, vertmarkov=config.vmarkov, headrules=config.headrules, rightmostunary=config.rightmostunary, coarselabels=config.coarsents, byhead=config.labelbyhead)
     splitdict = config.split or next(preset_splits[k] for k in preset_splits if k in config.corpus.lower())
     for r in Split(**splitdict).nonoverlapping():
         ex.read(r)

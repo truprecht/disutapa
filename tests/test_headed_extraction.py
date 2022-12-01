@@ -1,4 +1,4 @@
-from sdcp.grammar.extract_head import headed_clause, headed_rule, Extractor
+from sdcp.grammar.extract_head import headed_clause, headed_rule, Extractor, Nonterminal
 from sdcp.headed_tree import HeadedTree, Tree, HEAD
 
 def test_read_spine():
@@ -74,8 +74,8 @@ def test_extract():
 
     e = Extractor(horzmarkov=0, rightmostunary=False)
     deriv = e.extract_node(t, "ROOT")
-    assert deriv.label == (3, 0, headed_rule("ROOT", ["VP", "NP"], headed_clause(Tree("SBAR", [Tree("S", [Tree("VP", [1, 0]), 2])])), 1,  lexidx=2))
-    assert deriv[0].label == (4, 0, headed_rule("VP", ["ARG", "ARG"], headed_clause(Tree("VP", [1, 0, 2])), 2))
+    assert deriv.label == (3, 0, headed_rule("ROOT", ["VP+", "NP"], headed_clause(Tree("SBAR", [Tree("S", [Tree("VP", [1, 0]), 2])])), 1,  lexidx=2))
+    assert deriv[0].label == (4, 0, headed_rule("VP+", ["ARG", "ARG"], headed_clause(Tree("VP", [1, 0, 2])), 2))
     assert deriv[(0,0)].label == (0, 0, headed_rule("ARG", [], headed_clause(0), 1))
     assert deriv[(0,1)].label == (5, 5, headed_rule("ARG", [], headed_clause(0), 1))
     assert deriv[1].label == (2, 1, headed_rule("NP", ["ARG"], headed_clause(Tree("NP", [1, 0])), 1))

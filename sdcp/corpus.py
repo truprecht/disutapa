@@ -24,6 +24,7 @@ class corpus_extractor:
         self.goldtrees = []
         self.goldrules = []
         self.goldpos = []
+        self.goldderivs = []
         self.idx = {}
         self._binparams = binparams
 
@@ -44,16 +45,22 @@ class corpus_extractor:
                 stree = collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True)
                 rules, pos = singleton(stree)
                 rules = tuple(self.rules[gr] for gr in rules)
+                deriv = 0
             else:
                 bintree = binarize(
                     collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True),
                     **self._binparams)
                 bintree = AutoTree.convert(bintree)
-                rules = tuple(self.rules[gr] for gr in extract(bintree))
+                rules, deriv = extract(bintree)
+                rules = tuple(self.rules[gr] for gr in rules)
+                for node in deriv.subtrees():
+                    # node.label = rules[node.label]
+                    node.children = [(c if len(c) > 0 else c.label) for c in node]
                 pos = tuple(p for _, p in sorted(bintree.postags.items()))
             self.goldtrees.append(tree)
             self.sentences.append(tuple(sent))
             self.goldpos.append(pos)
+            self.goldderivs.append(deriv)
             self.goldrules.append(rules)
     
     def __getitem__(self, idx):
@@ -63,6 +70,7 @@ class corpus_extractor:
             self.sentences[idx],
             self.goldpos[idx],
             self.goldrules[idx],
+            self.goldderivs[idx],
         )
 
 

@@ -48,4 +48,7 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
 
 def extract(tree: Tree, override_root: str = "ROOT"):
     derivation = __extract_tree(tree, "ROOT", set(), override_lhs=override_root)
-    return (r for _, _, r in sorted(node.label for node in derivation.subtrees()))
+    rules = [r for _, _, r in sorted(node.label for node in derivation.subtrees())]
+    for node in derivation.subtrees():
+        node.label = node.label[0]
+    return rules, derivation

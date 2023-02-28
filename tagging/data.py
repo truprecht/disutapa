@@ -1,13 +1,21 @@
 from datasets import Dataset, DatasetDict
 from flair.data import Sentence, Dictionary, Token
 from collections import Counter
-
+from discodop.tree import Tree
 
 class SentenceWrapper(Sentence):
     def __init__(self, dataobj: dict):
         super().__init__(dataobj["sentence"], use_tokenizer=False)
         self.__gold_label_ids = dataobj
         self.__predicted_label_ids = {}
+
+    def get_derivation(self):
+        deriv = self.get_raw_labels("derivation")
+        st = self.get_raw_labels("supertag")
+        deriv = Tree.parse(deriv, parse_label=int, parse_leaf=lambda x: Tree(int(x), []))
+        for subd in deriv.subtrees():
+            subd.label = (st[subd.label], subd.label)
+        return deriv
 
     def get_raw_labels(self, field: str):
         return self.__gold_label_ids[field]

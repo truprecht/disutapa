@@ -5,8 +5,8 @@ import flair
 import torch
 
 from sdcp.grammar.sdcp import grammar, sdcp_clause, rule
-from tagging.model import ModelParameters, TaggerModel
-from tagging.data import CorpusWrapper
+from sdcp.tagging.model import ModelParameters, TaggerModel
+from sdcp.tagging.data import CorpusWrapper
 
 
 def main(config):

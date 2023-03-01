@@ -21,16 +21,16 @@ class EnsembleParser:
         self.len = len(rules_per_position)
         self.rootid = None
         self.chart = {}
-        self.weight = {}
+        self.weight = []
         self.unaries = {}
         self.from_left = {}
         self.from_right = {}
         self.queue = PriorityQueue()
         self.rule_scores = rule_combination_scores
         for i, rules in enumerate(rules_per_position):
-            maxweight = max(w for _, w in (rules or [(0,0)]))
+            minweight = min(w for _, w in (rules or [(0,0)]))
             for rid, weight in rules:
-                weight = maxweight - weight
+                weight = weight - minweight
                 rule = self.grammar.rules[rid]
                 match rule.as_tuple():
                     case (lhs, ()):
@@ -53,6 +53,7 @@ class EnsembleParser:
         self.backtraces = []
         while not self.queue.empty():
             qi: qelement = self.queue.get_nowait()
+            # print(qi)
             fritem = qi.item.freeze()
             if fritem in expanded:
                 continue
@@ -61,13 +62,14 @@ class EnsembleParser:
             self.backtraces.append(qi.bt)
             self.weight.append(qi.weight)
             qi.bt, backtrace_id = backtrace_id, qi.bt
-            self.from_lhs[qi.item.lhs].add((qi.item.leaves, backtrace_id.rid, qi.bt, qi.weight, qi.gapscore))
+            lhs = self.grammar.rules[qi.item.lhs].lhs
+            self.from_lhs[lhs].add((qi.item.leaves, qi.bt, qi.weight, qi.gapscore))
 
-            if qi.item.lhs == self.grammar.root and qi.item.leaves.leaves.all():
+            if lhs == self.grammar.root and qi.item.leaves.leaves.all():
                 self.rootid = -1
                 return
 
-            for rid, i, weight in self.unaries.get(qi.item.lhs, []):
+            for rid, i, weight in self.unaries.get(lhs, []):
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]
@@ -76,12 +78,12 @@ class EnsembleParser:
                 if newpos.gaps >= rule.fanout_hint:
                     continue
                 self.queue.put_nowait(qelement(
-                    PassiveItem(rule.lhs, newpos, rule.fanout_hint),
+                    PassiveItem(rid, newpos, rule.fanout_hint),
                     backtrace(rid, i, (qi.bt,)),
                     qi.weight+weight+self.rule_scores(rid, backtrace_id.rid),
                     newpos.gaps + self.discount*qi.gapscore
                 ))
-            for rid, i, weight in self.from_left.get(qi.item.lhs, []):
+            for rid, i, weight in self.from_left.get(lhs, []):
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]
@@ -101,7 +103,7 @@ class EnsembleParser:
                         qi.weight+_weight+weight+self.rule_scores(rid, backtrace_id.rid, self.backtraces[_bt].rid),
                         newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))
-            for rid, i, weight in self.from_right.get(qi.item.lhs, []):
+            for rid, i, weight in self.from_right.get(lhs, []):
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]

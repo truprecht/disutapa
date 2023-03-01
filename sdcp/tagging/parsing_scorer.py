@@ -7,24 +7,24 @@ class CombinatorialParsingScorer:
     def __init__(self, corpus: DatasetWrapper):
         combinations: dict[tuple[int], int] = defaultdict(lambda: 0)
         denominator: dict[tuple[int], int] = defaultdict(lambda: 0)
-        for sentence in corpus.train:
+        for sentence in corpus:
             deriv = sentence.get_derivation()
             for node in deriv.subtrees():
                 if not node.children:
                     continue
-                combinations[(node.label, *(c.label for c in node))] += 1
-                denominator[tuple(c.label for c in node)] += 1
+                combinations[(node.label[0], *(c.label[0] for c in node))] += 1
+                denominator[tuple(c.label[0] for c in node)] += 1
         self.probs = {
-            comb: log(combinations[comb] / denominator[comb[1:]])
+            comb: -log(combinations[comb] / denominator[comb[1:]])
             for comb in combinations
         }
 
-    def build(self):
+    def produce(self):
         return self
 
     def score(self, root: int, *children: tuple[int]):
-        if len(children) == 0: return 1
-        return self.probs.get((root, *children), 0)
+        if len(children) == 0: return 0
+        return self.probs.get((root, *children), float("inf"))
 
 
 class AffineLayer(t.nn.Module):

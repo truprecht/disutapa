@@ -53,7 +53,8 @@ class EnsembleModel(flair.nn.Model):
         self.embedding = flair.embeddings.StackedEmbeddings([
             builder.produce() for builder in embeddings
         ])
-        self.rule_scorer = parsing_scorer
+        self.scoring_builder = parsing_scorer
+        self.scoring = self.scoring_builder.produce()
 
         self.dropoutprob = dropout
         self.dropout = torch.nn.Dropout(dropout)
@@ -175,15 +176,15 @@ class EnsembleModel(flair.nn.Model):
                 sentence.store_raw_prediction("pos", postag[:len(sentence)])
 
                 # parse sentence and store parse tree in sentence
-                sentweights = torch.nn.functional.log_softmax(sentweights[:len(sentence)], dim=-1)
+                sentweights = -torch.nn.functional.log_softmax(sentweights[:len(sentence)], dim=-1)
                 predicted_tags = [
                     [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
                     for ktags, kweights in zip(senttags[:len(sentence)], sentweights)]
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
 
-                parser.init(*predicted_tags)
+                parser.init(self.scoring.score, *predicted_tags)
                 parser.fill_chart()
-                sentence.set_label(label_name, str(AutoTree(parser.get_best()).tree(pos)))
+                sentence.set_label(label_name, str(AutoTree(parser.get_best()[0]).tree(pos)))
 
             store_embeddings(batch, storage_mode=embedding_storage_mode)
             if return_loss:
@@ -318,7 +319,7 @@ class EnsembleModel(flair.nn.Model):
             "ktags": self.ktags,
             "evalparam": self.evalparam,
             "grammar": (self.__grammar__.rules, self.__grammar__.root),
-            "rule_embedding_dim": self.rule_embedding_dim
+            "scoring_builder": self.scoring_builder
         }
 
     @classmethod
@@ -327,10 +328,10 @@ class EnsembleModel(flair.nn.Model):
             state["embedding_builder"],
             state["tags"],
             grammar(*state["grammar"]),
+            state["scoring_builder"],
             dropout = state["dropout"],
             ktags = state["ktags"],
-            evalparam = state["evalparam"],
-            rule_embedding_dim = state["rule_embedding_dim"]
+            evalparam = state["evalparam"]
         )
         model.load_state_dict(state["state_dict"])
         return model

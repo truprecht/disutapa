@@ -5,8 +5,8 @@ import flair
 import torch
 
 from sdcp.grammar.sdcp import grammar, sdcp_clause, rule
-from tagging.model import ModelParameters, TaggerModel
-from tagging.data import CorpusWrapper
+from sdcp.tagging.ensemble_model import ModelParameters, EnsembleModel
+from sdcp.tagging.data import CorpusWrapper
 
 @dataclass
 class TrainingParameter:
@@ -24,7 +24,7 @@ def main(config: TrainingParameter):
     if not config.device is None:
         flair.device = config.device
     corpus = CorpusWrapper(config.corpus)
-    model = TaggerModel.from_corpus(
+    model = EnsembleModel.from_corpus(
         corpus.train,
         grammar([eval(t) for t in corpus.train.labels()]),
         ModelParameters(embeddings=config.embeddings, ktags=config.ktags, dropout=config.dropout)

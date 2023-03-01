@@ -1,6 +1,8 @@
 from argparse import ArgumentParser, Namespace
 from sdcp.grammar.sdcp import rule, sdcp_clause, grammar
-from sdcp.grammar.buparser import BuParser
+from sdcp.grammar.ensemble_parser_rule import EnsembleParser
+from sdcp.tagging.parsing_scorer import CombinatorialParsingScorer
+from sdcp.tagging.data import DatasetWrapper
 from sdcp.autotree import AutoTree
 from discodop.eval import Evaluator, readparam
 from discodop.tree import ParentedTree
@@ -22,22 +24,27 @@ def rule_vector(total: int, k: int, hot: int):
 def main(config: Namespace):
     seed(config.seed )
     evaluator = Evaluator(readparam(config.param))
-    data = DatasetDict.load_from_disk(config.corpus)["dev"]
-    p = BuParser(grammar([eval(str_hr) for str_hr in data.features["supertag"].feature.names]))
-    idtopos = data.features["pos"].feature.names
+    data = DatasetWrapper(DatasetDict.load_from_disk(config.corpus)["dev"])
+    snd_order_weights = CombinatorialParsingScorer(data)
+    p = EnsembleParser(grammar([eval(str_hr) for str_hr in data.labels()]))
+    idtopos = data.labels("pos")
     datalen = len(data) if config.range is None else config.range[1]-config.range[0]
     data = enumerate(data)
     if not config.range is None:
         data = ((i,s) for i,s in data if i in range(*config.range))
     for i, sample in tqdm(data, total=datalen):
         p.init(
-            *(rule_vector(len(p.grammar.rules), config.weighted, i) for i in sample["supertag"]),
+            snd_order_weights.score,
+            *(rule_vector(len(p.grammar.rules), config.weighted, i) for i in sample.get_raw_labels("supertag")),
         )
         p.fill_chart()
-        prediction = p.get_best()
-        prediction = AutoTree(prediction)
-        evaluator.add(i, ParentedTree(sample["tree"]), list(sample["sentence"]),
-                ParentedTree.convert(prediction.tree([idtopos[i] for i in sample["pos"]])), list(sample["sentence"]))
+        prediction = p.get_best()[0]
+        prediction = AutoTree(prediction).tree([idtopos[i] for i in sample.get_raw_labels("pos")])
+        evaluator.add(i, ParentedTree(sample.get_raw_labels("tree")), list(sample.get_raw_labels("sentence")),
+                ParentedTree.convert(prediction), list(sample.get_raw_labels("sentence")))
+        if str(prediction) != sample.get_raw_labels("tree"):
+            print(sample.get_raw_labels("tree"))
+            print(prediction)
     print(evaluator.summary())
 
 

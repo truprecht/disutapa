@@ -12,7 +12,8 @@ class SentenceWrapper(Sentence):
     def get_derivation(self):
         deriv = self.get_raw_labels("derivation")
         st = self.get_raw_labels("supertag")
-        deriv = Tree.parse(deriv, parse_label=int, parse_leaf=lambda x: Tree(int(x), []))
+        deriv = Tree(0, []) if deriv == "0" else \
+            Tree.parse(deriv, parse_label=int, parse_leaf=lambda x: Tree(int(x), []))
         for subd in deriv.subtrees():
             subd.label = (st[subd.label], subd.label)
         return deriv

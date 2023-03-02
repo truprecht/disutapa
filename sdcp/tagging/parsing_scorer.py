@@ -38,12 +38,6 @@ class CombinatorialParsingScorer:
                     combinations[(node.label[0], *(c.label[0] for c in node))] += 1
                     self.denominator[tuple(c.label[0] for c in node)] += 1
 
-        # tot = 0
-        # for i in range(1, max(combinations.values())+1):
-        #     vs = [v for v in combinations if combinations[v] == i]
-        #     print(i, len(vs), i*(len(vs)))
-        #     tot += i*len(vs)
-        # print("total:", len(combinations), tot)
         self.probs = {
             comb: -log((combinations[comb] + prior) / self.denom(comb[0], comb[1:]))
             for comb in combinations

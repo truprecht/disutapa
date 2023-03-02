@@ -57,7 +57,6 @@ def subcommand(sub: ArgumentParser):
             ftype = str
             nargs = "+"
             default = list()
-        print(name, ftype, default, nargs)
         sub.add_argument(name, type=ftype, default=default, nargs=nargs)
     sub.add_argument("--device", type=torch.device, default=None)
     sub.set_defaults(func=lambda args: main(args))

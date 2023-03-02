@@ -53,7 +53,6 @@ class EnsembleParser:
         self.backtraces = []
         while not self.queue.empty():
             qi: qelement = self.queue.get_nowait()
-            # print(qi)
             fritem = qi.item.freeze()
             if fritem in expanded:
                 continue

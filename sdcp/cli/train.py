@@ -21,13 +21,14 @@ class TrainingParameter:
 
 
 def main(config: TrainingParameter):
+    print(config)
     if not config.device is None:
         flair.device = config.device
     corpus = CorpusWrapper(config.corpus)
     model = EnsembleModel.from_corpus(
         corpus.train,
         grammar([eval(t) for t in corpus.train.labels()]),
-        ModelParameters(embeddings=config.embeddings, ktags=config.ktags, dropout=config.dropout)
+        ModelParameters(embeddings=config.embeddings, ktags=config.ktags, dropout=config.dropout, scoring=config.scoring, scoring_options=config.scoring_options)
     )
     trainer = flair.trainers.ModelTrainer(model, corpus)
     train = trainer.fine_tune if any(em.fine_tune() for em in model.embedding_builder) else \
@@ -50,6 +51,13 @@ def subcommand(sub: ArgumentParser):
         optional = f.default is MISSING and f.default_factory is MISSING
         name = f.name if optional else f"--{f.name}"
         default = None if optional else f.default
-        sub.add_argument(name, type=f.type, default=default)
+        ftype = f.type
+        nargs = None
+        if f.type == list[str]:
+            ftype = str
+            nargs = "+"
+            default = list()
+        print(name, ftype, default, nargs)
+        sub.add_argument(name, type=ftype, default=default, nargs=nargs)
     sub.add_argument("--device", type=torch.device, default=None)
     sub.set_defaults(func=lambda args: main(args))

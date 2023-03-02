@@ -1,19 +1,45 @@
 from .data import DatasetWrapper
-from collections import defaultdict
+from collections import Counter
 import torch as t
 from math import log
 from ..grammar.sdcp import rule
 
+
+class ScoringBuilder:
+    def __init__(self, typestr: str, trainingset: DatasetWrapper, *optionstrs: str):
+        if typestr is None or typestr.lower() == "none":
+            self.constructor = DummyScorer
+            self.options = ()
+        elif typestr.lower().startswith("c"):
+            options = eval(f"dict({', '.join(optionstrs)})")
+            self.constructor = CombinatorialParsingScorer(trainingset, **options)
+            self.options = ()
+    
+    def produce(self):
+        return self.constructor(*self.options)
+    
+
+class DummyScorer:
+    def __init__(self):
+        pass
+
+    @property
+    def snd_order(self):
+        return False
+
+    def score(*args):
+        return 0.0
+
 class CombinatorialParsingScorer:
     def __init__(self, corpus: DatasetWrapper, prior: int = 1, separated: bool = True):
-        combinations: dict[tuple[int], int] = defaultdict(lambda: 0)
-        self.denominator: dict[tuple[int], int] = defaultdict(lambda: 0)
-        self.cnt_by_rhs = defaultdict(lambda: 0)
+        combinations: dict[tuple[int], int] = Counter()
+        self.denominator: dict[tuple[int], int] = Counter()
+        self.cnt_by_rhs = Counter()
         self.lhs = []
         self.prior = prior
         self.cnt_separated = separated
 
-        for i, supertag in enumerate(corpus.labels()):
+        for supertag in corpus.labels():
             sobj: rule = eval(supertag)
             if sobj.rhs:
                 if self.cnt_separated and len(sobj.rhs) == 2:
@@ -49,15 +75,16 @@ class CombinatorialParsingScorer:
         s2 = self.cnt_by_rhs[rhs]
         return s1 + self.prior * s2
 
-    def produce(self):
-        return self
-
     def score(self, root: int, *children: tuple[int]):
         if self.cnt_separated and len(children) == 2 and not any(c is None for c in children):
             return self.score(root, children[0], None) + self.score(root, None, children[1])
         if not (v := self.probs.get((root, *children))) is None:
             return v
         return -log(self.prior / self.denom(root, children)) if self.prior else float("inf")
+
+    def __call__(self):
+        # pretend a class object is a constructor
+        return self
 
     @property
     def snd_order(self):

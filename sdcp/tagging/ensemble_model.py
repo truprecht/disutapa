@@ -1,4 +1,3 @@
-from ast import parse
 import torch
 import flair
 
@@ -13,7 +12,7 @@ from discodop.eval import readparam
 
 from .data import DatasetWrapper, SentenceWrapper
 from .embeddings import TokenEmbeddingBuilder, EmbeddingPresets
-from .parsing_scorer import CombinatorialParsingScorer
+from .parsing_scorer import ScoringBuilder
 
 
 from dataclasses import dataclass, field
@@ -21,6 +20,8 @@ from dataclasses import dataclass, field
 @dataclass
 class ModelParameters:
     embeddings: str = "Supervised"
+    scoring: str = None
+    scoring_options: list[str] = field(default_factory=list)
     ktags: int = 1
     dropout: float = 0.1
     evalparam: Optional[dict] = None
@@ -44,7 +45,7 @@ class EnsembleModel(flair.nn.Model):
             embedding.build_vocab(corpus)
             for embedding in parameters.embeddings
         ]
-        parsing_scorer = CombinatorialParsingScorer(corpus)
+        parsing_scorer = ScoringBuilder(parameters.scoring, corpus, *parameters.scoring_options)
         return cls(embeddings, tag_dicts, grammar, parsing_scorer, parameters.dropout, parameters.ktags, parameters.evalparam)
 
     def __init__(self, embeddings, dictionaries, grammar, parsing_scorer, dropout: float = 0.1, ktags: int = 1, evalparam: dict = None):
@@ -182,6 +183,7 @@ class EnsembleModel(flair.nn.Model):
                     for ktags, kweights in zip(senttags[:len(sentence)], sentweights)]
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
 
+                print(self.scoring)
                 parser.init(self.scoring.score, *predicted_tags)
                 parser.fill_chart()
                 sentence.set_label(label_name, str(AutoTree(parser.get_best()[0]).tree(pos)))

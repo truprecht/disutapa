@@ -6,7 +6,7 @@ CPU = torch.device("cpu")
 
 from typing import Tuple, Optional
 from sdcp.grammar.sdcp import grammar
-from sdcp.grammar.ensemble_parser_rule import EnsembleParser
+from sdcp.grammar.ensemble_parser import EnsembleParser
 from sdcp.autotree import AutoTree
 
 from discodop.eval import readparam
@@ -163,7 +163,7 @@ class EnsembleModel(flair.nn.Model):
         get_label_name = lambda x: f"{label_name}-{x}"
 
         with torch.no_grad():
-            parser = EnsembleParser(self.__grammar__)
+            parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
             scores = dict(self.forward(batch, batch_first=True))
             tagscores = scores["supertag"].cpu()
             tags = argpartition(-tagscores, self.ktags, axis=2)[:, :, 0:self.ktags]

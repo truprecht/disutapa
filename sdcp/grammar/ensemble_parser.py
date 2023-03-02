@@ -12,30 +12,32 @@ from discodop.tree import Tree
 
 
 class EnsembleParser:
-    def __init__(self, grammar: grammar, gamma: float = 0.1):
+    def __init__(self, grammar: grammar, gamma: float = 0.1, snd_order_weights: bool = True):
         self.grammar = grammar
         self.discount = gamma
+        self.sow = snd_order_weights
 
 
     def init(self, rule_combination_scores, *rules_per_position):
         self.len = len(rules_per_position)
         self.rootid = None
         self.chart = {}
-        self.weight = {}
+        self.weight = []
         self.unaries = {}
         self.from_left = {}
         self.from_right = {}
         self.queue = PriorityQueue()
         self.rule_scores = rule_combination_scores
         for i, rules in enumerate(rules_per_position):
-            maxweight = max(w for _, w in (rules or [(0,0)]))
+            minweight = min(w for _, w in (rules or [(0,0)]))
             for rid, weight in rules:
-                weight = maxweight - weight
+                weight = weight - minweight
                 rule = self.grammar.rules[rid]
+                passive_item_lhs = rid if self.sow else rule.lhs
                 match rule.as_tuple():
                     case (lhs, ()):
                         self.queue.put(qelement(
-                            PassiveItem(lhs, BitSpan.fromit((i,), self.len), rule.fanout_hint),
+                            PassiveItem(passive_item_lhs, BitSpan.fromit((i,), self.len), rule.fanout_hint),
                             backtrace(rid, i, ()),
                             weight,
                             0   
@@ -61,27 +63,29 @@ class EnsembleParser:
             self.backtraces.append(qi.bt)
             self.weight.append(qi.weight)
             qi.bt, backtrace_id = backtrace_id, qi.bt
-            self.from_lhs[qi.item.lhs].add((qi.item.leaves, qi.bt, qi.weight, qi.gapscore))
+            lhs = qi.item.lhs if not self.sow else self.grammar.rules[qi.item.lhs].lhs
+            self.from_lhs[lhs].add((qi.item.leaves, qi.bt, qi.weight, qi.gapscore))
 
-            if qi.item.lhs == self.grammar.root and qi.item.leaves.leaves.all():
+            if lhs == self.grammar.root and qi.item.leaves.leaves.all():
                 self.rootid = -1
                 return
 
-            for rid, i, weight in self.unaries.get(qi.item.lhs, []):
+            for rid, i, weight in self.unaries.get(lhs, []):
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]
                 # TODO: check gaps first?
                 newpos = qi.item.leaves.with_leaf(i)
+                passive_item_lhs = rid if self.sow else rule.lhs
                 if newpos.gaps >= rule.fanout_hint:
                     continue
                 self.queue.put_nowait(qelement(
-                    PassiveItem(rule.lhs, newpos, rule.fanout_hint),
+                    PassiveItem(passive_item_lhs, newpos, rule.fanout_hint),
                     backtrace(rid, i, (qi.bt,)),
                     qi.weight+weight+self.rule_scores(rid, backtrace_id.rid),
                     newpos.gaps + self.discount*qi.gapscore
                 ))
-            for rid, i, weight in self.from_left.get(qi.item.lhs, []):
+            for rid, i, weight in self.from_left.get(lhs, []):
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]
@@ -95,13 +99,14 @@ class EnsembleParser:
                     newpos = qi.item.leaves.union(_leaves, and_leaf=i)
                     if newpos.gaps >= rule.fanout_hint:
                         continue
+                    passive_item_lhs = rid if self.sow else rule.lhs
                     self.queue.put_nowait(qelement(
-                        PassiveItem(rule.lhs, newpos, rule.fanout_hint),
+                        PassiveItem(passive_item_lhs, newpos, rule.fanout_hint),
                         backtrace(rid, i, (qi.bt, _bt)),
                         qi.weight+_weight+weight+self.rule_scores(rid, backtrace_id.rid, self.backtraces[_bt].rid),
                         newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))
-            for rid, i, weight in self.from_right.get(qi.item.lhs, []):
+            for rid, i, weight in self.from_right.get(lhs, []):
                 if i in qi.item.leaves:
                     continue
                 rule = self.grammar.rules[rid]
@@ -115,8 +120,9 @@ class EnsembleParser:
                     newpos = qi.item.leaves.union(_leaves, and_leaf=i)
                     if newpos.gaps >= rule.fanout_hint:
                         continue
+                    passive_item_lhs = rid if self.sow else rule.lhs
                     self.queue.put_nowait(qelement(
-                        PassiveItem(rule.lhs, newpos, rule.fanout_hint),
+                        PassiveItem(passive_item_lhs, newpos, rule.fanout_hint),
                         backtrace(rid, i, (_bt, qi.bt)),
                         qi.weight+_weight+weight+self.rule_scores(rid, self.backtraces[_bt].rid, backtrace_id.rid),
                         newpos.gaps + self.discount*(qi.gapscore+_gapscore)

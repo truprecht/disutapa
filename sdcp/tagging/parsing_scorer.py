@@ -5,7 +5,7 @@ from math import log
 from ..grammar.sdcp import rule
 
 class CombinatorialParsingScorer:
-    def __init__(self, corpus: DatasetWrapper, prior: int = 1, separated: bool = False):
+    def __init__(self, corpus: DatasetWrapper, prior: int = 1, separated: bool = True):
         combinations: dict[tuple[int], int] = defaultdict(lambda: 0)
         self.denominator: dict[tuple[int], int] = defaultdict(lambda: 0)
         self.cnt_by_rhs = defaultdict(lambda: 0)
@@ -58,6 +58,10 @@ class CombinatorialParsingScorer:
         if not (v := self.probs.get((root, *children))) is None:
             return v
         return -log(self.prior / self.denom(root, children)) if self.prior else float("inf")
+
+    @property
+    def snd_order(self):
+        return True
 
 
 class AffineLayer(t.nn.Module):

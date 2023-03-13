@@ -58,11 +58,18 @@ class CombinatorialParsingScorer:
                 if self.cnt_separated and len(node) == 2:
                     combinations[(node.label[0], node[0].label[0], None)] += 1
                     combinations[(node.label[0], None, node[1].label[0])] += 1
-                    self.denominator[(node[0].label[0], None)] += 1
-                    self.denominator[(None, node[1].label[0])] += 1
+                    for node_ in deriv.subtrees():
+                        if not len(node_) == 2: continue
+                        if node[0].label[0] == node_[0].label[0]:
+                            self.denominator[(node.label[0], node[0].label[0], None)] += 1
+                        if node[1].label[0] == node_[1].label[0]:
+                            self.denominator[(node.label[0], None, node[1].label[0])] += 1
                 else:
                     combinations[(node.label[0], *(c.label[0] for c in node))] += 1
-                    self.denominator[tuple(c.label[0] for c in node)] += 1
+                    rhs = tuple(c.label[0] for c in node)
+                    for node_ in deriv.subtrees():
+                        if rhs == tuple(c.label[0] for c in node_):
+                            self.denominator[(node.label[0], *rhs)] += 1
 
         self.probs = {
             comb: -log((combinations[comb] + prior) / self.denom(comb[0], comb[1:]))
@@ -71,7 +78,7 @@ class CombinatorialParsingScorer:
 
     def denom(self, rule, children):
         rhs = tuple(self.lhs[c] if not c is None else None for c in children)
-        s1 = self.denominator[children]
+        s1 = self.denominator[(rule, *children)]
         s2 = self.cnt_by_rhs[rhs]
         return s1 + self.prior * s2
 

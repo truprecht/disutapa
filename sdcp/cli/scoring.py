@@ -30,11 +30,18 @@ def main(config: Namespace):
             if config.separate and len(node) == 2:
                 combinations[(node.label[0], node[0].label[0], None)] += 1
                 combinations[(node.label[0], None, node[1].label[0])] += 1
-                denominator[(node[0].label[0], None)] += 1
-                denominator[(None, node[1].label[0])] += 1
+                for node_ in deriv.subtrees():
+                    if not len(node_) == 2: continue
+                    if node[0].label[0] == node_[0].label[0]:
+                        denominator[(node.label[0], node[0].label[0], None)] += 1
+                    if node[1].label[0] == node_[1].label[0]:
+                        denominator[(node.label[0], None, node[1].label[0])] += 1
             else:
                 combinations[(node.label[0], *(c.label[0] for c in node))] += 1
-                denominator[tuple(c.label[0] for c in node)] += 1
+                rhs = tuple(c.label[0] for c in node)
+                for node_ in deriv.subtrees():
+                    if rhs == tuple(c.label[0] for c in node_):
+                        denominator[(node.label[0], *rhs)] += 1
 
     tot = 0
     coms = Counter()

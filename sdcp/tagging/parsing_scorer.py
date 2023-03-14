@@ -1,6 +1,7 @@
 from .data import DatasetWrapper
 from collections import Counter
 import torch as t
+import flair as f
 from math import log, sqrt
 from ..grammar.sdcp import rule
 
@@ -112,9 +113,9 @@ class CombinatorialParsingScorer:
 
 
 def singleton(num: int):
-    if not isinstance(num, int):
-        return num
-    return t.tensor(num, dtype=t.long)
+    if isinstance(num, t.Tensor):
+        return num.to(f.device)
+    return t.tensor(num, dtype=t.long, device=f.device)
 
 
 class NeuralCombinatorialScorer(t.nn.Module):
@@ -126,6 +127,7 @@ class NeuralCombinatorialScorer(t.nn.Module):
         self.unary = t.nn.Parameter(t.empty((self.nfeatures,)*2))
         self.binary = t.nn.Parameter(t.empty((self.nfeatures,)*3))
         self.reset_parameters()
+        self.to(f.device)
 
     def reset_parameters(self):
         bound = 1 / sqrt(self.nfeatures)
@@ -144,13 +146,13 @@ class NeuralCombinatorialScorer(t.nn.Module):
         return (feats * self.embedding.weight).sum(-1)
     
     def forward_loss(self, root, *children, check_bounds: bool = False):
-        if len(children) == 0: return t.tensor(0.0)
+        if len(children) == 0: return t.tensor(0.0, device=f.device)
         feats = self.forward(root, *children)
         loss = t.nn.functional.cross_entropy(feats, singleton(root), reduction="sum")
         return loss
 
     def score(self, root, *children):
-        if len(children) == 0: return t.tensor(0.0)
+        if len(children) == 0: return t.tensor(0.0, device=f.device)
         return -t.nn.functional.log_softmax(self.forward(root, *children), dim=-1)[root]
 
     @property

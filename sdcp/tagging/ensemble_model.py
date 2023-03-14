@@ -119,9 +119,9 @@ class EnsembleModel(flair.nn.Model):
     
 
     def _parsing_loss(self, batch: list[SentenceWrapper]):
+        loss = torch.tensor(0.0, device=flair.device)
         if not self.scoring.requires_training:
-            return torch.tensor(0.0)
-        loss = torch.tensor(0.0)
+            return loss
         for sentence in batch:
             deriv = sentence.get_derivation()
             for node in deriv.subtrees():

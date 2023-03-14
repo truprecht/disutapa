@@ -116,11 +116,23 @@ class EnsembleModel(flair.nn.Model):
             )
         n_predictions = sum(len(sentence) for sentence in batch)
         return loss, n_predictions
+    
+
+    def _parsing_loss(self, batch: list[SentenceWrapper]):
+        if not self.scoring.requires_training:
+            return torch.tensor(0.0)
+        loss = torch.tensor(0.0)
+        for sentence in batch:
+            deriv = sentence.get_derivation()
+            for node in deriv.subtrees():
+                loss += self.scoring.forward_loss(node.label[0], *(c.label[0] for c in node))
+        return loss
 
 
     def forward_loss(self, batch):
         feats = self.forward(batch)
-        return self._calculate_loss(feats, batch)
+        l, n = self._calculate_loss(feats, batch)
+        return l + self._parsing_loss(batch), n
 
 
     def forward(self, batch, batch_first: bool = False):
@@ -183,14 +195,15 @@ class EnsembleModel(flair.nn.Model):
                     for ktags, kweights in zip(senttags[:len(sentence)], sentweights)]
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
 
-                print(self.scoring)
                 parser.init(self.scoring.score, *predicted_tags)
                 parser.fill_chart()
                 sentence.set_label(label_name, str(AutoTree(parser.get_best()[0]).tree(pos)))
 
             store_embeddings(batch, storage_mode=embedding_storage_mode)
             if return_loss:
-                return self._calculate_loss(scores.items(), batch, batch_first=True, check_bounds=True)
+                l, n = self._calculate_loss(scores.items(), batch, batch_first=True, check_bounds=True)
+                # return l + self._parsing_loss(batch), n
+                return l, n
 
     def evaluate(self,
             dataset: DatasetWrapper,

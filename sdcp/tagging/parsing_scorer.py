@@ -1,22 +1,26 @@
 from .data import DatasetWrapper
 from collections import Counter
 import torch as t
-from math import log
+from math import log, sqrt
 from ..grammar.sdcp import rule
 
 
 class ScoringBuilder:
     def __init__(self, typestr: str, trainingset: DatasetWrapper, *optionstrs: str):
+        self.poptions = ()
+        self.kwoptions = dict()
         if typestr is None or typestr.lower() == "none":
             self.constructor = DummyScorer
-            self.options = ()
         elif typestr.lower().startswith("c"):
             options = eval(f"dict({', '.join(optionstrs)})")
             self.constructor = CombinatorialParsingScorer(trainingset, **options)
-            self.options = ()
+        elif typestr.lower().startswith("neu"):
+            self.constructor = NeuralCombinatorialScorer
+            self.poptions = (len(trainingset.labels()),)
+            self.kwoptions = eval(f"dict({', '.join(optionstrs)})")
     
     def produce(self):
-        return self.constructor(*self.options)
+        return self.constructor(*self.poptions, **self.kwoptions)
     
 
 class DummyScorer:
@@ -27,8 +31,13 @@ class DummyScorer:
     def snd_order(self):
         return False
 
+    @property
+    def requires_training(self):
+        return False
+
     def score(*args):
         return 0.0
+
 
 class CombinatorialParsingScorer:
     def __init__(self, corpus: DatasetWrapper, prior: int = 1, separated: bool = True):
@@ -96,6 +105,62 @@ class CombinatorialParsingScorer:
     @property
     def snd_order(self):
         return True
+
+    @property
+    def requires_training(self):
+        return False
+
+
+def singleton(num: int):
+    if not isinstance(num, int):
+        return num
+    return t.tensor(num, dtype=t.long)
+
+
+class NeuralCombinatorialScorer(t.nn.Module):
+    def __init__(self, n: int, embedding_dim: int = 32):
+        super().__init__()
+        self.nfeatures = embedding_dim
+        self.embedding = t.nn.Embedding(n, self.nfeatures)
+        self.bias = t.nn.Parameter(t.empty((self.nfeatures,)))
+        self.unary = t.nn.Parameter(t.empty((self.nfeatures,)*2))
+        self.binary = t.nn.Parameter(t.empty((self.nfeatures,)*3))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        bound = 1 / sqrt(self.nfeatures)
+        t.nn.init.uniform_(self.bias, -bound, bound)
+        t.nn.init.uniform_(self.unary, -bound, bound)
+        t.nn.init.uniform_(self.binary, -bound, bound)
+        self.embedding.reset_parameters()
+
+    def forward(self, root: int, *children: tuple[int]):
+        if len(children) == 1:
+            em = self.embedding(singleton(children[0]))
+            feats = (self.unary * em).sum(-1)
+        elif len(children) == 2:
+            feats = ((self.binary * self.embedding(singleton(children[0]))).sum(-1) * self.embedding(singleton(children[1]))).sum(-1)
+        feats += self.bias
+        return (feats * self.embedding.weight).sum(-1)
+    
+    def forward_loss(self, root, *children, check_bounds: bool = False):
+        if len(children) == 0: return t.tensor(0.0)
+        feats = self.forward(root, *children)
+        loss = t.nn.functional.cross_entropy(feats, singleton(root), reduction="sum")
+        return loss
+
+    def score(self, root, *children):
+        if len(children) == 0: return t.tensor(0.0)
+        return -t.nn.functional.log_softmax(self.forward(root, *children), dim=-1)[root]
+
+    @property
+    def snd_order(self):
+        return True
+
+    @property
+    def requires_training(self):
+        return True
+
 
 
 class AffineLayer(t.nn.Module):

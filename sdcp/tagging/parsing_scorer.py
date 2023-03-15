@@ -27,7 +27,7 @@ class ScoringBuilder:
             self.kwoptions: dict = eval(f"dict({', '.join(options)})")
             
     def produce(self, encoding_len: None|int = None):
-        if self.constructor is SpanScorer:
+        if self.constructor is SpanScorer and len(self.poptions) < 2:
             assert not encoding_len is None
             self.poptions += (encoding_len,)
         return self.constructor(*self.poptions, **self.kwoptions)
@@ -182,19 +182,24 @@ class SpanScorer(t.nn.Module):
         super().__init__()
         self.vecdim = encoding_dim
         self.embedding_dim = embedding_dim
-        self.rule_embedding = t.nn.Embedding(nrules, embedding_dim)
+        self.nrules = nrules
         self.encoding_to_embdding = t.nn.Sequential(
             t.nn.Linear(encoding_dim, encoding_dim),
             t.nn.ReLU(),
             t.nn.Linear(encoding_dim, embedding_dim)
         )
-        self.combinator = t.nn.Parameter(t.empty((self.embedding_dim,)*3))
+        self.combinator = t.nn.Parameter(t.empty((self.nrules, self.embedding_dim, self.embedding_dim)))
+        self.reset_parameters()
         self.to(f.device)
+
+    def reset_parameters(self):
+        bound = 1 / sqrt(self.nrules)
+        t.nn.init.uniform_(self.combinator, -bound, bound)
 
     def forward(self, encoding: t.Tensor, span: Iterable[int], head: int):
         spanenc = self.encoding_to_embdding(self.__class__.spanvec(encoding, span))
         headenc = self.encoding_to_embdding(encoding[head])
-        return (((self.combinator * spanenc).sum(-1) * headenc).sum(-1) * self.rule_embedding.weight).sum(-1)
+        return ((self.combinator * spanenc).sum(-1) * headenc).sum(-1)
 
     def score(self, root, children, head, span, encoding):
         return -t.nn.functional.log_softmax(self.forward(encoding, span, head), dim=-1)[root]

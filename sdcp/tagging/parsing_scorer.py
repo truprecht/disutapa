@@ -173,7 +173,7 @@ class NeuralCombinatorialScorer(t.nn.Module):
         return True
 
 
-class SpanScorer:
+class SpanScorer(t.nn.Module):
     @classmethod
     def spanvec(cls, sent_encoding: t.Tensor, span: Iterable[int]):
         return sent_encoding[t.tensor(list(span))].max(dim=0)[0]
@@ -189,6 +189,7 @@ class SpanScorer:
             t.nn.Linear(encoding_dim, embedding_dim)
         )
         self.combinator = t.nn.Parameter(t.empty((self.embedding_dim,)*3))
+        self.to(f.device)
 
     def forward(self, encoding: t.Tensor, span: Iterable[int], head: int):
         spanenc = self.encoding_to_embdding(self.__class__.spanvec(encoding, span))

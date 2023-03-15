@@ -132,26 +132,15 @@ class NeuralCombinatorialScorer(t.nn.Module):
         super().__init__()
         self.nfeatures = embedding_dim
         self.embedding = t.nn.Embedding(n, self.nfeatures)
-        self.bias = t.nn.Parameter(t.empty((self.nfeatures,)))
-        self.unary = t.nn.Parameter(t.empty((self.nfeatures,)*2))
-        self.binary = t.nn.Parameter(t.empty((self.nfeatures,)*3))
-        self.reset_parameters()
+        self.binary = t.nn.Bilinear(self.nfeatures, self.nfeatures, self.nfeatures)
+        self.unary = t.nn.Linear(self.nfeatures, self.nfeatures, bias=False) # share bias with binary
         self.to(f.device)
-
-    def reset_parameters(self):
-        bound = 1 / sqrt(self.nfeatures)
-        t.nn.init.uniform_(self.bias, -bound, bound)
-        t.nn.init.uniform_(self.unary, -bound, bound)
-        t.nn.init.uniform_(self.binary, -bound, bound)
-        self.embedding.reset_parameters()
 
     def forward(self, root: int, *children: tuple[int]):
         if len(children) == 1:
-            em = self.embedding(singleton(children[0]))
-            feats = (self.unary * em).sum(-1)
+            feats = self.unary(self.embedding(singleton(children[0]))) + self.binary.bias
         elif len(children) == 2:
-            feats = ((self.binary * self.embedding(singleton(children[0]))).sum(-1) * self.embedding(singleton(children[1]))).sum(-1)
-        feats += self.bias
+            feats = self.binary(self.embedding(singleton(children[0])), self.embedding(singleton(children[1])))
         return (feats * self.embedding.weight).sum(-1)
     
     def forward_loss(self, root, children, head, span, sentence_encoding):
@@ -188,18 +177,13 @@ class SpanScorer(t.nn.Module):
             t.nn.ReLU(),
             t.nn.Linear(encoding_dim, embedding_dim)
         )
-        self.combinator = t.nn.Parameter(t.empty((self.nrules, self.embedding_dim, self.embedding_dim)))
-        self.reset_parameters()
+        self.combinator = t.nn.Bilinear(self.embedding_dim, self.embedding_dim, self.nrules)
         self.to(f.device)
-
-    def reset_parameters(self):
-        bound = 1 / sqrt(self.nrules)
-        t.nn.init.uniform_(self.combinator, -bound, bound)
 
     def forward(self, encoding: t.Tensor, span: Iterable[int], head: int):
         spanenc = self.encoding_to_embdding(self.__class__.spanvec(encoding, span))
         headenc = self.encoding_to_embdding(encoding[head])
-        return ((self.combinator * spanenc).sum(-1) * headenc).sum(-1)
+        return self.combinator(spanenc, headenc)
 
     def score(self, root, children, head, span, encoding):
         return -t.nn.functional.log_softmax(self.forward(encoding, span, head), dim=-1)[root]

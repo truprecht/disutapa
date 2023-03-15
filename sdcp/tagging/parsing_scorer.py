@@ -4,25 +4,34 @@ import torch as t
 import flair as f
 from math import log, sqrt
 from ..grammar.sdcp import rule
+from ..grammar.buparser import BitSpan, PassiveItem, backtrace
+from typing import Iterable
 
 
 class ScoringBuilder:
-    def __init__(self, typestr: str, trainingset: DatasetWrapper, *optionstrs: str):
+    def __init__(self, typestr: str, trainingset: DatasetWrapper, *options: str|int):
         self.poptions = ()
         self.kwoptions = dict()
         if typestr is None or typestr.lower() == "none":
             self.constructor = DummyScorer
-        elif typestr.lower().startswith("c"):
-            options = eval(f"dict({', '.join(optionstrs)})")
+        elif typestr.lower().startswith("snd"):
+            options = eval(f"dict({', '.join(options)})")
             self.constructor = CombinatorialParsingScorer(trainingset, **options)
         elif typestr.lower().startswith("neu"):
             self.constructor = NeuralCombinatorialScorer
             self.poptions = (len(trainingset.labels()),)
-            self.kwoptions = eval(f"dict({', '.join(optionstrs)})")
-    
-    def produce(self):
+            self.kwoptions = eval(f"dict({', '.join(options)})")
+        elif typestr.lower().startswith("span"):
+            self.constructor = SpanScorer
+            self.poptions = (len(trainingset.labels()),)
+            self.kwoptions: dict = eval(f"dict({', '.join(options)})")
+            
+    def produce(self, encoding_len: None|int = None):
+        if self.constructor is SpanScorer:
+            assert not encoding_len is None
+            self.poptions += (encoding_len,)
         return self.constructor(*self.poptions, **self.kwoptions)
-    
+
 
 class DummyScorer:
     def __init__(self):
@@ -92,9 +101,9 @@ class CombinatorialParsingScorer:
         s2 = self.cnt_by_rhs[rhs]
         return s1 + self.prior * s2
 
-    def score(self, root: int, *children: tuple[int]):
+    def score(self, root, children, *_unused_args):
         if self.cnt_separated and len(children) == 2 and not any(c is None for c in children):
-            return self.score(root, children[0], None) + self.score(root, None, children[1])
+            return self.score(root, (children[0], None), *_unused_args) + self.score(root, (None, children[1]), *_unused_args)
         if not (v := self.probs.get((root, *children))) is None:
             return v
         return -log(self.prior / self.denom(root, children)) if self.prior else float("inf")
@@ -145,13 +154,13 @@ class NeuralCombinatorialScorer(t.nn.Module):
         feats += self.bias
         return (feats * self.embedding.weight).sum(-1)
     
-    def forward_loss(self, root, *children, check_bounds: bool = False):
+    def forward_loss(self, root, children, head, span, sentence_encoding):
         if len(children) == 0: return t.tensor(0.0, device=f.device)
         feats = self.forward(root, *children)
         loss = t.nn.functional.cross_entropy(feats, singleton(root), reduction="sum")
         return loss
 
-    def score(self, root, *children):
+    def score(self, root, children, head, span, sentence_encoding):
         if len(children) == 0: return t.tensor(0.0, device=f.device)
         return -t.nn.functional.log_softmax(self.forward(root, *children), dim=-1)[root]
 
@@ -164,37 +173,39 @@ class NeuralCombinatorialScorer(t.nn.Module):
         return True
 
 
-
-class AffineLayer(t.nn.Module):
-    def __init__(self, rules: int, embedding_dim: int):
-        self.embeddings = t.nn.Embedding(rules, embedding_dim)
-        self.unary = t.nn.Bilinear(embedding_dim, embedding_dim, 1)
-        self.binaries = [
-            t.nn.Bilinear(embedding_dim, embedding_dim, 1)
-            for _ in range(0,3)
-        ]
-
-    def forward(self, *rules):
-        rules = tuple(map(self.embeddings, rules))
-        match rules:
-            case (top, bot):
-                return self.unary(top, bot)
-            case (top, left, right):
-                return self.binaries[0](top, left) \
-                        + self.binaries[1](top, right) \
-                        + self.binaries[2](left, right)
-
-
-class SpanParsingScorer(t.nn.Module):
-    def __init__(self, corpus: DatasetWrapper, embedding_len: int):
+class SpanScorer:
+    @classmethod
+    def spanvec(cls, sent_encoding: t.Tensor, span: Iterable[int]):
+        return sent_encoding[t.tensor(list(span))].max(dim=0)[0]
+        
+    def __init__(self, nrules: int, encoding_dim: int, embedding_dim: int = 32):
         super().__init__()
-        nrules = len(corpus.labels())
-        embedding_len *= 2
-        self.w = t.nn.Sequence(
-            t.nn.Linear((embedding_len, embedding_len)),
-            t.nn.Relu(),
-            t.nn.Linear((embedding_len, nrules))
+        self.vecdim = encoding_dim
+        self.embedding_dim = embedding_dim
+        self.rule_embedding = t.nn.Embedding(nrules, embedding_dim)
+        self.encoding_to_embdding = t.nn.Sequential(
+            t.nn.Linear(encoding_dim, encoding_dim),
+            t.nn.ReLU(),
+            t.nn.Linear(encoding_dim, embedding_dim)
         )
+        self.combinator = t.nn.Parameter(t.empty((self.embedding_dim,)*3))
 
-    def forward(self, embedded_span: t.tensor):
-        return self.w(embedded_span)
+    def forward(self, encoding: t.Tensor, span: Iterable[int], head: int):
+        spanenc = self.encoding_to_embdding(self.__class__.spanvec(encoding, span))
+        headenc = self.encoding_to_embdding(encoding[head])
+        return (((self.combinator * spanenc).sum(-1) * headenc).sum(-1) * self.rule_embedding.weight).sum(-1)
+
+    def score(self, root, children, head, span, encoding):
+        return -t.nn.functional.log_softmax(self.forward(encoding, span, head), dim=-1)[root]
+    
+    def forward_loss(self, root, children, head, span, encoding):
+        feats = self.forward(encoding, span, head)
+        return t.nn.functional.cross_entropy(feats, singleton(root))
+
+    @property
+    def snd_order(self):
+        return False
+
+    @property
+    def requires_training(self):
+        return True

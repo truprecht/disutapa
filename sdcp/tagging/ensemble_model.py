@@ -54,13 +54,13 @@ class EnsembleModel(flair.nn.Model):
         self.embedding = flair.embeddings.StackedEmbeddings([
             builder.produce() for builder in embeddings
         ])
+        inputlen = self.embedding.embedding_length
         self.scoring_builder = parsing_scorer
-        self.scoring = self.scoring_builder.produce()
+        self.scoring = self.scoring_builder.produce(inputlen)
 
         self.dropoutprob = dropout
         self.dropout = torch.nn.Dropout(dropout)
         self.dictionaries = dictionaries
-        inputlen = self.embedding.embedding_length
         self.scores = torch.nn.ModuleDict({
             field: torch.nn.Linear(inputlen, len(dict))
             for field, dict in self.dictionaries.items()
@@ -86,7 +86,7 @@ class EnsembleModel(flair.nn.Model):
     def label_type(self):
         return "supertag"
 
-    def _batch_to_embeddings(self, batch):
+    def _batch_to_embeddings(self, batch, batch_first: bool = False):
         if not type(batch) is list:
             batch = [batch]
         self.embedding.embed(batch)
@@ -94,6 +94,8 @@ class EnsembleModel(flair.nn.Model):
         input = torch.nn.utils.rnn.pad_sequence([
             torch.stack([ word.get_embedding(embedding_name) for word in sentence ])
             for sentence in batch]).to(flair.device)
+        if batch_first:
+            input = input.transpose(0,1)
         return input
 
 
@@ -118,29 +120,35 @@ class EnsembleModel(flair.nn.Model):
         return loss, n_predictions
     
 
-    def _parsing_loss(self, batch: list[SentenceWrapper]):
+    def _parsing_loss(self, batch: list[SentenceWrapper], embeds: torch.Tensor):
         loss = torch.tensor(0.0, device=flair.device)
         if not self.scoring.requires_training:
             return loss
-        for sentence in batch:
+        for i, sentence in enumerate(batch):
             deriv = sentence.get_derivation()
             for node in deriv.subtrees():
-                loss += self.scoring.forward_loss(node.label[0], *(c.label[0] for c in node))
+                leaves = list(n.label[1] for n in node.subtrees())
+                loss += self.scoring.forward_loss(
+                    node.label[0],
+                    tuple(c.label[0] for c in node),
+                    node.label[1],
+                    leaves,
+                    embeds[:len(sentence), i])
         return loss
 
 
     def forward_loss(self, batch):
-        feats = self.forward(batch)
+        embeds = self._batch_to_embeddings(batch)
+        feats = self.forward(embeds)
         l, n = self._calculate_loss(feats, batch)
-        return l + self._parsing_loss(batch), n
+        return l + self._parsing_loss(batch, embeds), n
 
 
-    def forward(self, batch, batch_first: bool = False):
-        inputfeats = self._batch_to_embeddings(batch)
-        inputfeats = self.dropout(inputfeats)
+    def forward(self, embeddings):
+        inputfeats = self.dropout(embeddings)
         for field, layer in self.scores.items():
             logits = layer(inputfeats)
-            yield field, (logits if not batch_first else logits.transpose(0,1))
+            yield field, logits #(logits if not batch_first else logits.transpose(0,1))
 
 
     def predict(self,
@@ -177,12 +185,13 @@ class EnsembleModel(flair.nn.Model):
 
         with torch.no_grad():
             parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
-            scores = dict(self.forward(batch, batch_first=True))
+            embeds = self._batch_to_embeddings(batch, batch_first=True)
+            scores = dict(self.forward(embeds))
             tagscores = scores["supertag"].cpu()
             tags = argpartition(-tagscores, self.ktags, axis=2)[:, :, 0:self.ktags]
             postags = scores["pos"].argmax(dim=-1)
 
-            for sentence, senttags, sentweights, postag in zip(batch, tags, tagscores.gather(2, tags), postags):
+            for sentence, sembed, senttags, sentweights, postag in zip(batch, embeds, tags, tagscores.gather(2, tags), postags):
                 # store tags in tokens
                 sentence.store_raw_prediction("supertag-k", senttags[:len(sentence)])
                 sentence.store_raw_prediction("supertag", senttags.gather(1, sentweights.argmax(dim=1, keepdim=True)).squeeze()[:len(sentence)])
@@ -195,7 +204,7 @@ class EnsembleModel(flair.nn.Model):
                     for ktags, kweights in zip(senttags[:len(sentence)], sentweights)]
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
 
-                parser.init(self.scoring.score, *predicted_tags)
+                parser.init(self.scoring.score, sembed[:len(sentence)], *predicted_tags)
                 parser.fill_chart()
                 sentence.set_label(label_name, str(AutoTree(parser.get_best()[0]).tree(pos)))
 

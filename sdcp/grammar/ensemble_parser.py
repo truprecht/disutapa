@@ -18,7 +18,7 @@ class EnsembleParser:
         self.sow = snd_order_weights
 
 
-    def init(self, rule_combination_scores, *rules_per_position):
+    def init(self, parsing_scorer, sentence_embedding, *rules_per_position):
         self.len = len(rules_per_position)
         self.rootid = None
         self.chart = {}
@@ -27,7 +27,13 @@ class EnsembleParser:
         self.from_left = {}
         self.from_right = {}
         self.queue = PriorityQueue()
-        self.rule_scores = rule_combination_scores
+        self.backtraces = []
+        self.rule_scores = lambda it, bt: parsing_scorer(
+            bt.rid,
+            tuple(self.backtraces[b].rid for b in bt.children),
+            bt.leaf,
+            it.leaves,
+            sentence_embedding)
         for i, rules in enumerate(rules_per_position):
             minweight = min(w for _, w in (rules or [(0,0)]))
             for rid, weight in rules:
@@ -52,7 +58,6 @@ class EnsembleParser:
     def fill_chart(self):
         expanded = set()
         self.from_lhs: dict[str, list[tuple[BitSpan, int, float, float]]] = defaultdict(SortedList)
-        self.backtraces = []
         while not self.queue.empty():
             qi: qelement = self.queue.get_nowait()
             fritem = qi.item.freeze()
@@ -79,10 +84,12 @@ class EnsembleParser:
                 passive_item_lhs = rid if self.sow else rule.lhs
                 if newpos.gaps >= rule.fanout_hint:
                     continue
+                passive_item = PassiveItem(passive_item_lhs, newpos, rule.fanout_hint)
+                backt = backtrace(rid, i, (qi.bt,))
                 self.queue.put_nowait(qelement(
-                    PassiveItem(passive_item_lhs, newpos, rule.fanout_hint),
-                    backtrace(rid, i, (qi.bt,)),
-                    qi.weight+weight+self.rule_scores(rid, backtrace_id.rid),
+                    passive_item,
+                    backt,
+                    qi.weight+weight+self.rule_scores(passive_item, backt),
                     newpos.gaps + self.discount*qi.gapscore
                 ))
             for rid, i, weight in self.from_left.get(lhs, []):
@@ -100,10 +107,12 @@ class EnsembleParser:
                     if newpos.gaps >= rule.fanout_hint:
                         continue
                     passive_item_lhs = rid if self.sow else rule.lhs
+                    passive_item = PassiveItem(passive_item_lhs, newpos, rule.fanout_hint)
+                    backt = backtrace(rid, i, (qi.bt, _bt))
                     self.queue.put_nowait(qelement(
-                        PassiveItem(passive_item_lhs, newpos, rule.fanout_hint),
-                        backtrace(rid, i, (qi.bt, _bt)),
-                        qi.weight+_weight+weight+self.rule_scores(rid, backtrace_id.rid, self.backtraces[_bt].rid),
+                        passive_item,
+                        backt,
+                        qi.weight+_weight+weight+self.rule_scores(passive_item, backt),
                         newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))
             for rid, i, weight in self.from_right.get(lhs, []):
@@ -121,10 +130,12 @@ class EnsembleParser:
                     if newpos.gaps >= rule.fanout_hint:
                         continue
                     passive_item_lhs = rid if self.sow else rule.lhs
+                    passive_item = PassiveItem(passive_item_lhs, newpos, rule.fanout_hint)
+                    backt = backtrace(rid, i, (_bt, qi.bt))
                     self.queue.put_nowait(qelement(
-                        PassiveItem(passive_item_lhs, newpos, rule.fanout_hint),
-                        backtrace(rid, i, (_bt, qi.bt)),
-                        qi.weight+_weight+weight+self.rule_scores(rid, self.backtraces[_bt].rid, backtrace_id.rid),
+                        passive_item,
+                        backt,
+                        qi.weight+_weight+weight+self.rule_scores(passive_item, backt),
                         newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))
 

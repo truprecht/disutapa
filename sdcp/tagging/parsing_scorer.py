@@ -167,23 +167,28 @@ class SpanScorer(t.nn.Module):
     def spanvec(cls, sent_encoding: t.Tensor, span: Iterable[int]):
         return sent_encoding[t.tensor(list(span))].max(dim=0)[0]
         
-    def __init__(self, nrules: int, encoding_dim: int, embedding_dim: int = 32):
+    def __init__(self, nrules: int, encoding_dim: int, embedding_dim: int = 32, score_head: bool = False):
         super().__init__()
         self.vecdim = encoding_dim
         self.embedding_dim = embedding_dim
         self.nrules = nrules
         self.encoding_to_embdding = t.nn.Sequential(
-            t.nn.Linear(encoding_dim, encoding_dim),
+            t.nn.Linear(encoding_dim, embedding_dim),
             t.nn.ReLU(),
-            t.nn.Linear(encoding_dim, embedding_dim)
         )
-        self.combinator = t.nn.Bilinear(self.embedding_dim, self.embedding_dim, self.nrules)
+        if score_head:
+            self.combinator = t.nn.Bilinear(self.embedding_dim, self.embedding_dim, self.embedding_dim)
+        else:
+            self.combinator = None
+        self.decompression = t.nn.Linear(embedding_dim, nrules)
         self.to(f.device)
 
     def forward(self, encoding: t.Tensor, span: Iterable[int], head: int):
-        spanenc = self.encoding_to_embdding(self.__class__.spanvec(encoding, span))
-        headenc = self.encoding_to_embdding(encoding[head])
-        return self.combinator(spanenc, headenc)
+        feats = self.encoding_to_embdding(self.__class__.spanvec(encoding, span))
+        if not self.combinator is None:
+            headenc = self.encoding_to_embdding(encoding[head])
+            feats = t.nn.functional.relu(self.combinator(self.combinator(feats, headenc)))
+        return self.decompression(feats)
 
     def score(self, root, children, head, span, encoding):
         return -t.nn.functional.log_softmax(self.forward(encoding, span, head), dim=-1)[root]

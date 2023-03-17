@@ -11,7 +11,7 @@ from sdcp.autotree import AutoTree
 from discodop.eval import readparam
 
 from .data import DatasetWrapper, SentenceWrapper
-from .embeddings import TokenEmbeddingBuilder, EmbeddingPresets
+from .embeddings import TokenEmbeddingBuilder, EmbeddingPresets, PretrainedBuilder
 from .parsing_scorer import ScoringBuilder
 
 
@@ -19,7 +19,8 @@ from dataclasses import dataclass, field
 
 @dataclass
 class ModelParameters:
-    embeddings: str = "Supervised"
+    embedding: str = "Supervised"
+    embedding_options: list[str] = field(default_factory=list)
     scoring: str = None
     scoring_options: list[str] = field(default_factory=list)
     ktags: int = 1
@@ -27,7 +28,11 @@ class ModelParameters:
     evalparam: Optional[dict] = None
 
     def __post_init__(self):
-        self.embeddings = EmbeddingPresets[self.embeddings].value
+        if self.embedding in EmbeddingPresets:
+            self.embedding = EmbeddingPresets[self.embedding]
+        else:
+            options = eval(f"dict({','.join(self.embedding_options)})")
+            self.embedding = [PretrainedBuilder(self.embedding, **options)]
         if self.evalparam is None:
             self.evalparam = readparam("../disco-dop/proper.prm")
 
@@ -43,7 +48,7 @@ class EnsembleModel(flair.nn.Model):
 
         embeddings = [
             embedding.build_vocab(corpus)
-            for embedding in parameters.embeddings
+            for embedding in parameters.embedding
         ]
         parsing_scorer = ScoringBuilder(parameters.scoring, corpus, *parameters.scoring_options)
         return cls(embeddings, tag_dicts, grammar, parsing_scorer, parameters.dropout, parameters.ktags, parameters.evalparam)

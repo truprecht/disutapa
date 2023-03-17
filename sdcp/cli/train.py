@@ -28,7 +28,7 @@ def main(config: TrainingParameter):
     model = EnsembleModel.from_corpus(
         corpus.train,
         grammar([eval(t) for t in corpus.train.labels()]),
-        ModelParameters(embeddings=config.embeddings, ktags=config.ktags, dropout=config.dropout, scoring=config.scoring, scoring_options=config.scoring_options)
+        ModelParameters(embedding=config.embedding, embedding_options=config.embedding_options, ktags=config.ktags, dropout=config.dropout, scoring=config.scoring, scoring_options=config.scoring_options)
     )
     trainer = flair.trainers.ModelTrainer(model, corpus)
     train = trainer.fine_tune if any(em.fine_tune() for em in model.embedding_builder) else \

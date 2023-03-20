@@ -52,6 +52,7 @@ class DummyScorer:
 class CombinatorialParsingScorer:
     def __init__(self, corpus: DatasetWrapper, prior: int = 1, separated: bool = True):
         combinations: dict[tuple[int], int] = Counter()
+        self.ntags = len(corpus.labels())
         self.denominator: dict[tuple[int], int] = Counter()
         self.cnt_by_rhs = Counter()
         self.lhs = []
@@ -119,6 +120,12 @@ class CombinatorialParsingScorer:
     @property
     def requires_training(self):
         return False
+    
+    def get_probab_distribution(self, children, *_unused_args):
+        return t.tensor([
+            self.score(n, children)
+            for n in range(self.ntags)
+        ])
 
 
 def singleton(num: int):
@@ -136,7 +143,7 @@ class NeuralCombinatorialScorer(t.nn.Module):
         self.unary = t.nn.Linear(self.nfeatures, self.nfeatures, bias=False) # share bias with binary
         self.to(f.device)
 
-    def forward(self, root: int, *children: tuple[int]):
+    def forward(self, *children: tuple[int]):
         if len(children) == 1:
             feats = self.unary(self.embedding(singleton(children[0]))) + self.binary.bias
         elif len(children) == 2:
@@ -145,13 +152,13 @@ class NeuralCombinatorialScorer(t.nn.Module):
     
     def forward_loss(self, root, children, head, span, sentence_encoding):
         if len(children) == 0: return t.tensor(0.0, device=f.device)
-        feats = self.forward(root, *children)
+        feats = self.forward(*children)
         loss = t.nn.functional.cross_entropy(feats, singleton(root), reduction="sum")
         return loss
 
     def score(self, root, children, head, span, sentence_encoding):
         if len(children) == 0: return t.tensor(0.0, device=f.device)
-        return -t.nn.functional.log_softmax(self.forward(root, *children), dim=-1)[root]
+        return -t.nn.functional.log_softmax(self.forward(*children), dim=-1)[root]
 
     @property
     def snd_order(self):
@@ -160,6 +167,9 @@ class NeuralCombinatorialScorer(t.nn.Module):
     @property
     def requires_training(self):
         return True
+    
+    def get_probab_distribution(self, children, *_unused_args):
+        return -t.nn.functional.log_softmax(self.forward(*children), dim=-1)
 
 
 class SpanScorer(t.nn.Module):
@@ -204,3 +214,6 @@ class SpanScorer(t.nn.Module):
     @property
     def requires_training(self):
         return True
+    
+    def get_probab_distribution(self, children, head, span, encoding):
+        return -t.nn.functional.log_softmax(self.forward(encoding, span, head), dim=-1)

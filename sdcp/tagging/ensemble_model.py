@@ -1,5 +1,7 @@
 import torch
 import flair
+from tqdm import tqdm
+from math import ceil
 
 CPU = torch.device("cpu")
 
@@ -232,7 +234,8 @@ class EnsembleModel(flair.nn.Model):
             main_evaluation_metric = (),
             gold_label_dictionary = None,
             return_loss: bool = True,
-            exclude_labels = []) -> Tuple[flair.training_utils.Result, float]:
+            exclude_labels = [],
+            progressbar: bool = False) -> Tuple[flair.training_utils.Result, float]:
         """ Predicts supertags, pos tags and parse trees, and reports the
             predictions scores for a set of sentences.
             :param sentences: a ``DataSet`` of sentences. For each sentence
@@ -270,6 +273,7 @@ class EnsembleModel(flair.nn.Model):
                 strmode: Evaluator({ **self.evalparam, "DISC_ONLY": mode })}
         
         data_loader = DataLoader(dataset, batch_size=mini_batch_size, num_workers=num_workers)
+        iterator = data_loader if not progressbar else tqdm(data_loader)
 
         # predict supertags and parse trees
         eval_loss = 0
@@ -278,8 +282,8 @@ class EnsembleModel(flair.nn.Model):
 
         trees = []
         supertags = []
-        postags = []
-        for batch in data_loader:
+        postags = [] 
+        for batch in iterator:
             loss = self.predict(
                 batch,
                 embedding_storage_mode=embedding_storage_mode,

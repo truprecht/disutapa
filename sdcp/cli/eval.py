@@ -17,7 +17,7 @@ def main(config):
     model = EnsembleModel.load(config.model)
     if config.ktags:
         model.__ktags__ = config.ktags
-    results = model.evaluate(corpus)
+    results = model.evaluate(corpus, progressbar=True)
     print(results.log_header)
     print(results.log_line)
     print(results.detailed_results)

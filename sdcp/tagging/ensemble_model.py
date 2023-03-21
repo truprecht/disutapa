@@ -131,9 +131,11 @@ class EnsembleModel(flair.nn.Model):
         loss = torch.tensor(0.0, device=flair.device)
         if not self.scoring.requires_training:
             return loss
+        npredictions = 0
         for i, sentence in enumerate(batch):
             deriv = sentence.get_derivation()
             for node in deriv.subtrees():
+                if not node.children: continue
                 leaves = list(n.label[1] for n in node.subtrees())
                 loss += self.scoring.forward_loss(
                     node.label[0],
@@ -141,14 +143,19 @@ class EnsembleModel(flair.nn.Model):
                     node.label[1],
                     leaves,
                     embeds[:len(sentence), i])
-        return loss
+                npredictions += 1
+        return loss, npredictions
 
 
     def forward_loss(self, batch):
         embeds = self._batch_to_embeddings(batch)
         feats = self.forward(embeds)
-        l, n = self._calculate_loss(feats, batch)
-        return l + self._parsing_loss(batch, embeds), n
+        loss, predictions = self._calculate_loss(feats, batch)
+        if self.scoring.requires_training:
+            lparse, nparse = self._parsing_loss(batch, embeds)
+            loss += lparse
+            predictions += nparse
+        return loss, predictions
 
 
     def forward(self, embeddings):

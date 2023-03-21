@@ -205,7 +205,7 @@ class SpanScorer(t.nn.Module):
     
     def forward_loss(self, root, children, head, span, encoding):
         feats = self.forward(encoding, span, head)
-        return t.nn.functional.cross_entropy(feats, singleton(root))
+        return t.nn.functional.cross_entropy(feats, singleton(root), reduction="sum")
 
     @property
     def snd_order(self):

@@ -6,6 +6,7 @@ from math import log, sqrt
 from ..grammar.sdcp import rule
 from ..grammar.buparser import BitSpan, PassiveItem, backtrace
 from typing import Iterable
+from discodop.tree import Tree
 
 
 class ScoringBuilder:
@@ -138,7 +139,7 @@ class NeuralCombinatorialScorer(t.nn.Module):
     def __init__(self, n: int, embedding_dim: int = 32):
         super().__init__()
         self.nfeatures = embedding_dim
-        self.embedding = t.nn.Embedding(n, self.nfeatures)
+        self.embedding = t.nn.Embedding(n+1, self.nfeatures)
         self.binary = t.nn.Bilinear(self.nfeatures, self.nfeatures, self.nfeatures)
         self.unary = t.nn.Linear(self.nfeatures, self.nfeatures, bias=False) # share bias with binary
         self.to(f.device)
@@ -148,13 +149,17 @@ class NeuralCombinatorialScorer(t.nn.Module):
             feats = self.unary(self.embedding(singleton(children[0]))) + self.binary.bias
         elif len(children) == 2:
             feats = self.binary(self.embedding(singleton(children[0])), self.embedding(singleton(children[1])))
-        return (feats * self.embedding.weight).sum(-1)
+        return (feats * self.embedding.weight[:-1]).sum(-1)
     
-    def forward_loss(self, root, children, head, span, sentence_encoding):
+    def forward_loss(self, _embedding, root, *children):
         if len(children) == 0: return t.tensor(0.0, device=f.device)
         feats = self.forward(*children)
-        loss = t.nn.functional.cross_entropy(feats, singleton(root), reduction="sum")
-        return loss
+        return t.nn.functional.cross_entropy(feats, singleton(root), reduction="sum")
+    
+    def norule_loss(self, _embedding, *children):
+        if len(children) == 0: return t.tensor(0.0, device=f.device)
+        feats = self.forward(*children)
+        return t.nn.functional.cross_entropy(feats, singleton(self.nfeatures), reduction="sum")
 
     def score(self, root, children, head, span, sentence_encoding):
         if len(children) == 0: return t.tensor(0.0, device=f.device)
@@ -170,6 +175,16 @@ class NeuralCombinatorialScorer(t.nn.Module):
     
     def get_probab_distribution(self, children, *_unused_args):
         return -t.nn.functional.log_softmax(self.forward(*children), dim=-1)
+        
+
+    def get_key_from_chart_item(self, item: PassiveItem, bts: list[backtrace]):
+        tup = tuple(bts[i].rid for i in bts[-1].children)
+        return tup, tup
+    
+
+    def get_key_from_gold_node(self, gold: Tree, sentlen: int):
+        tup = tuple(n.label[0] for n in gold.children)
+        return tup, tup
 
 
 class SpanScorer(t.nn.Module):
@@ -190,7 +205,7 @@ class SpanScorer(t.nn.Module):
             self.combinator = t.nn.Bilinear(self.embedding_dim, self.embedding_dim, self.embedding_dim)
         else:
             self.combinator = None
-        self.decompression = t.nn.Linear(embedding_dim, nrules)
+        self.decompression = t.nn.Linear(embedding_dim, nrules+1)
         self.to(f.device)
 
     def forward(self, encoding: t.Tensor, span: Iterable[int], head: int):
@@ -199,13 +214,17 @@ class SpanScorer(t.nn.Module):
             headenc = self.encoding_to_embdding(encoding[head])
             feats = t.nn.functional.relu(self.combinator(self.combinator(feats, headenc)))
         return self.decompression(feats)
+    
+    def forward_loss(self, encoding, root, span, head):
+        feats = self.forward(encoding, span, head)
+        return t.nn.functional.cross_entropy(feats, singleton(root), reduction="sum")
+    
+    def norule_loss(self, encoding, span, head):
+        feats = self.forward(encoding, span, head)
+        return t.nn.functional.cross_entropy(feats, singleton(self.nrules), reduction="sum")
 
     def score(self, root, children, head, span, encoding):
         return -t.nn.functional.log_softmax(self.forward(encoding, span, head), dim=-1)[root]
-    
-    def forward_loss(self, root, children, head, span, encoding):
-        feats = self.forward(encoding, span, head)
-        return t.nn.functional.cross_entropy(feats, singleton(root), reduction="sum")
 
     @property
     def snd_order(self):
@@ -217,3 +236,15 @@ class SpanScorer(t.nn.Module):
     
     def get_probab_distribution(self, children, head, span, encoding):
         return -t.nn.functional.log_softmax(self.forward(encoding, span, head), dim=-1)
+
+
+    def get_key_from_chart_item(self, item: PassiveItem, bts: list[backtrace]):
+        head = bts[-1].leaf if not self.combinator is None else None
+        span = item.leaves
+        return (span, head), (span.freeze(), head)
+    
+
+    def get_key_from_gold_node(self, gold: Tree, sentlen: int):
+        span = BitSpan.fromit((n.label[1] for n in gold.subtrees()), sentlen)
+        head = gold.label[1] if not self.combinator is None else None
+        return (span, head), (span.freeze(), head)

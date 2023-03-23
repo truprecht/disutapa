@@ -9,6 +9,7 @@ from sortedcontainers import SortedList
 from collections import defaultdict
 from .buparser import BitSpan, PassiveItem, backtrace, qelement
 from discodop.tree import Tree
+from random import random
 
 
 class EnsembleParser:
@@ -21,13 +22,13 @@ class EnsembleParser:
     def init(self, parsing_scorer, sentence_embedding, *rules_per_position):
         self.len = len(rules_per_position)
         self.rootid = None
-        self.chart = {}
         self.weight = []
         self.unaries = {}
         self.from_left = {}
         self.from_right = {}
         self.queue = PriorityQueue()
         self.backtraces = []
+        self.items = []
         self.rule_scores = lambda it, bt: parsing_scorer(
             bt.rid,
             tuple(self.backtraces[b].rid for b in bt.children),
@@ -53,6 +54,26 @@ class EnsembleParser:
                     case (lhs, (r1, r2)):
                         self.from_left.setdefault(r1, []).append((rid, i, weight))
                         self.from_right.setdefault(r2, []).append((rid, i, weight))
+        self.golditems = None
+     
+     
+    def add_nongold_filter(self, gold_tree: Tree, early_stopping_prob: float = 0.9):
+        self.golditems = set()
+        for node in gold_tree.subtrees():
+            span = BitSpan.fromit((n.label[1] for n in node.subtrees()), self.len).freeze()
+            if self.sow:
+                lhs = node.label[0]
+            else:
+                lhs = self.grammar.rules[node.label[0]].lhs
+            self.golditems.add((lhs, span))
+        self.nongold_stop_prob = early_stopping_prob
+
+
+    def check_nongold_filter(self, item):
+        # return true if this item shall not be further explored
+        # this is used during training for faster parsing
+        # but will only explore wrong items found in limited depth
+        return not self.golditems is None and not item[:2] in self.golditems and random() < self.nongold_stop_prob
 
 
     def fill_chart(self):
@@ -67,6 +88,11 @@ class EnsembleParser:
             backtrace_id = len(self.backtraces)
             self.backtraces.append(qi.bt)
             self.weight.append(qi.weight)
+            self.items.append(qi.item)
+
+            if self.check_nongold_filter(fritem):
+                continue
+
             qi.bt, backtrace_id = backtrace_id, qi.bt
             lhs = qi.item.lhs if not self.sow else self.grammar.rules[qi.item.lhs].lhs
             self.from_lhs[lhs].add((qi.item.leaves, qi.bt, qi.weight, qi.gapscore))

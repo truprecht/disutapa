@@ -106,6 +106,37 @@ class EnsembleModel(flair.nn.Model):
         return input
 
 
+    def _parsing_loss(self, batch: list[SentenceWrapper], embeddings, feats):
+        loss = torch.tensor(0.0, device=flair.device)
+        npredictions = 0
+        parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
+        topweights, toptags = feats.topk(self.ktags, dim=-1)
+        for i, sent in enumerate(batch):
+            embeds = embeddings[:len(sent), i]
+            predicted_tags = [
+                [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
+                for ktags, kweights in zip(toptags[:len(sent), i], topweights[:len(sent), i])]
+            parser.init(self.scoring.score, embeds, *predicted_tags)
+            parser.add_nongold_filter(sent.get_derivation(), 0.9)
+            parser.fill_chart()
+            
+            processed_items = set()
+            # print("finished parsing in training phase, saw", len(parser.backtraces), "backtraces")
+            for node in sent.get_derivation().subtrees():
+                args, key = self.scoring.get_key_from_gold_node(node, len(sent))
+                processed_items.add(key)
+                loss += self.scoring.forward_loss(embeds, node.label[0], *args)
+                npredictions += 1
+            for (i, item) in enumerate(parser.items):
+                args, key = self.scoring.get_key_from_chart_item(item, parser.backtraces[:i+1])
+                if key in processed_items: continue
+                processed_items.add(key)
+                loss += self.scoring.norule_loss(embeds, *args)
+                npredictions += 1
+
+        return loss, npredictions
+
+
     def _calculate_loss(self, feats, batch: list[SentenceWrapper], batch_first: bool = False, check_bounds: bool = False):
         loss = torch.tensor(0.0, device=flair.device)
         for field, logits in feats:
@@ -125,34 +156,14 @@ class EnsembleModel(flair.nn.Model):
             )
         n_predictions = sum(len(sentence) for sentence in batch)
         return loss, n_predictions
-    
-
-    def _parsing_loss(self, batch: list[SentenceWrapper], embeds: torch.Tensor):
-        loss = torch.tensor(0.0, device=flair.device)
-        if not self.scoring.requires_training:
-            return loss
-        npredictions = 0
-        for i, sentence in enumerate(batch):
-            deriv = sentence.get_derivation()
-            for node in deriv.subtrees():
-                if not node.children: continue
-                leaves = list(n.label[1] for n in node.subtrees())
-                loss += self.scoring.forward_loss(
-                    node.label[0],
-                    tuple(c.label[0] for c in node),
-                    node.label[1],
-                    leaves,
-                    embeds[:len(sentence), i])
-                npredictions += 1
-        return loss, npredictions
 
 
     def forward_loss(self, batch):
         embeds = self._batch_to_embeddings(batch)
-        feats = self.forward(embeds)
-        loss, predictions = self._calculate_loss(feats, batch)
+        feats = dict(self.forward(embeds))
+        loss, predictions = self._calculate_loss(feats.items(), batch)
         if self.scoring.requires_training:
-            lparse, nparse = self._parsing_loss(batch, embeds)
+            lparse, nparse = self._parsing_loss(batch, embeds, feats["supertag"])
             loss += lparse
             predictions += nparse
         return loss, predictions
@@ -204,6 +215,7 @@ class EnsembleModel(flair.nn.Model):
             tagscores = scores["supertag"].cpu()
             tags = argpartition(-tagscores, self.ktags, axis=2)[:, :, 0:self.ktags]
             postags = scores["pos"].argmax(dim=-1)
+            totalbacktraces = 0
 
             for sentence, sembed, senttags, sentweights, postag in zip(batch, embeds, tags, tagscores.gather(2, tags), postags):
                 # store tags in tokens
@@ -221,6 +233,8 @@ class EnsembleModel(flair.nn.Model):
                 parser.init(self.scoring.score, sembed[:len(sentence)], *predicted_tags)
                 parser.fill_chart()
                 sentence.set_label(label_name, str(AutoTree(parser.get_best()[0]).tree(pos)))
+                totalbacktraces += len(parser.backtraces)
+            print("finished parsing in prediction phase, saw", totalbacktraces, "backtraces")
 
             store_embeddings(batch, storage_mode=embedding_storage_mode)
             if return_loss:

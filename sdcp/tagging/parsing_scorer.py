@@ -209,16 +209,9 @@ class NeuralCombinatorialScorer(t.nn.Module):
         scores[mask] = unary_scores
         scores[~mask] = binary_scores
         return scores
-    
-    def __call__(self, *args):
-        return self.score(*args)
 
 
 class SpanScorer(t.nn.Module):
-    @classmethod
-    def spanvec(cls, sent_encoding: t.Tensor, span: Iterable[int]):
-        return sent_encoding[t.tensor(list(span))].max(dim=0)[0]
-        
     def __init__(self, nrules: int, encoding_dim: int, embedding_dim: int = 32, score_head: bool = False):
         super().__init__()
         self.vecdim = encoding_dim
@@ -235,23 +228,39 @@ class SpanScorer(t.nn.Module):
         self.decompression = t.nn.Linear(embedding_dim, nrules+1)
         self.to(f.device)
 
-    def forward(self, encoding: t.Tensor, span: Iterable[int], head: int):
-        feats = self.encoding_to_embdding(self.__class__.spanvec(encoding, span))
+    def forward(self, encoding: t.Tensor, spans: list[BitSpan], heads: list[int]):
+        feats = t.empty((len(spans), self.vecdim))
+        for i, s in enumerate(spans):
+            mask = t.zeros((encoding.size(0),), dtype=t.bool)
+            for j in s: mask[j] = True
+            feats[i, :] = encoding[mask].max(dim=0)[0]
+        feats = self.encoding_to_embdding(feats)
         if not self.combinator is None:
-            headenc = self.encoding_to_embdding(encoding[head])
+            headenc = self.encoding_to_embdding(encoding[t.tensor(heads)])
             feats = t.nn.functional.relu(self.combinator(self.combinator(feats, headenc)))
         return self.decompression(feats)
-    
-    def forward_loss(self, encoding, root, span, head):
-        feats = self.forward(encoding, span, head)
-        return t.nn.functional.cross_entropy(feats, singleton(root), reduction="sum")
-    
-    def norule_loss(self, encoding, span, head):
-        feats = self.forward(encoding, span, head)
-        return t.nn.functional.cross_entropy(feats, singleton(self.nrules), reduction="sum")
+ 
+    def forward_loss(self, batch: list[Derivation], embeddings: t.Tensor):
+        loss = t.tensor(0.0)
+        for i, deriv in enumerate(batch):
+            spans = [n.yd for n in deriv.subderivs() if n.children]
+            heads = [n.leaf for n in deriv.subderivs() if n.children]
+            gold = t.tensor([n.rule for n in deriv.subderivs() if n.children], dtype=t.long)
+            loss += t.nn.functional.cross_entropy(self.forward(embeddings[:,i], spans, heads), gold, reduction="sum")
+        return loss
 
-    def score(self, root, children, head, span, encoding):
-        return -t.nn.functional.log_softmax(self.forward(encoding, span, head), dim=-1)[root]
+    def norule_loss(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace], embeddings: t.Tensor):
+        spans = [n.leaves for n, _ in items]
+        heads = [bt.leaf for _, bt in items]
+        gold = t.empty((len(items),), dtype=t.long)
+        gold[:] = self.nrules
+        return t.nn.functional.cross_entropy(self.forward(embeddings, spans, heads), gold, reduction="sum")
+    
+    def score(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace], embeddings: t.Tensor):
+        spans = [n.leaves for n, _ in items]
+        heads = [bt.leaf for _, bt in items]
+        gold = t.tensor([bt.rid for _, bt in items], dtype=t.long)
+        return -t.nn.functional.log_softmax(self.forward(embeddings, spans, heads), dim=-1).gather(1, gold.unsqueeze(1)).squeeze(dim=1)
 
     @property
     def snd_order(self):
@@ -260,18 +269,3 @@ class SpanScorer(t.nn.Module):
     @property
     def requires_training(self):
         return True
-    
-    def get_probab_distribution(self, children, head, span, encoding):
-        return -t.nn.functional.log_softmax(self.forward(encoding, span, head), dim=-1)
-
-
-    def get_key_from_chart_item(self, item: PassiveItem, bts: list[backtrace]):
-        head = bts[-1].leaf if not self.combinator is None else None
-        span = item.leaves
-        return (span, head), (span.freeze(), head)
-    
-
-    def get_key_from_gold_node(self, gold: Tree, sentlen: int):
-        span = BitSpan.fromit((n.label[1] for n in gold.subtrees()), sentlen)
-        head = gold.label[1] if not self.combinator is None else None
-        return (span, head), (span.freeze(), head)

@@ -27,9 +27,11 @@ class ScoringBuilder:
             self.constructor = SpanScorer
             self.poptions = (len(trainingset.labels()),)
             self.kwoptions: dict = eval(f"dict({', '.join(options)})")
+        else:
+            raise ValueError(f"did not recognize scoring identifier: {typestr}")
             
     def produce(self, encoding_len: None|int = None):
-        if self.constructor is SpanScorer and len(self.poptions) < 2:
+        if self.constructor in (SpanScorer, NeuralCombinatorialScorer) and len(self.poptions) < 2:
             assert not encoding_len is None
             self.poptions += (encoding_len,)
         return self.constructor(*self.poptions, **self.kwoptions)
@@ -137,13 +139,17 @@ def singleton(num: int):
 
 
 class NeuralCombinatorialScorer(t.nn.Module):
-    def __init__(self, n: int, embedding_dim: int = 32):
+    def __init__(self, nrules: int, sentence_embedding_dim: int, rule_embedding_dim: int = 32, sentence_compression_dim: int = 32):
         super().__init__()
-        self.nfeatures = embedding_dim
-        self.nrules = n
-        self.embedding = t.nn.Embedding(n+1, self.nfeatures)
-        self.binary = t.nn.Bilinear(self.nfeatures, self.nfeatures, self.nfeatures)
-        self.unary = t.nn.Linear(self.nfeatures, self.nfeatures, bias=False) # share bias with binary
+        self.n_rule_features = rule_embedding_dim
+        self.input_dim = sentence_embedding_dim
+        self.n_word_features = sentence_compression_dim
+        self.nrules = nrules
+        self.word_compression = t.nn.Linear(self.input_dim, self.n_word_features)
+        self.rule_embedding = t.nn.Embedding(nrules+1, self.n_rule_features)
+        nfeatures = self.n_rule_features+self.n_word_features
+        self.binary = t.nn.Bilinear(nfeatures, nfeatures, self.n_rule_features)
+        self.unary = t.nn.Linear(nfeatures, self.n_rule_features, bias=False) # share bias with binary
         self.to(f.device)
 
     @property
@@ -157,54 +163,66 @@ class NeuralCombinatorialScorer(t.nn.Module):
     def get_probab_distribution(self, children, *_unused_args):
         return -t.nn.functional.log_softmax(self.forward(*children), dim=-1)
 
-    def forward(self, *children):
+    def forward(self, embeddings: t.Tensor, *children: t.Tensor):
+        mid, tot = children[0].size(1), children[0].size(1)
+        if len(children) > 1:
+            tot *= 2
+        feats = t.empty((tot, self.n_rule_features + self.n_word_features))
+        feats[:mid, :self.n_rule_features] = self.rule_embedding(children[0][0])
+        feats[:mid, self.n_rule_features:] = self.word_compression(embeddings[children[0][1]])
         if len(children) == 1:
-            feats = self.unary(self.embedding(children[0])) + self.binary.bias
+            feats = t.nn.functional.relu(feats)
+            feats = self.unary(feats) + self.binary.bias
         elif len(children) == 2:
-            feats = self.binary(self.embedding(children[0]), self.embedding(children[1]))
-        return feats @ self.embedding.weight.transpose(0, 1)
+            feats[mid:, :self.n_rule_features] = self.rule_embedding(children[1][0])
+            feats[mid:, self.n_rule_features:] = self.word_compression(embeddings[children[1][1]])
+            feats = t.nn.functional.relu(feats)
+            feats = self.binary(feats[:mid], feats[mid:])
+        feats = t.nn.functional.relu(feats) @ self.rule_embedding.weight.transpose(0, 1)
+        return feats
  
-    def forward_loss(self, batch: list[Derivation], _embeddings: t.Tensor):
-        size = sum(d.inner_nodes for d in batch)
-        combinations = t.empty((3, size), dtype=t.long)
-        unary_mask = t.empty((size,), dtype=t.bool)
-        i = 0
-        for deriv in batch:
-            for subderiv in deriv.subderivs():
-                if len(subderiv.children) == 0: continue
+    def forward_loss(self, batch: list[Derivation], embeddings: t.Tensor):
+        loss = t.tensor(0.0)
+        for j, deriv in enumerate(batch):
+            combinations = t.empty((5, deriv.inner_nodes), dtype=t.long)
+            unary_mask = t.empty((deriv.inner_nodes,), dtype=t.bool)
+            for i, subderiv in enumerate(n for n in deriv.subderivs() if n.children):
                 combinations[0, i] = subderiv.rule
                 combinations[1, i] = subderiv.children[0].rule
+                combinations[2, i] = subderiv.children[0].leaf
                 if len(subderiv.children) == 2:
-                    combinations[2, i] = subderiv.children[1].rule
+                    combinations[3, i] = subderiv.children[1].rule
+                    combinations[4, i] = subderiv.children[1].leaf
                 unary_mask[i] = len(subderiv.children) == 1
-                i += 1
-        loss = t.nn.functional.cross_entropy(self.forward(combinations[1, unary_mask]), combinations[0, unary_mask], reduction="sum")
-        loss += t.nn.functional.cross_entropy(self.forward(combinations[1, ~unary_mask], combinations[2, ~unary_mask]), combinations[0, ~unary_mask], reduction="sum")
+            loss += t.nn.functional.cross_entropy(self.forward(embeddings[:,j], combinations[1:3, unary_mask]), combinations[0, unary_mask], reduction="sum")
+            loss += t.nn.functional.cross_entropy(self.forward(embeddings[:,j], combinations[1:3, ~unary_mask], combinations[3:5, ~unary_mask]), combinations[0, ~unary_mask], reduction="sum")
         return loss
 
     @classmethod
     def _backtrace_to_tensor(cls, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace]):
-        combinations = t.empty((3, len(items)), dtype=t.long)
+        combinations = t.empty((5, len(items)), dtype=t.long)
         unary_mask = t.empty((len(items),), dtype=t.bool)
         for i, (_, bt) in enumerate(items):
             if len(bt.children) == 0: continue
             combinations[0, i] = bt.rid
             combinations[1, i] = bts[bt.children[0]].rid
+            combinations[2, i] = bts[bt.children[0]].leaf
             if len(bt.children) == 2:
-                combinations[2, i] = bts[bt.children[1]].rid
+                combinations[3, i] = bts[bt.children[1]].rid
+                combinations[4, i] = bts[bt.children[1]].leaf
             unary_mask[i] = len(bt.children) == 1
-        return combinations[:2, unary_mask], combinations[:, ~unary_mask], unary_mask
+        return combinations[:3, unary_mask], combinations[:, ~unary_mask], unary_mask
 
-    def norule_loss(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace], _embeddings: t.Tensor):
+    def norule_loss(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace], embeddings: t.Tensor):
         unaries, binaries, _ = self._backtrace_to_tensor(items, bts)
         unaries[0,:], binaries[0, :] = self.nrules, self.nrules
-        return t.nn.functional.cross_entropy(self.forward(unaries[1]), unaries[0], reduction="sum") \
-            + t.nn.functional.cross_entropy(self.forward(binaries[1], binaries[2]), binaries[0], reduction="sum")
+        return t.nn.functional.cross_entropy(self.forward(embeddings, unaries[1:3]), unaries[0], reduction="sum") \
+            + t.nn.functional.cross_entropy(self.forward(embeddings, binaries[1:3], binaries[3:5]), binaries[0], reduction="sum")
     
-    def score(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace], _embeddings: t.Tensor):
+    def score(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace], embeddings: t.Tensor):
         unaries, binaries, mask = self._backtrace_to_tensor(items, bts)
-        unary_scores = -t.nn.functional.log_softmax(self.forward(unaries[1]), dim=1).gather(1, unaries[0].unsqueeze(1)).squeeze()
-        binary_scores = -t.nn.functional.log_softmax(self.forward(binaries[1], binaries[2]), dim=1).gather(1, binaries[0].unsqueeze(1)).squeeze()
+        unary_scores = -t.nn.functional.log_softmax(self.forward(embeddings, unaries[1:3]), dim=1).gather(1, unaries[0].unsqueeze(1)).squeeze()
+        binary_scores = -t.nn.functional.log_softmax(self.forward(embeddings, binaries[1:3], binaries[3:5]), dim=1).gather(1, binaries[0].unsqueeze(1)).squeeze()
         scores = t.empty_like(mask, dtype=t.float)
         scores[mask] = unary_scores
         scores[~mask] = binary_scores

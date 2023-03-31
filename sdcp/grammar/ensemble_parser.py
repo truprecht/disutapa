@@ -10,6 +10,7 @@ from collections import defaultdict
 from .buparser import BitSpan, PassiveItem, backtrace, qelement
 from discodop.tree import Tree
 from random import random
+from .derivation import Derivation
 
 
 class EnsembleParser:
@@ -29,12 +30,8 @@ class EnsembleParser:
         self.queue = PriorityQueue()
         self.backtraces = []
         self.items = []
-        self.rule_scores = lambda it, bt: parsing_scorer(
-            bt.rid,
-            tuple(self.backtraces[b].rid for b in bt.children),
-            bt.leaf,
-            it.leaves,
-            sentence_embedding)
+        self.rule_scorer = parsing_scorer
+        self.sentence_embedding = sentence_embedding
         for i, rules in enumerate(rules_per_position):
             minweight = min(w for _, w in (rules or [(0,0)]))
             for rid, weight in rules:
@@ -57,15 +54,12 @@ class EnsembleParser:
         self.golditems = None
      
      
-    def add_nongold_filter(self, gold_tree: Tree, early_stopping_prob: float = 0.9):
+    def add_nongold_filter(self, gold_tree: Derivation, early_stopping_prob: float = 0.9):
         self.golditems = set()
-        for node in gold_tree.subtrees():
-            span = BitSpan.fromit((n.label[1] for n in node.subtrees()), self.len).freeze()
-            if self.sow:
-                lhs = node.label[0]
-            else:
-                lhs = self.grammar.rules[node.label[0]].lhs
-            self.golditems.add((lhs, span))
+        self.brassitems = list()
+        for node in gold_tree.subderivs():
+            lhs = node.rule if self.sow else self.grammar.rules[node.rule].lhs
+            self.golditems.add((lhs, node.yd.freeze()))
         self.nongold_stop_prob = early_stopping_prob
 
 
@@ -91,6 +85,7 @@ class EnsembleParser:
             self.items.append(qi.item)
 
             if self.check_nongold_filter(fritem):
+                self.brassitems.append(len(self.items)-1)
                 continue
 
             qi.bt, backtrace_id = backtrace_id, qi.bt
@@ -101,6 +96,7 @@ class EnsembleParser:
                 self.rootid = -1
                 return
 
+            self.new_items: list[qelement] = []
             for rid, i, weight in self.unaries.get(lhs, []):
                 if i in qi.item.leaves:
                     continue
@@ -112,10 +108,10 @@ class EnsembleParser:
                     continue
                 passive_item = PassiveItem(passive_item_lhs, newpos, rule.fanout_hint)
                 backt = backtrace(rid, i, (qi.bt,))
-                self.queue.put_nowait(qelement(
+                self.new_items.append(qelement(
                     passive_item,
                     backt,
-                    qi.weight+weight+self.rule_scores(passive_item, backt),
+                    qi.weight+weight,
                     newpos.gaps + self.discount*qi.gapscore
                 ))
             for rid, i, weight in self.from_left.get(lhs, []):
@@ -135,10 +131,10 @@ class EnsembleParser:
                     passive_item_lhs = rid if self.sow else rule.lhs
                     passive_item = PassiveItem(passive_item_lhs, newpos, rule.fanout_hint)
                     backt = backtrace(rid, i, (qi.bt, _bt))
-                    self.queue.put_nowait(qelement(
+                    self.new_items.append(qelement(
                         passive_item,
                         backt,
-                        qi.weight+_weight+weight+self.rule_scores(passive_item, backt),
+                        qi.weight+_weight+weight,
                         newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))
             for rid, i, weight in self.from_right.get(lhs, []):
@@ -158,12 +154,17 @@ class EnsembleParser:
                     passive_item_lhs = rid if self.sow else rule.lhs
                     passive_item = PassiveItem(passive_item_lhs, newpos, rule.fanout_hint)
                     backt = backtrace(rid, i, (_bt, qi.bt))
-                    self.queue.put_nowait(qelement(
+                    self.new_items.append(qelement(
                         passive_item,
                         backt,
-                        qi.weight+_weight+weight+self.rule_scores(passive_item, backt),
+                        qi.weight+_weight+weight,
                         newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))
+            if self.new_items:
+                weights = self.rule_scorer.score([(i.item, i.bt) for i in self.new_items], self.backtraces, self.sentence_embedding)
+                for weight, qe in zip(weights, self.new_items):
+                    qe.weight += weight
+                    self.queue.put(qe)
 
     
     def get_best_derivation(self, item=None):

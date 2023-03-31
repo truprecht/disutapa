@@ -4,7 +4,8 @@ import torch as t
 import flair as f
 from math import log, sqrt
 from ..grammar.sdcp import rule
-from ..grammar.buparser import BitSpan, PassiveItem, backtrace
+from ..grammar.derivation import Derivation
+from ..grammar.buparser import BitSpan, PassiveItem, backtrace, qelement
 from typing import Iterable
 from discodop.tree import Tree
 
@@ -139,31 +140,11 @@ class NeuralCombinatorialScorer(t.nn.Module):
     def __init__(self, n: int, embedding_dim: int = 32):
         super().__init__()
         self.nfeatures = embedding_dim
+        self.nrules = n
         self.embedding = t.nn.Embedding(n+1, self.nfeatures)
         self.binary = t.nn.Bilinear(self.nfeatures, self.nfeatures, self.nfeatures)
         self.unary = t.nn.Linear(self.nfeatures, self.nfeatures, bias=False) # share bias with binary
         self.to(f.device)
-
-    def forward(self, *children: tuple[int]):
-        if len(children) == 1:
-            feats = self.unary(self.embedding(singleton(children[0]))) + self.binary.bias
-        elif len(children) == 2:
-            feats = self.binary(self.embedding(singleton(children[0])), self.embedding(singleton(children[1])))
-        return (feats * self.embedding.weight[:-1]).sum(-1)
-    
-    def forward_loss(self, _embedding, root, *children):
-        if len(children) == 0: return t.tensor(0.0, device=f.device)
-        feats = self.forward(*children)
-        return t.nn.functional.cross_entropy(feats, singleton(root), reduction="sum")
-    
-    def norule_loss(self, _embedding, *children):
-        if len(children) == 0: return t.tensor(0.0, device=f.device)
-        feats = self.forward(*children)
-        return t.nn.functional.cross_entropy(feats, singleton(self.nfeatures), reduction="sum")
-
-    def score(self, root, children, head, span, sentence_encoding):
-        if len(children) == 0: return t.tensor(0.0, device=f.device)
-        return -t.nn.functional.log_softmax(self.forward(*children), dim=-1)[root]
 
     @property
     def snd_order(self):
@@ -175,16 +156,62 @@ class NeuralCombinatorialScorer(t.nn.Module):
     
     def get_probab_distribution(self, children, *_unused_args):
         return -t.nn.functional.log_softmax(self.forward(*children), dim=-1)
-        
 
-    def get_key_from_chart_item(self, item: PassiveItem, bts: list[backtrace]):
-        tup = tuple(bts[i].rid for i in bts[-1].children)
-        return tup, tup
+    def forward(self, *children):
+        if len(children) == 1:
+            feats = self.unary(self.embedding(children[0])) + self.binary.bias
+        elif len(children) == 2:
+            feats = self.binary(self.embedding(children[0]), self.embedding(children[1]))
+        return feats @ self.embedding.weight.transpose(0, 1)
+ 
+    def forward_loss(self, batch: list[Derivation], _embeddings: t.Tensor):
+        size = sum(d.inner_nodes for d in batch)
+        combinations = t.empty((3, size), dtype=t.long)
+        unary_mask = t.empty((size,), dtype=t.bool)
+        i = 0
+        for deriv in batch:
+            for subderiv in deriv.subderivs():
+                if len(subderiv.children) == 0: continue
+                combinations[0, i] = subderiv.rule
+                combinations[1, i] = subderiv.children[0].rule
+                if len(subderiv.children) == 2:
+                    combinations[2, i] = subderiv.children[1].rule
+                unary_mask[i] = len(subderiv.children) == 1
+                i += 1
+        loss = t.nn.functional.cross_entropy(self.forward(combinations[1, unary_mask]), combinations[0, unary_mask], reduction="sum")
+        loss += t.nn.functional.cross_entropy(self.forward(combinations[1, ~unary_mask], combinations[2, ~unary_mask]), combinations[0, ~unary_mask], reduction="sum")
+        return loss
+
+    @classmethod
+    def _backtrace_to_tensor(cls, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace]):
+        combinations = t.empty((3, len(items)), dtype=t.long)
+        unary_mask = t.empty((len(items),), dtype=t.bool)
+        for i, (_, bt) in enumerate(items):
+            if len(bt.children) == 0: continue
+            combinations[0, i] = bt.rid
+            combinations[1, i] = bts[bt.children[0]].rid
+            if len(bt.children) == 2:
+                combinations[2, i] = bts[bt.children[1]].rid
+            unary_mask[i] = len(bt.children) == 1
+        return combinations[:2, unary_mask], combinations[:, ~unary_mask], unary_mask
+
+    def norule_loss(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace], _embeddings: t.Tensor):
+        unaries, binaries, _ = self._backtrace_to_tensor(items, bts)
+        unaries[0,:], binaries[0, :] = self.nrules, self.nrules
+        return t.nn.functional.cross_entropy(self.forward(unaries[1]), unaries[0], reduction="sum") \
+            + t.nn.functional.cross_entropy(self.forward(binaries[1], binaries[2]), binaries[0], reduction="sum")
     
-
-    def get_key_from_gold_node(self, gold: Tree, sentlen: int):
-        tup = tuple(n.label[0] for n in gold.children)
-        return tup, tup
+    def score(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace], _embeddings: t.Tensor):
+        unaries, binaries, mask = self._backtrace_to_tensor(items, bts)
+        unary_scores = -t.nn.functional.log_softmax(self.forward(unaries[1]), dim=1).gather(1, unaries[0].unsqueeze(1)).squeeze()
+        binary_scores = -t.nn.functional.log_softmax(self.forward(binaries[1], binaries[2]), dim=1).gather(1, binaries[0].unsqueeze(1)).squeeze()
+        scores = t.empty_like(mask, dtype=t.float)
+        scores[mask] = unary_scores
+        scores[~mask] = binary_scores
+        return scores
+    
+    def __call__(self, *args):
+        return self.score(*args)
 
 
 class SpanScorer(t.nn.Module):

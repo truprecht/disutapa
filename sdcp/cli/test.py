@@ -36,7 +36,7 @@ def main(config: Namespace):
         data = ((i,s) for i,s in data if i in range(*config.range))
     for i, sample in tqdm(data, total=datalen):
         p.init(
-            snd_order_weights.score if snd_order_weights else lambda *x: 0,
+            snd_order_weights if snd_order_weights else lambda *x: 0,
             *(rule_vector(len(p.grammar.rules), config.weighted, i) for i in sample.get_raw_labels("supertag")),
         )
         p.fill_chart()

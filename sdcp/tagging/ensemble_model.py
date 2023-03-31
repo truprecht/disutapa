@@ -107,8 +107,11 @@ class EnsembleModel(flair.nn.Model):
 
 
     def _parsing_loss(self, batch: list[SentenceWrapper], embeddings, feats):
-        loss = torch.tensor(0.0, device=flair.device)
-        npredictions = 0
+        derivations = [s.get_derivation() for s in batch]
+        loss = self.scoring.forward_loss(derivations, embeddings)
+        npreds = sum(s.size for s in derivations)
+
+        brassitems = []
         parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
         topweights, toptags = feats.topk(self.ktags, dim=-1)
         for i, sent in enumerate(batch):
@@ -116,25 +119,15 @@ class EnsembleModel(flair.nn.Model):
             predicted_tags = [
                 [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
                 for ktags, kweights in zip(toptags[:len(sent), i], topweights[:len(sent), i])]
-            parser.init(self.scoring.score, embeds, *predicted_tags)
-            parser.add_nongold_filter(sent.get_derivation(), 0.9)
+            parser.init(self.scoring, embeds, *predicted_tags)
+            parser.add_nongold_filter(derivations[i], 0.9)
             parser.fill_chart()
-            
-            processed_items = set()
-            # print("finished parsing in training phase, saw", len(parser.backtraces), "backtraces")
-            for node in sent.get_derivation().subtrees():
-                args, key = self.scoring.get_key_from_gold_node(node, len(sent))
-                processed_items.add(key)
-                loss += self.scoring.forward_loss(embeds, node.label[0], *args)
-                npredictions += 1
-            for (i, item) in enumerate(parser.items):
-                args, key = self.scoring.get_key_from_chart_item(item, parser.backtraces[:i+1])
-                if key in processed_items: continue
-                processed_items.add(key)
-                loss += self.scoring.norule_loss(embeds, *args)
-                npredictions += 1
+            brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
+            if brassitems:
+                loss += self.scoring.norule_loss(brassitems, parser.backtraces, embeds)
+                npreds += len(brassitems)
 
-        return loss, npredictions
+        return loss, npreds
 
 
     def _calculate_loss(self, feats, batch: list[SentenceWrapper], batch_first: bool = False, check_bounds: bool = False):
@@ -216,6 +209,7 @@ class EnsembleModel(flair.nn.Model):
             tags = argpartition(-tagscores, self.ktags, axis=2)[:, :, 0:self.ktags]
             postags = scores["pos"].argmax(dim=-1)
             totalbacktraces = 0
+            totalqueuelen = 0
 
             for sentence, sembed, senttags, sentweights, postag in zip(batch, embeds, tags, tagscores.gather(2, tags), postags):
                 # store tags in tokens
@@ -230,11 +224,13 @@ class EnsembleModel(flair.nn.Model):
                     for ktags, kweights in zip(senttags[:len(sentence)], sentweights)]
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
 
-                parser.init(self.scoring.score, sembed[:len(sentence)], *predicted_tags)
+                parser.init(self.scoring, sembed[:len(sentence)], *predicted_tags)
                 parser.fill_chart()
                 sentence.set_label(label_name, str(AutoTree(parser.get_best()[0]).tree(pos)))
                 totalbacktraces += len(parser.backtraces)
+                totalqueuelen += parser.queue._qsize()
             print("finished parsing in prediction phase, saw", totalbacktraces, "backtraces")
+            print(totalqueuelen, "items left in queue")
 
             store_embeddings(batch, storage_mode=embedding_storage_mode)
             if return_loss:

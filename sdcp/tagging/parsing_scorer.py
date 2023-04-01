@@ -76,24 +76,24 @@ class CombinatorialParsingScorer:
 
         for sentence in corpus:
             deriv = sentence.get_derivation()
-            for node in deriv.subtrees():
+            for node in deriv.subderivs():
                 if not node.children:
                     continue
-                if self.cnt_separated and len(node) == 2:
-                    combinations[(node.label[0], node[0].label[0], None)] += 1
-                    combinations[(node.label[0], None, node[1].label[0])] += 1
-                    for node_ in deriv.subtrees():
-                        if not len(node_) == 2: continue
-                        if node[0].label[0] == node_[0].label[0]:
-                            self.denominator[(node.label[0], node[0].label[0], None)] += 1
-                        if node[1].label[0] == node_[1].label[0]:
-                            self.denominator[(node.label[0], None, node[1].label[0])] += 1
+                if self.cnt_separated and len(node.children) == 2:
+                    combinations[(node.rule, node.children[0].rule, None)] += 1
+                    combinations[(node.rule, None, node.children[1].rule)] += 1
+                    for node_ in deriv.subderivs():
+                        if not len(node_.children) == 2: continue
+                        if node.children[0].rule == node_.children[0].rule:
+                            self.denominator[(node.rule, node.children[0].rule, None)] += 1
+                        if node.children[1].rule == node_.children[1].rule:
+                            self.denominator[(node.rule, None, node.children[1].rule)] += 1
                 else:
-                    combinations[(node.label[0], *(c.label[0] for c in node))] += 1
-                    rhs = tuple(c.label[0] for c in node)
-                    for node_ in deriv.subtrees():
-                        if rhs == tuple(c.label[0] for c in node_):
-                            self.denominator[(node.label[0], *rhs)] += 1
+                    combinations[(node.rule, *(c.rule for c in node.children))] += 1
+                    rhs = tuple(c.rule for c in node.children)
+                    for node_ in deriv.subderivs():
+                        if rhs == tuple(c.rule for c in node_.children):
+                            self.denominator[(node.rule, *rhs)] += 1
 
         self.probs = {
             comb: -log((combinations[comb] + prior) / self.denom(comb[0], comb[1:]))
@@ -106,9 +106,15 @@ class CombinatorialParsingScorer:
         s2 = self.cnt_by_rhs[rhs]
         return s1 + self.prior * s2
 
-    def score(self, root, children, *_unused_args):
+    def score(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace], _embeddings: t.Tensor):
+        for item, bt in items:
+            root = bt.rid
+            children = tuple(bts[c].rid for c in bt.children)
+            yield self._single_score(root, children)
+
+    def _single_score(self, root, children, *_unused_args):
         if self.cnt_separated and len(children) == 2 and not any(c is None for c in children):
-            return self.score(root, (children[0], None), *_unused_args) + self.score(root, (None, children[1]), *_unused_args)
+            return self._single_score(root, (children[0], None), *_unused_args) + self._single_score(root, (None, children[1]), *_unused_args)
         if not (v := self.probs.get((root, *children))) is None:
             return v
         return -log(self.prior / self.denom(root, children)) if self.prior else float("inf")
@@ -127,15 +133,9 @@ class CombinatorialParsingScorer:
     
     def get_probab_distribution(self, children, *_unused_args):
         return t.tensor([
-            self.score(n, children)
+            self._single_score(n, children)
             for n in range(self.ntags)
         ])
-
-
-def singleton(num: int):
-    if isinstance(num, t.Tensor):
-        return num.to(f.device)
-    return t.tensor(num, dtype=t.long, device=f.device)
 
 
 class NeuralCombinatorialScorer(t.nn.Module):

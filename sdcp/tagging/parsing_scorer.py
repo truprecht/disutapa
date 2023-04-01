@@ -100,13 +100,16 @@ class CombinatorialParsingScorer:
             for comb in combinations
         }
 
+    def init_embeddings(self, *args):
+        pass
+
     def denom(self, rule, children):
         rhs = tuple(self.lhs[c] if not c is None else None for c in children)
         s1 = self.denominator[(rule, *children)]
         s2 = self.cnt_by_rhs[rhs]
         return s1 + self.prior * s2
 
-    def score(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace], _embeddings: t.Tensor):
+    def score(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace]):
         for item, bt in items:
             root = bt.rid
             children = tuple(bts[c].rid for c in bt.children)
@@ -152,6 +155,9 @@ class NeuralCombinatorialScorer(t.nn.Module):
         self.unary = t.nn.Linear(nfeatures, self.n_rule_features, bias=False) # share bias with binary
         self.to(f.device)
 
+    def init_embeddings(self, word_embeddings: t.Tensor):
+        self.word_embeddings = word_embeddings        
+
     @property
     def snd_order(self):
         return True
@@ -163,25 +169,25 @@ class NeuralCombinatorialScorer(t.nn.Module):
     def get_probab_distribution(self, children, *_unused_args):
         return -t.nn.functional.log_softmax(self.forward(*children), dim=-1)
 
-    def forward(self, embeddings: t.Tensor, *children: t.Tensor):
+    def forward(self, *children: t.Tensor):
         mid, tot = children[0].size(1), children[0].size(1)
         if len(children) > 1:
             tot *= 2
         feats = t.empty((tot, self.n_rule_features + self.n_word_features))
         feats[:mid, :self.n_rule_features] = self.rule_embedding(children[0][0])
-        feats[:mid, self.n_rule_features:] = self.word_compression(embeddings[children[0][1]])
+        feats[:mid, self.n_rule_features:] = self.word_compression(self.word_embeddings[children[0][1]])
         if len(children) == 1:
             feats = t.nn.functional.relu(feats)
             feats = self.unary(feats) + self.binary.bias
         elif len(children) == 2:
             feats[mid:, :self.n_rule_features] = self.rule_embedding(children[1][0])
-            feats[mid:, self.n_rule_features:] = self.word_compression(embeddings[children[1][1]])
+            feats[mid:, self.n_rule_features:] = self.word_compression(self.word_embeddings[children[1][1]])
             feats = t.nn.functional.relu(feats)
             feats = self.binary(feats[:mid], feats[mid:])
         feats = t.nn.functional.relu(feats) @ self.rule_embedding.weight.transpose(0, 1)
         return feats
  
-    def forward_loss(self, batch: list[Derivation], embeddings: t.Tensor):
+    def forward_loss(self, batch: list[Derivation]):
         loss = t.tensor(0.0)
         for j, deriv in enumerate(batch):
             combinations = t.empty((5, deriv.inner_nodes), dtype=t.long)
@@ -194,8 +200,8 @@ class NeuralCombinatorialScorer(t.nn.Module):
                     combinations[3, i] = subderiv.children[1].rule
                     combinations[4, i] = subderiv.children[1].leaf
                 unary_mask[i] = len(subderiv.children) == 1
-            loss += t.nn.functional.cross_entropy(self.forward(embeddings[:,j], combinations[1:3, unary_mask]), combinations[0, unary_mask], reduction="sum")
-            loss += t.nn.functional.cross_entropy(self.forward(embeddings[:,j], combinations[1:3, ~unary_mask], combinations[3:5, ~unary_mask]), combinations[0, ~unary_mask], reduction="sum")
+            loss += t.nn.functional.cross_entropy(self.forward(combinations[1:3, unary_mask]), combinations[0, unary_mask], reduction="sum")
+            loss += t.nn.functional.cross_entropy(self.forward(combinations[1:3, ~unary_mask], combinations[3:5, ~unary_mask]), combinations[0, ~unary_mask], reduction="sum")
         return loss
 
     @classmethod
@@ -213,16 +219,16 @@ class NeuralCombinatorialScorer(t.nn.Module):
             unary_mask[i] = len(bt.children) == 1
         return combinations[:3, unary_mask], combinations[:, ~unary_mask], unary_mask
 
-    def norule_loss(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace], embeddings: t.Tensor):
+    def norule_loss(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace]):
         unaries, binaries, _ = self._backtrace_to_tensor(items, bts)
         unaries[0,:], binaries[0, :] = self.nrules, self.nrules
-        return t.nn.functional.cross_entropy(self.forward(embeddings, unaries[1:3]), unaries[0], reduction="sum") \
-            + t.nn.functional.cross_entropy(self.forward(embeddings, binaries[1:3], binaries[3:5]), binaries[0], reduction="sum")
+        return t.nn.functional.cross_entropy(self.forward(unaries[1:3]), unaries[0], reduction="sum") \
+            + t.nn.functional.cross_entropy(self.forward(binaries[1:3], binaries[3:5]), binaries[0], reduction="sum")
     
-    def score(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace], embeddings: t.Tensor):
+    def score(self, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace]):
         unaries, binaries, mask = self._backtrace_to_tensor(items, bts)
-        unary_scores = -t.nn.functional.log_softmax(self.forward(embeddings, unaries[1:3]), dim=1).gather(1, unaries[0].unsqueeze(1)).squeeze()
-        binary_scores = -t.nn.functional.log_softmax(self.forward(embeddings, binaries[1:3], binaries[3:5]), dim=1).gather(1, binaries[0].unsqueeze(1)).squeeze()
+        unary_scores = -t.nn.functional.log_softmax(self.forward(unaries[1:3]), dim=1).gather(1, unaries[0].unsqueeze(1)).squeeze()
+        binary_scores = -t.nn.functional.log_softmax(self.forward(binaries[1:3], binaries[3:5]), dim=1).gather(1, binaries[0].unsqueeze(1)).squeeze()
         scores = t.empty_like(mask, dtype=t.float)
         scores[mask] = unary_scores
         scores[~mask] = binary_scores
@@ -230,59 +236,80 @@ class NeuralCombinatorialScorer(t.nn.Module):
 
 
 class SpanScorer(t.nn.Module):
-    def __init__(self, nrules: int, encoding_dim: int, embedding_dim: int = 32, score_head: bool = False):
+    def __init__(self, nrules: int, encoding_dim: int, fencepost_dim: int = 32, lstm_layers: int = 2):
         super().__init__()
-        self.vecdim = encoding_dim
-        self.embedding_dim = embedding_dim
+        self.vecdim = encoding_dim+2*fencepost_dim
         self.nrules = nrules
-        self.encoding_to_embdding = t.nn.Sequential(
-            t.nn.Linear(encoding_dim, embedding_dim),
-            t.nn.ReLU(),
-        )
-        if score_head:
-            self.combinator = t.nn.Bilinear(self.embedding_dim, self.embedding_dim, self.embedding_dim)
-        else:
-            self.combinator = None
-        self.decompression = t.nn.Linear(embedding_dim, nrules+1)
+        self.bos_eos = t.nn.Embedding(2, encoding_dim)
+        self.fencepost_dim = fencepost_dim
+        self.fencepost_lstm = t.nn.LSTM(encoding_dim, fencepost_dim, lstm_layers, bidirectional=True)
+        self.classifier = t.nn.Linear(self.vecdim, nrules+1)
         self.to(f.device)
 
-    def forward(self, encoding: t.Tensor, spans: list[BitSpan], heads: list[int]):
+
+    def init_embeddings(self, word_embeddings: t.Tensor):
+        self.word_embeddings = word_embeddings
+        self.fenceposts = self.fencepost_lstm(
+            t.cat((
+                self.bos_eos(t.tensor([0])),
+                self.word_embeddings,
+                self.bos_eos(t.tensor([1])),
+            ))
+        )[0]
+
+
+    def to_vec(self, span: BitSpan):
+        mask = t.zeros((self.word_embeddings.size(0),), dtype=t.bool)
+        for j in span:
+            mask[j] = True
+        lefts, rights = zip(*span.fences())
+        lefts, rights = t.tensor(lefts), t.tensor(rights)
+        fenceposts = t.cat([
+            self.fenceposts[rights, :self.fencepost_dim]-self.fenceposts[lefts, :self.fencepost_dim],
+            self.fenceposts[rights+1, self.fencepost_dim:]-self.fenceposts[lefts+1, self.fencepost_dim:]
+        ], dim = 1)
+        return  t.cat((
+            self.word_embeddings[mask].max(dim=0)[0],
+            fenceposts.max(dim=0)[0]
+        ))
+        
+
+    def forward(self, spans: list[BitSpan], heads: list[int]):
         feats = t.empty((len(spans), self.vecdim))
         for i, s in enumerate(spans):
-            mask = t.zeros((encoding.size(0),), dtype=t.bool)
-            for j in s: mask[j] = True
-            feats[i, :] = encoding[mask].max(dim=0)[0]
-        feats = self.encoding_to_embdding(feats)
-        if not self.combinator is None:
-            headenc = self.encoding_to_embdding(encoding[t.tensor(heads)])
-            feats = t.nn.functional.relu(self.combinator(self.combinator(feats, headenc)))
-        return self.decompression(feats)
- 
-    def forward_loss(self, batch: list[Derivation], embeddings: t.Tensor):
+            feats[i, :] = self.to_vec(s)
+        return self.classifier(feats)
+
+
+    def forward_loss(self, batch: list[Derivation]):
         loss = t.tensor(0.0)
         for i, deriv in enumerate(batch):
             spans = [n.yd for n in deriv.subderivs() if n.children]
             heads = [n.leaf for n in deriv.subderivs() if n.children]
             gold = t.tensor([n.rule for n in deriv.subderivs() if n.children], dtype=t.long)
-            loss += t.nn.functional.cross_entropy(self.forward(embeddings[:,i], spans, heads), gold, reduction="sum")
+            loss += t.nn.functional.cross_entropy(self.forward(spans, heads), gold, reduction="sum")
         return loss
 
-    def norule_loss(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace], embeddings: t.Tensor):
+
+    def norule_loss(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace]):
         spans = [n.leaves for n, _ in items]
         heads = [bt.leaf for _, bt in items]
         gold = t.empty((len(items),), dtype=t.long)
         gold[:] = self.nrules
-        return t.nn.functional.cross_entropy(self.forward(embeddings, spans, heads), gold, reduction="sum")
-    
-    def score(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace], embeddings: t.Tensor):
+        return t.nn.functional.cross_entropy(self.forward(spans, heads), gold, reduction="sum")
+
+  
+    def score(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace]):
         spans = [n.leaves for n, _ in items]
         heads = [bt.leaf for _, bt in items]
         gold = t.tensor([bt.rid for _, bt in items], dtype=t.long)
-        return -t.nn.functional.log_softmax(self.forward(embeddings, spans, heads), dim=-1).gather(1, gold.unsqueeze(1)).squeeze(dim=1)
+        return -t.nn.functional.log_softmax(self.forward(spans, heads), dim=-1).gather(1, gold.unsqueeze(1)).squeeze(dim=1)
+
 
     @property
     def snd_order(self):
         return False
+
 
     @property
     def requires_training(self):

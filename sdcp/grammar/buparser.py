@@ -82,6 +82,19 @@ class BitSpan:
 
     def __len__(self) -> int:
         return self.leaves.count(1)
+    
+    def fences(self) -> Iterable[tuple[int, int]]:
+        left, right = None, None
+        for i in self:
+            if left is None:
+                left, right = i, i+1
+            elif right == i:
+                right += 1
+            else:
+                yield (left, right)
+                left, right = i, i+1
+        if not left is None:
+            yield (left, right)
 
 @dataclass
 class PassiveItem:

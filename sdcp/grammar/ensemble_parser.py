@@ -31,7 +31,7 @@ class EnsembleParser:
         self.backtraces = []
         self.items = []
         self.rule_scorer = parsing_scorer
-        self.sentence_embedding = sentence_embedding
+        self.rule_scorer.init_embeddings(sentence_embedding)
         for i, rules in enumerate(rules_per_position):
             minweight = min(w for _, w in (rules or [(0,0)]))
             for rid, weight in rules:
@@ -161,7 +161,7 @@ class EnsembleParser:
                         newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))
             if self.new_items:
-                weights = self.rule_scorer.score([(i.item, i.bt) for i in self.new_items], self.backtraces, self.sentence_embedding)
+                weights = self.rule_scorer.score([(i.item, i.bt) for i in self.new_items], self.backtraces)
                 for weight, qe in zip(weights, self.new_items):
                     qe.weight += weight
                     self.queue.put(qe)

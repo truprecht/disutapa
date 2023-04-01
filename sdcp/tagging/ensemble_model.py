@@ -107,24 +107,28 @@ class EnsembleModel(flair.nn.Model):
 
 
     def _parsing_loss(self, batch: list[SentenceWrapper], embeddings, feats):
-        derivations = [s.get_derivation() for s in batch]
-        loss = self.scoring.forward_loss(derivations, embeddings)
-        npreds = sum(s.size for s in derivations)
+        loss = torch.tensor(0.0)
+        npreds = 0
 
         brassitems = []
         parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
         topweights, toptags = feats.topk(self.ktags, dim=-1)
         for i, sent in enumerate(batch):
+            derivation = sent.get_derivation()
             embeds = embeddings[:len(sent), i]
             predicted_tags = [
                 [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
                 for ktags, kweights in zip(toptags[:len(sent), i], topweights[:len(sent), i])]
             parser.init(self.scoring, embeds, *predicted_tags)
-            parser.add_nongold_filter(derivations[i], 0.9)
+            parser.add_nongold_filter(derivation, 0.9)
             parser.fill_chart()
+
+            loss += self.scoring.forward_loss([derivation])
+            npreds += derivation.inner_nodes
+
             brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
             if brassitems:
-                loss += self.scoring.norule_loss(brassitems, parser.backtraces, embeds)
+                loss += self.scoring.norule_loss(brassitems, parser.backtraces)
                 npreds += len(brassitems)
 
         return loss, npreds

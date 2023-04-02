@@ -209,13 +209,13 @@ class EnsembleModel(flair.nn.Model):
             parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
             embeds = self._batch_to_embeddings(batch, batch_first=True)
             scores = dict(self.forward(embeds))
-            tagscores = scores["supertag"].cpu()
-            tags = argpartition(-tagscores, self.ktags, axis=2)[:, :, 0:self.ktags]
+            
+            topweights, toptags = scores["supertag"].topk(self.ktags, dim=-1)
             postags = scores["pos"].argmax(dim=-1)
             totalbacktraces = 0
             totalqueuelen = 0
 
-            for sentence, sembed, senttags, sentweights, postag in zip(batch, embeds, tags, tagscores.gather(2, tags), postags):
+            for sentence, sembed, senttags, sentweights, postag in zip(batch, embeds, toptags, topweights, postags):
                 # store tags in tokens
                 sentence.store_raw_prediction("supertag-k", senttags[:len(sentence)])
                 sentence.store_raw_prediction("supertag", senttags.gather(1, sentweights.argmax(dim=1, keepdim=True)).squeeze()[:len(sentence)])

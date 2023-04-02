@@ -187,21 +187,20 @@ class NeuralCombinatorialScorer(t.nn.Module):
         feats = t.nn.functional.relu(feats) @ self.rule_embedding.weight.transpose(0, 1)
         return feats
  
-    def forward_loss(self, batch: list[Derivation]):
+    def forward_loss(self, deriv: Derivation):
         loss = t.tensor(0.0, device=f.device)
-        for j, deriv in enumerate(batch):
-            combinations = t.empty((5, deriv.inner_nodes), dtype=t.long, device=f.device)
-            unary_mask = t.empty((deriv.inner_nodes,), dtype=t.bool, device=f.device)
-            for i, subderiv in enumerate(n for n in deriv.subderivs() if n.children):
-                combinations[0, i] = subderiv.rule
-                combinations[1, i] = subderiv.children[0].rule
-                combinations[2, i] = subderiv.children[0].leaf
-                if len(subderiv.children) == 2:
-                    combinations[3, i] = subderiv.children[1].rule
-                    combinations[4, i] = subderiv.children[1].leaf
-                unary_mask[i] = len(subderiv.children) == 1
-            loss += t.nn.functional.cross_entropy(self.forward(combinations[1:3, unary_mask]), combinations[0, unary_mask], reduction="sum")
-            loss += t.nn.functional.cross_entropy(self.forward(combinations[1:3, ~unary_mask], combinations[3:5, ~unary_mask]), combinations[0, ~unary_mask], reduction="sum")
+        combinations = t.empty((5, deriv.inner_nodes), dtype=t.long, device=f.device)
+        unary_mask = t.empty((deriv.inner_nodes,), dtype=t.bool, device=f.device)
+        for i, subderiv in enumerate(n for n in deriv.subderivs() if n.children):
+            combinations[0, i] = subderiv.rule
+            combinations[1, i] = subderiv.children[0].rule
+            combinations[2, i] = subderiv.children[0].leaf
+            if len(subderiv.children) == 2:
+                combinations[3, i] = subderiv.children[1].rule
+                combinations[4, i] = subderiv.children[1].leaf
+            unary_mask[i] = len(subderiv.children) == 1
+        loss  = t.nn.functional.cross_entropy(self.forward(combinations[1:3, unary_mask]), combinations[0, unary_mask], reduction="sum")
+        loss += t.nn.functional.cross_entropy(self.forward(combinations[1:3, ~unary_mask], combinations[3:5, ~unary_mask]), combinations[0, ~unary_mask], reduction="sum")
         return loss
 
     @classmethod
@@ -281,14 +280,12 @@ class SpanScorer(t.nn.Module):
         return self.classifier(feats)
 
 
-    def forward_loss(self, batch: list[Derivation]):
-        loss = t.tensor(0.0, device=f.device)
-        for i, deriv in enumerate(batch):
-            spans = [n.yd for n in deriv.subderivs() if n.children]
-            heads = [n.leaf for n in deriv.subderivs() if n.children]
-            gold = t.tensor([n.rule for n in deriv.subderivs() if n.children], dtype=t.long, device=f.device)
-            loss += t.nn.functional.cross_entropy(self.forward(spans, heads), gold, reduction="sum")
-        return loss
+    def forward_loss(self, deriv: Derivation):
+        spans = [n.yd for n in deriv.subderivs() if n.children]
+        heads = [n.leaf for n in deriv.subderivs() if n.children]
+        gold = t.tensor([n.rule for n in deriv.subderivs() if n.children], dtype=t.long, device=f.device)
+        return t.nn.functional.cross_entropy(self.forward(spans, heads), gold, reduction="sum")
+
 
 
     def norule_loss(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace]):

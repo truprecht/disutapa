@@ -123,7 +123,7 @@ class EnsembleModel(flair.nn.Model):
             parser.add_nongold_filter(derivation, 0.9)
             parser.fill_chart()
 
-            loss += self.scoring.forward_loss([derivation])
+            loss += self.scoring.forward_loss(derivation)
             npreds += derivation.inner_nodes
 
             brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]

@@ -1,16 +1,12 @@
-from dataclasses import dataclass, field
-from typing import Iterable, Optional, Tuple
-
-from .sdcp import grammar
-from queue import PriorityQueue
-from bitarray import frozenbitarray, bitarray
-from bitarray.util import count_and
-from sortedcontainers import SortedList
 from collections import defaultdict
-from .buparser import BitSpan, PassiveItem, backtrace, qelement
 from discodop.tree import Tree
+from queue import PriorityQueue
 from random import random
+from sortedcontainers import SortedList
+
 from .derivation import Derivation
+from .buparser import BitSpan, PassiveItem, backtrace, qelement
+from .sdcp import grammar
 
 
 class EnsembleParser:

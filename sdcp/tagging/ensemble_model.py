@@ -107,7 +107,7 @@ class EnsembleModel(flair.nn.Model):
 
 
     def _parsing_loss(self, batch: list[SentenceWrapper], embeddings, feats):
-        loss = torch.tensor(0.0)
+        loss = torch.tensor(0.0, device=flair.device)
         npreds = 0
 
         brassitems = []

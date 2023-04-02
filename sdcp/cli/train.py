@@ -21,7 +21,6 @@ class TrainingParameter:
 
 
 def main(config: TrainingParameter):
-    print(config)
     if not config.device is None:
         flair.device = config.device
     corpus = CorpusWrapper(config.corpus)

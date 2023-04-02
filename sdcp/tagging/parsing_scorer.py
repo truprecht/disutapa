@@ -1,13 +1,13 @@
-from .data import DatasetWrapper
-from collections import Counter
-import torch as t
 import flair as f
-from math import log, sqrt
+import torch as t
+
+from collections import Counter
+from math import log
+
 from ..grammar.sdcp import rule
 from ..grammar.derivation import Derivation
-from ..grammar.buparser import BitSpan, PassiveItem, backtrace, qelement
-from typing import Iterable
-from discodop.tree import Tree
+from ..grammar.buparser import BitSpan, PassiveItem, backtrace
+from .data import DatasetWrapper
 
 
 class ScoringBuilder:
@@ -138,7 +138,7 @@ class CombinatorialParsingScorer:
         return t.tensor([
             self._single_score(n, children)
             for n in range(self.ntags)
-        ])
+        ], device=f.device)
 
 
 class NeuralCombinatorialScorer(t.nn.Module):
@@ -173,7 +173,7 @@ class NeuralCombinatorialScorer(t.nn.Module):
         mid, tot = children[0].size(1), children[0].size(1)
         if len(children) > 1:
             tot *= 2
-        feats = t.empty((tot, self.n_rule_features + self.n_word_features))
+        feats = t.empty((tot, self.n_rule_features + self.n_word_features), device=f.device)
         feats[:mid, :self.n_rule_features] = self.rule_embedding(children[0][0])
         feats[:mid, self.n_rule_features:] = self.word_compression(self.word_embeddings[children[0][1]])
         if len(children) == 1:
@@ -188,10 +188,10 @@ class NeuralCombinatorialScorer(t.nn.Module):
         return feats
  
     def forward_loss(self, batch: list[Derivation]):
-        loss = t.tensor(0.0)
+        loss = t.tensor(0.0, device=f.device)
         for j, deriv in enumerate(batch):
-            combinations = t.empty((5, deriv.inner_nodes), dtype=t.long)
-            unary_mask = t.empty((deriv.inner_nodes,), dtype=t.bool)
+            combinations = t.empty((5, deriv.inner_nodes), dtype=t.long, device=f.device)
+            unary_mask = t.empty((deriv.inner_nodes,), dtype=t.bool, device=f.device)
             for i, subderiv in enumerate(n for n in deriv.subderivs() if n.children):
                 combinations[0, i] = subderiv.rule
                 combinations[1, i] = subderiv.children[0].rule
@@ -206,8 +206,8 @@ class NeuralCombinatorialScorer(t.nn.Module):
 
     @classmethod
     def _backtrace_to_tensor(cls, items: list[tuple[PassiveItem, backtrace]], bts: list[backtrace]):
-        combinations = t.empty((5, len(items)), dtype=t.long)
-        unary_mask = t.empty((len(items),), dtype=t.bool)
+        combinations = t.empty((5, len(items)), dtype=t.long, device=f.device)
+        unary_mask = t.empty((len(items),), dtype=t.bool, device=f.device)
         for i, (_, bt) in enumerate(items):
             if len(bt.children) == 0: continue
             combinations[0, i] = bt.rid
@@ -229,7 +229,7 @@ class NeuralCombinatorialScorer(t.nn.Module):
         unaries, binaries, mask = self._backtrace_to_tensor(items, bts)
         unary_scores = -t.nn.functional.log_softmax(self.forward(unaries[1:3]), dim=1).gather(1, unaries[0].unsqueeze(1)).squeeze()
         binary_scores = -t.nn.functional.log_softmax(self.forward(binaries[1:3], binaries[3:5]), dim=1).gather(1, binaries[0].unsqueeze(1)).squeeze()
-        scores = t.empty_like(mask, dtype=t.float)
+        scores = t.empty_like(mask, dtype=t.float, device=f.device)
         scores[mask] = unary_scores
         scores[~mask] = binary_scores
         return scores
@@ -251,19 +251,19 @@ class SpanScorer(t.nn.Module):
         self.word_embeddings = word_embeddings
         self.fenceposts = self.fencepost_lstm(
             t.cat((
-                self.bos_eos(t.tensor([0])),
+                self.bos_eos(t.tensor([0], device=f.device)),
                 self.word_embeddings,
-                self.bos_eos(t.tensor([1])),
+                self.bos_eos(t.tensor([1], device=f.device)),
             ))
         )[0]
 
 
     def to_vec(self, span: BitSpan):
-        mask = t.zeros((self.word_embeddings.size(0),), dtype=t.bool)
+        mask = t.zeros((self.word_embeddings.size(0),), dtype=t.bool, device=f.device)
         for j in span:
             mask[j] = True
         lefts, rights = zip(*span.fences())
-        lefts, rights = t.tensor(lefts), t.tensor(rights)
+        lefts, rights = t.tensor(lefts, device=f.device), t.tensor(rights, device=f.device)
         fenceposts = t.cat([
             self.fenceposts[rights, :self.fencepost_dim]-self.fenceposts[lefts, :self.fencepost_dim],
             self.fenceposts[rights+1, self.fencepost_dim:]-self.fenceposts[lefts+1, self.fencepost_dim:]
@@ -275,18 +275,18 @@ class SpanScorer(t.nn.Module):
         
 
     def forward(self, spans: list[BitSpan], heads: list[int]):
-        feats = t.empty((len(spans), self.vecdim))
+        feats = t.empty((len(spans), self.vecdim), device=f.device)
         for i, s in enumerate(spans):
             feats[i, :] = self.to_vec(s)
         return self.classifier(feats)
 
 
     def forward_loss(self, batch: list[Derivation]):
-        loss = t.tensor(0.0)
+        loss = t.tensor(0.0, device=f.device)
         for i, deriv in enumerate(batch):
             spans = [n.yd for n in deriv.subderivs() if n.children]
             heads = [n.leaf for n in deriv.subderivs() if n.children]
-            gold = t.tensor([n.rule for n in deriv.subderivs() if n.children], dtype=t.long)
+            gold = t.tensor([n.rule for n in deriv.subderivs() if n.children], dtype=t.long, device=f.device)
             loss += t.nn.functional.cross_entropy(self.forward(spans, heads), gold, reduction="sum")
         return loss
 
@@ -294,7 +294,7 @@ class SpanScorer(t.nn.Module):
     def norule_loss(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace]):
         spans = [n.leaves for n, _ in items]
         heads = [bt.leaf for _, bt in items]
-        gold = t.empty((len(items),), dtype=t.long)
+        gold = t.empty((len(items),), dtype=t.long, device=f.device)
         gold[:] = self.nrules
         return t.nn.functional.cross_entropy(self.forward(spans, heads), gold, reduction="sum")
 
@@ -302,7 +302,7 @@ class SpanScorer(t.nn.Module):
     def score(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace]):
         spans = [n.leaves for n, _ in items]
         heads = [bt.leaf for _, bt in items]
-        gold = t.tensor([bt.rid for _, bt in items], dtype=t.long)
+        gold = t.tensor([bt.rid for _, bt in items], dtype=t.long, device=f.device)
         return -t.nn.functional.log_softmax(self.forward(spans, heads), dim=-1).gather(1, gold.unsqueeze(1)).squeeze(dim=1)
 
 

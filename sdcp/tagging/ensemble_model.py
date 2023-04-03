@@ -25,6 +25,7 @@ class ModelParameters:
     embedding_options: list[str] = field(default_factory=list)
     scoring: str = None
     scoring_options: list[str] = field(default_factory=list)
+    abort_nongold_prob: float = 0.9
     ktags: int = 1
     dropout: float = 0.1
     evalparam: Optional[dict] = None
@@ -53,9 +54,9 @@ class EnsembleModel(flair.nn.Model):
             for embedding in parameters.embedding
         ]
         parsing_scorer = ScoringBuilder(parameters.scoring, corpus, *parameters.scoring_options)
-        return cls(embeddings, tag_dicts, grammar, parsing_scorer, parameters.dropout, parameters.ktags, parameters.evalparam)
+        return cls(embeddings, tag_dicts, grammar, parsing_scorer, parameters.dropout, parameters.ktags, parameters.evalparam, parameters.abort_nongold_prob)
 
-    def __init__(self, embeddings, dictionaries, grammar, parsing_scorer, dropout: float = 0.1, ktags: int = 1, evalparam: dict = None):
+    def __init__(self, embeddings, dictionaries, grammar, parsing_scorer, dropout: float = 0.1, ktags: int = 1, evalparam: dict = None, abort_brass: float = 0.9):
         super().__init__()
         self.embedding_builder = embeddings
         self.embedding = flair.embeddings.StackedEmbeddings([
@@ -64,6 +65,7 @@ class EnsembleModel(flair.nn.Model):
         inputlen = self.embedding.embedding_length
         self.scoring_builder = parsing_scorer
         self.scoring = self.scoring_builder.produce(inputlen)
+        self.abort_brass = abort_brass
 
         self.dropoutprob = dropout
         self.dropout = torch.nn.Dropout(dropout)
@@ -120,7 +122,7 @@ class EnsembleModel(flair.nn.Model):
                 [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
                 for ktags, kweights in zip(toptags[:len(sent), i], topweights[:len(sent), i])]
             parser.init(self.scoring, embeds, *predicted_tags)
-            parser.add_nongold_filter(derivation, 0.9)
+            parser.add_nongold_filter(derivation, self.abort_brass)
             parser.fill_chart()
 
             loss += self.scoring.forward_loss(derivation)

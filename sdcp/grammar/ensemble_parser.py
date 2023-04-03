@@ -59,11 +59,13 @@ class EnsembleParser:
         self.nongold_stop_prob = early_stopping_prob
 
 
-    def check_nongold_filter(self, item):
+    def check_nongold_filter(self, item, bt):
         # return true if this item shall not be further explored
         # this is used during training for faster parsing
         # but will only explore wrong items found in limited depth
-        return not self.golditems is None and not item[:2] in self.golditems and random() < self.nongold_stop_prob
+        return not self.golditems is None and bt.children and \
+                not item[:2] in self.golditems and \
+                random() < self.nongold_stop_prob
 
 
     def fill_chart(self):
@@ -80,7 +82,7 @@ class EnsembleParser:
             self.weight.append(qi.weight)
             self.items.append(qi.item)
 
-            if self.check_nongold_filter(fritem):
+            if self.check_nongold_filter(fritem, qi.bt):
                 self.brassitems.append(len(self.items)-1)
                 continue
 

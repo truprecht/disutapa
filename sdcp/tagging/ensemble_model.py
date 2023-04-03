@@ -115,6 +115,7 @@ class EnsembleModel(flair.nn.Model):
         brassitems = []
         parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
         topweights, toptags = feats.topk(self.ktags, dim=-1)
+        topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
         for i, sent in enumerate(batch):
             derivation = sent.get_derivation()
             embeds = embeddings[:len(sent), i]
@@ -213,6 +214,7 @@ class EnsembleModel(flair.nn.Model):
             scores = dict(self.forward(embeds))
             
             topweights, toptags = scores["supertag"].topk(self.ktags, dim=-1)
+            topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
             postags = scores["pos"].argmax(dim=-1)
             totalbacktraces = 0
             totalqueuelen = 0
@@ -224,7 +226,6 @@ class EnsembleModel(flair.nn.Model):
                 sentence.store_raw_prediction("pos", postag[:len(sentence)])
 
                 # parse sentence and store parse tree in sentence
-                sentweights = -torch.nn.functional.log_softmax(sentweights[:len(sentence)], dim=-1)
                 predicted_tags = [
                     [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
                     for ktags, kweights in zip(senttags[:len(sentence)], sentweights)]

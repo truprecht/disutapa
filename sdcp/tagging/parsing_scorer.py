@@ -2,6 +2,7 @@ import flair as f
 import torch as t
 
 from collections import Counter
+from itertools import repeat
 from math import log
 
 from ..grammar.sdcp import rule
@@ -48,9 +49,12 @@ class DummyScorer:
     @property
     def requires_training(self):
         return False
+    
+    def init_embeddings(self, *args):
+        pass
 
-    def score(*args):
-        return 0.0
+    def score(self, *args):
+        return repeat(0.0)
 
 
 class CombinatorialParsingScorer:

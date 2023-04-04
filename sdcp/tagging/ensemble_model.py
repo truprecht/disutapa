@@ -222,7 +222,7 @@ class EnsembleModel(flair.nn.Model):
             for sentence, sembed, senttags, sentweights, postag in zip(batch, embeds, toptags, topweights, postags):
                 # store tags in tokens
                 sentence.store_raw_prediction("supertag-k", senttags[:len(sentence)])
-                sentence.store_raw_prediction("supertag", senttags.gather(1, sentweights.argmax(dim=1, keepdim=True)).squeeze()[:len(sentence)])
+                sentence.store_raw_prediction("supertag", senttags.gather(1, sentweights.argmin(dim=1, keepdim=True)).squeeze()[:len(sentence)])
                 sentence.store_raw_prediction("pos", postag[:len(sentence)])
 
                 # parse sentence and store parse tree in sentence

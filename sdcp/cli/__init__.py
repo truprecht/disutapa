@@ -1,4 +1,4 @@
-from . import extract, test, train, eval, scoring
+from . import eval_scoring, add_scoring, extract, test, train, eval
 from argparse import ArgumentParser
 
 def main():
@@ -11,8 +11,10 @@ def main():
         subcommands.add_parser(name="test", description="Test extracted gold supertags and report parsing score"))
     train.subcommand(
         subcommands.add_parser(name="train", description="Train discriminative model for supertagging"))
-    scoring.subcommand(
+    eval_scoring.subcommand(
         subcommands.add_parser(name="scoring", description="Show statistics about second-order rule scoring"))
+    add_scoring.subcommand(
+        subcommands.add_parser(name="add-scoring", description="Add a scoring module to the parser"))
     eval.subcommand(
         subcommands.add_parser(name="eval", description="Evaluate a trained classifier"))
     parsed_args = args.parse_args()

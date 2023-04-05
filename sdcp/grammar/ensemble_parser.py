@@ -27,7 +27,6 @@ class EnsembleParser:
         self.backtraces = []
         self.items = []
         self.rule_scorer = parsing_scorer
-        self.rule_scorer.init_embeddings(sentence_embedding)
         for i, rules in enumerate(rules_per_position):
             minweight = min(w for _, w in (rules or [(0,0)]))
             for rid, weight in rules:
@@ -77,6 +76,7 @@ class EnsembleParser:
             if fritem in expanded:
                 continue
             expanded.add(fritem)
+            # print(qi.item, qi.weight)
             backtrace_id = len(self.backtraces)
             self.backtraces.append(qi.bt)
             self.weight.append(qi.weight)

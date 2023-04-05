@@ -1,5 +1,5 @@
-from dataclasses import dataclass, fields, MISSING
 from argparse import ArgumentParser
+from dataclasses import dataclass, fields, MISSING, field
 
 import flair
 import torch
@@ -9,34 +9,38 @@ from sdcp.tagging.ensemble_model import ModelParameters, EnsembleModel
 from sdcp.tagging.data import CorpusWrapper
 
 @dataclass
-class TrainingParameter:
+class Parameter:
+    model: str
     corpus: str
     epochs: int = 32
     lr: float = 1e-5
     batch: int = 16
-    micro_batch: int = None
     weight_decay: float = 0.01
     optimizer: str = "AdamW"
-    output_dir: str = "/tmp/sdcp-training"
+    output_dir: str = "/tmp/sdcp-training-scoring"
+    scoring: str = None
+    scoring_options: list[str] = field(default_factory=list)
+    abort_nongold_prob: float = 0.9
+    ktags: int = 1
 
 
-def main(config: TrainingParameter):
+def main(config: Parameter):
     if not config.device is None:
         flair.device = config.device
     corpus = CorpusWrapper(config.corpus)
-    model = EnsembleModel.from_corpus(
-        corpus.train,
-        grammar([eval(t) for t in corpus.train.labels()]),
-        ModelParameters(embedding=config.embedding, embedding_options=config.embedding_options, ktags=config.ktags, dropout=config.dropout, scoring=config.scoring, scoring_options=config.scoring_options)
-    )
+    model = EnsembleModel.load(config.model)
+    model.__ktags__ = config.ktags
+    if not config.scoring is None:
+        model.set_scoring(config.scoring, corpus.train, config.scoring_options, abort_brass = config.abort_nongold_prob)
+    elif not model.scoring.requires_training:
+        raise Exception("Cannot train scoring object:", model.scoring)
+    model.fix_tagging()
+
     trainer = flair.trainers.ModelTrainer(model, corpus)
-    train = trainer.fine_tune if any(em.fine_tune() for em in model.embedding_builder) else \
-                trainer.train
-    train(
+    trainer.train(
         config.output_dir,
         learning_rate=config.lr,
         mini_batch_size=config.batch,
-        mini_batch_chunk_size=config.micro_batch,
         max_epochs=config.epochs,
         weight_decay=config.weight_decay,
         optimizer=torch.optim.__dict__[config.optimizer],
@@ -48,8 +52,7 @@ def main(config: TrainingParameter):
 
 
 def subcommand(sub: ArgumentParser):
-    for f in [f for f in fields(TrainingParameter) if not f.name == "model"] \
-            + [f for f in fields(ModelParameters)]:
+    for f in [f for f in fields(Parameter)]:
         optional = f.default is MISSING and f.default_factory is MISSING
         name = f.name if optional else f"--{f.name}"
         default = None if optional else f.default

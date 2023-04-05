@@ -56,7 +56,18 @@ class EnsembleModel(flair.nn.Model):
         parsing_scorer = ScoringBuilder(parameters.scoring, corpus, *parameters.scoring_options)
         return cls(embeddings, tag_dicts, grammar, parsing_scorer, parameters.dropout, parameters.ktags, parameters.evalparam, parameters.abort_nongold_prob)
 
-    def __init__(self, embeddings, dictionaries, grammar, parsing_scorer, dropout: float = 0.1, ktags: int = 1, evalparam: dict = None, abort_brass: float = 0.9):
+    def set_scoring(self, scoring_str, corpus, option_strs, abort_brass: float = 0.9):
+        self.scoring_builder = ScoringBuilder(scoring_str, corpus, *option_strs)
+        self.scoring = self.scoring_builder.produce(self.embedding.embedding_length)
+        self.abort_brass = abort_brass
+
+    def fix_tagging(self):
+        self.__fix_tagging__ = True
+        for e in self.embedding.embeddings:
+            if "fine_tune" in e.__dict__:
+                e.fine_tune = False
+
+    def __init__(self, embeddings, dictionaries, grammar, parsing_scorer, dropout: float = 0.1, ktags: int = 1, evalparam: dict = None, abort_brass: float = 2):
         super().__init__()
         self.embedding_builder = embeddings
         self.embedding = flair.embeddings.StackedEmbeddings([
@@ -71,13 +82,14 @@ class EnsembleModel(flair.nn.Model):
         self.dropout = torch.nn.Dropout(dropout)
         self.dictionaries = dictionaries
         self.scores = torch.nn.ModuleDict({
-            field: torch.nn.Linear(inputlen, len(dict))
+            field: torch.nn.Linear(self.embedding.embedding_length, len(dict))
             for field, dict in self.dictionaries.items()
         })
 
         self.__grammar__ = grammar
         self.__evalparam__ = evalparam
         self.__ktags__ = ktags
+        self.__fix_tagging__ = False
         self.to(flair.device)
 
     def set_eval_param(self, ktags: int, evalparam: dict):
@@ -108,36 +120,39 @@ class EnsembleModel(flair.nn.Model):
         return input
 
 
-    def _parsing_loss(self, batch: list[SentenceWrapper], embeddings, feats):
+    def _parsing_loss(self, batch: list[SentenceWrapper], embeddings: torch.Tensor, feats: torch.Tensor):
         loss = torch.tensor(0.0, device=flair.device)
         npreds = 0
+        if self.__fix_tagging__:
+            feats = feats.detach()
+            embeddings = embeddings.detach()
 
         brassitems = []
         parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
         topweights, toptags = feats.topk(self.ktags, dim=-1)
         topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
         for i, sent in enumerate(batch):
-            derivation = sent.get_derivation()
             embeds = embeddings[:len(sent), i]
-            predicted_tags = [
-                [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
-                for ktags, kweights in zip(toptags[:len(sent), i], topweights[:len(sent), i])]
-            parser.init(self.scoring, embeds, *predicted_tags)
-            parser.add_nongold_filter(derivation, self.abort_brass)
-            parser.fill_chart()
-
+            derivation = sent.get_derivation()
+            self.scoring.init_embeddings(embeds)
             loss += self.scoring.forward_loss(derivation)
             npreds += derivation.inner_nodes
 
-            brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
-            if brassitems:
-                loss += self.scoring.norule_loss(brassitems, parser.backtraces)
-                npreds += len(brassitems)
+            if self.abort_brass <= 1:
+                predicted_tags = [
+                    [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
+                    for ktags, kweights in zip(toptags[:len(sent), i], topweights[:len(sent), i])]
+                parser.init(self.scoring, embeds, *predicted_tags)
+                parser.add_nongold_filter(derivation, self.abort_brass)
+                parser.fill_chart()
+                brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
+                if brassitems:
+                    loss += self.scoring.norule_loss(brassitems, parser.backtraces)
+                    npreds += len(brassitems)
 
         return loss, npreds
 
-
-    def _calculate_loss(self, feats, batch: list[SentenceWrapper], batch_first: bool = False, check_bounds: bool = False):
+    def _tagging_loss(self, feats, batch: list[SentenceWrapper], batch_first: bool = False, check_bounds: bool = False):
         loss = torch.tensor(0.0, device=flair.device)
         for field, logits in feats:
             gold = torch.nn.utils.rnn.pad_sequence([
@@ -161,7 +176,11 @@ class EnsembleModel(flair.nn.Model):
     def forward_loss(self, batch):
         embeds = self._batch_to_embeddings(batch)
         feats = dict(self.forward(embeds))
-        loss, predictions = self._calculate_loss(feats.items(), batch)
+        loss, predictions = torch.tensor(0.0, device=flair.device), 0
+        if not self.__fix_tagging__:
+            pl, pp = self._tagging_loss(feats.items(), batch)
+            loss += pl
+            predictions += pp
         if self.scoring.requires_training:
             lparse, nparse = self._parsing_loss(batch, embeds, feats["supertag"])
             loss += lparse
@@ -231,6 +250,7 @@ class EnsembleModel(flair.nn.Model):
                     for ktags, kweights in zip(senttags[:len(sentence)], sentweights)]
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
 
+                self.scoring.init_embeddings(sembed[:len(sentence)])
                 parser.init(self.scoring, sembed[:len(sentence)], *predicted_tags)
                 parser.fill_chart()
                 sentence.set_label(label_name, str(AutoTree(parser.get_best()[0]).tree(pos)))
@@ -241,7 +261,7 @@ class EnsembleModel(flair.nn.Model):
 
             store_embeddings(batch, storage_mode=embedding_storage_mode)
             if return_loss:
-                l, n = self._calculate_loss(scores.items(), batch, batch_first=True, check_bounds=True)
+                l, n = self._tagging_loss(scores.items(), batch, batch_first=True, check_bounds=True)
                 # return l + self._parsing_loss(batch), n
                 return l, n
 

@@ -127,30 +127,54 @@ class EnsembleModel(flair.nn.Model):
             feats = feats.detach()
             embeddings = embeddings.detach()
 
-        brassitems = []
-        parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
-        topweights, toptags = feats.topk(self.ktags, dim=-1)
-        topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
         for i, sent in enumerate(batch):
             embeds = embeddings[:len(sent), i]
-            derivation = sent.get_derivation()
             self.scoring.init_embeddings(embeds)
-            loss += self.scoring.forward_loss(derivation)
-            npreds += derivation.inner_nodes
+            deriv = sent.get_derivation()
+            loss += self.scoring.forward_loss(deriv)
+            npreds += deriv.inner_nodes
 
-            if self.abort_brass <= 1:
+            brassitems = None
+            if not (cache := sent.cache("brassitems")) is None:
+                brassitems, backtraces = cache
+            elif self.abort_brass <= 1:
+                parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
+                topweights, toptags = feats[:len(sent), i].topk(self.ktags, dim=-1)
+                topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
                 predicted_tags = [
                     [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
-                    for ktags, kweights in zip(toptags[:len(sent), i], topweights[:len(sent), i])]
+                    for ktags, kweights in zip(toptags, topweights)]
+                parser.init(self.scoring, embeds, *predicted_tags)
+                parser.add_nongold_filter(deriv, self.abort_brass)
+                parser.fill_chart()
+                brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
+                backtraces = parser.backtraces
+            if brassitems:
+                loss += self.scoring.norule_loss(brassitems, backtraces)
+                npreds += len(brassitems)
+
+        return loss, npreds
+
+
+    def cache_scoring_items(self, sentence: SentenceWrapper):
+        derivation = sentence.get_derivation()
+        if self.abort_brass <= 1:
+            with torch.no_grad():
+                parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
+                embeds = self._batch_to_embeddings([sentence], batch_first=True)
+                scores = dict(self.forward(embeds))
+                topweights, toptags = scores["supertag"][0].topk(self.ktags, dim=-1)
+                topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
+                self.scoring.init_embeddings(embeds[0])
+                predicted_tags = [
+                    [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
+                    for ktags, kweights in zip(toptags[:len(sentence)], topweights[:len(sentence)])]
                 parser.init(self.scoring, embeds, *predicted_tags)
                 parser.add_nongold_filter(derivation, self.abort_brass)
                 parser.fill_chart()
                 brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
-                if brassitems:
-                    loss += self.scoring.norule_loss(brassitems, parser.backtraces)
-                    npreds += len(brassitems)
+                sentence.cache("brassitems", (brassitems, parser.backtraces))
 
-        return loss, npreds
 
     def _tagging_loss(self, feats, batch: list[SentenceWrapper], batch_first: bool = False, check_bounds: bool = False):
         loss = torch.tensor(0.0, device=flair.device)

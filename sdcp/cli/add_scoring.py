@@ -29,7 +29,11 @@ def main(config: Parameter):
         flair.device = config.device
     corpus = CorpusWrapper(config.corpus)
     model = EnsembleModel.load(config.model)
+    model.abort_brass = config.abort_nongold_prob
     model.__ktags__ = config.ktags
+    if config.cache:
+        for s in corpus.train:
+            model.cache_scoring_items(s)
     if not config.scoring is None:
         model.set_scoring(config.scoring, corpus.train, config.scoring_options, abort_brass = config.abort_nongold_prob)
     elif not model.scoring.requires_training:
@@ -64,4 +68,5 @@ def subcommand(sub: ArgumentParser):
             default = list()
         sub.add_argument(name, type=ftype, default=default, nargs=nargs)
     sub.add_argument("--device", type=torch.device, default=None)
+    sub.add_argument("--cache", action="store_true", default=False)
     sub.set_defaults(func=lambda args: main(args))

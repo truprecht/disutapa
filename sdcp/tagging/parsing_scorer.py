@@ -277,7 +277,7 @@ class SpanScorer(t.nn.Module):
         ))
         
 
-    def forward(self, spans: list[BitSpan], heads: list[int]):
+    def forward(self, spans: list[BitSpan]):
         feats = t.empty((len(spans), self.vecdim), device=f.device)
         for i, s in enumerate(spans):
             feats[i, :] = self.to_vec(s)
@@ -286,25 +286,21 @@ class SpanScorer(t.nn.Module):
 
     def forward_loss(self, deriv: Derivation):
         spans = [n.yd for n in deriv.subderivs() if n.children]
-        heads = [n.leaf for n in deriv.subderivs() if n.children]
         gold = t.tensor([n.rule for n in deriv.subderivs() if n.children], dtype=t.long, device=f.device)
-        return t.nn.functional.cross_entropy(self.forward(spans, heads), gold, reduction="sum")
-
+        return t.nn.functional.cross_entropy(self.forward(spans), gold, reduction="sum")
 
 
     def norule_loss(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace]):
         spans = [n.leaves for n, _ in items]
-        heads = [bt.leaf for _, bt in items]
         gold = t.empty((len(items),), dtype=t.long, device=f.device)
         gold[:] = self.nrules
-        return t.nn.functional.cross_entropy(self.forward(spans, heads), gold, reduction="sum")
+        return t.nn.functional.cross_entropy(self.forward(spans), gold, reduction="sum")
 
   
     def score(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace]):
         spans = [n.leaves for n, _ in items]
-        heads = [bt.leaf for _, bt in items]
         gold = t.tensor([bt.rid for _, bt in items], dtype=t.long, device=f.device)
-        return -t.nn.functional.log_softmax(self.forward(spans, heads), dim=-1).gather(1, gold.unsqueeze(1)).squeeze(dim=1)
+        return -t.nn.functional.log_softmax(self.forward(spans), dim=-1).gather(1, gold.unsqueeze(1)).squeeze(dim=1)
 
 
     @property

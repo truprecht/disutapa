@@ -76,7 +76,6 @@ class EnsembleParser:
             if fritem in expanded:
                 continue
             expanded.add(fritem)
-            # print(qi.item, qi.weight)
             backtrace_id = len(self.backtraces)
             self.backtraces.append(qi.bt)
             self.weight.append(qi.weight)

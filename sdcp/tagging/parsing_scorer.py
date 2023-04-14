@@ -246,7 +246,7 @@ class SpanScorer(t.nn.Module):
         self.bos_eos = t.nn.Embedding(2, encoding_dim)
         self.fencepost_dim = fencepost_dim
         self.fencepost_lstm = t.nn.LSTM(encoding_dim, fencepost_dim, lstm_layers, bidirectional=True)
-        self.classifier = t.nn.Linear(self.vecdim, nrules+1)
+        self.classifier = t.nn.Linear(self.vecdim, nrules)
         self.to(f.device)
 
 
@@ -277,30 +277,29 @@ class SpanScorer(t.nn.Module):
         ))
         
 
-    def forward(self, spans: list[BitSpan]):
+    def forward(self, spans: list[BitSpan], rids: t.Tensor):
         feats = t.empty((len(spans), self.vecdim), device=f.device)
         for i, s in enumerate(spans):
             feats[i, :] = self.to_vec(s)
-        return self.classifier(feats)
+        return self.classifier(feats).gather(1, rids.unsqueeze(1)).squeeze(1)
 
 
-    def forward_loss(self, deriv: Derivation):
+    def forward_loss(self, deriv: Derivation, negative: bool = False):
         spans = [n.yd for n in deriv.subderivs() if n.children]
         gold = t.tensor([n.rule for n in deriv.subderivs() if n.children], dtype=t.long, device=f.device)
-        return t.nn.functional.cross_entropy(self.forward(spans), gold, reduction="sum")
+        return t.nn.functional.binary_cross_entropy_with_logits(self.forward(spans, gold), t.ones_like(gold, dtype=t.float, device=f.device), reduction="sum")
 
 
     def norule_loss(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace]):
         spans = [n.leaves for n, _ in items]
-        gold = t.empty((len(items),), dtype=t.long, device=f.device)
-        gold[:] = self.nrules
-        return t.nn.functional.cross_entropy(self.forward(spans), gold, reduction="sum")
+        rids = t.tensor([bt.rid for _, bt in items], dtype=t.long, device=f.device)
+        return t.nn.functional.binary_cross_entropy_with_logits(self.forward(spans, rids), t.zeros_like(rids, dtype=t.float, device=f.device), reduction="sum")
 
   
     def score(self, items: list[tuple[PassiveItem, backtrace]], _bts: list[backtrace]):
         spans = [n.leaves for n, _ in items]
-        gold = t.tensor([bt.rid for _, bt in items], dtype=t.long, device=f.device)
-        return -t.nn.functional.log_softmax(self.forward(spans), dim=-1).gather(1, gold.unsqueeze(1)).squeeze(dim=1)
+        rids = t.tensor([bt.rid for _, bt in items], dtype=t.long, device=f.device)
+        return -t.nn.functional.logsigmoid(self.forward(spans, rids))
 
 
     @property

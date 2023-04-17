@@ -39,7 +39,8 @@ def main(config: Parameter):
         model.set_scoring(config.scoring, corpus.train, config.scoring_options, abort_brass = config.abort_nongold_prob)
     elif not model.scoring.requires_training:
         raise Exception("Cannot train scoring object:", model.scoring)
-    model.fix_tagging()
+    if config.fix_embedding:
+        model.fix_tagging()
 
     trainer = flair.trainers.ModelTrainer(model, corpus)
     trainer.train(
@@ -70,4 +71,5 @@ def subcommand(sub: ArgumentParser):
         sub.add_argument(name, type=ftype, default=default, nargs=nargs)
     sub.add_argument("--device", type=torch.device, default=None)
     sub.add_argument("--cache", action="store_true", default=False)
+    sub.add_argument("--fix-embedding", action="store_true", default=False)
     sub.set_defaults(func=lambda args: main(args))

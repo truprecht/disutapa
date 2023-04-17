@@ -170,7 +170,7 @@ class EnsembleModel(flair.nn.Model):
                     [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
                     for ktags, kweights in zip(toptags[:len(sentence)], topweights[:len(sentence)])]
                 parser.init(self.scoring, embeds, *predicted_tags)
-                parser.add_nongold_filter(derivation, self.abort_brass)
+                parser.add_nongold_filter(derivation, nongold_stopping_prob=self.abort_brass, early_stopping=False)
                 parser.fill_chart()
                 brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
                 sentence.cache("brassitems", (brassitems, parser.backtraces))

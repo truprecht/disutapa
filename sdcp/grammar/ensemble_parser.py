@@ -47,15 +47,17 @@ class EnsembleParser:
                         self.from_left.setdefault(r1, []).append((rid, i, weight))
                         self.from_right.setdefault(r2, []).append((rid, i, weight))
         self.golditems = None
+        self.stop_early = True
      
      
-    def add_nongold_filter(self, gold_tree: Derivation, early_stopping_prob: float = 0.9):
+    def add_nongold_filter(self, gold_tree: Derivation, nongold_stopping_prob: float = 0.9, early_stopping: bool = True):
         self.golditems = set()
         self.brassitems = list()
         for node in gold_tree.subderivs():
             lhs = node.rule if self.sow else self.grammar.rules[node.rule].lhs
             self.golditems.add((lhs, node.yd.freeze()))
-        self.nongold_stop_prob = early_stopping_prob
+        self.nongold_stop_prob = nongold_stopping_prob
+        self.stop_early = early_stopping
 
 
     def check_nongold_filter(self, item, bt):
@@ -90,8 +92,10 @@ class EnsembleParser:
             self.from_lhs[lhs].add((qi.item.leaves, qi.bt, qi.weight, qi.gapscore))
 
             if lhs == self.grammar.root and qi.item.leaves.leaves.all():
-                self.rootid = -1
-                return
+                if self.rootid is None:
+                    self.rootid = len(self.backtraces)-1
+                if self.stop_early:
+                    return
 
             self.new_items: list[qelement] = []
             for rid, i, weight in self.unaries.get(lhs, []):

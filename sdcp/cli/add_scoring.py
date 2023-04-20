@@ -1,10 +1,10 @@
 from argparse import ArgumentParser
 from dataclasses import dataclass, fields, MISSING, field
 from tqdm import tqdm
+from math import ceil
 
 import flair
 import torch
-from flair.datasets import DataLoader
 
 from sdcp.grammar.sdcp import grammar, sdcp_clause, rule
 from sdcp.tagging.ensemble_model import ModelParameters, EnsembleModel
@@ -34,8 +34,10 @@ def main(config: Parameter):
     model.abort_brass = config.abort_nongold_prob
     model.__ktags__ = config.ktags
     if config.cache:
-        for s in tqdm(DataLoader(corpus.train, config.batch), desc="precomputing parses for each sentence"):
-            model.cache_scoring_items(s)
+        for j in tqdm(range(ceil(len(corpus.train)/config.batch)), desc="precomputing parses for each sentence"):
+            start = j*config.batch
+            end = min(len(corpus.train), (j+1)*config.batch)
+            model.cache_scoring_items(corpus.train[start:end])
     if not config.scoring is None:
         model.set_scoring(config.scoring, corpus.train, config.scoring_options, abort_brass = config.abort_nongold_prob)
     elif not model.scoring.requires_training:

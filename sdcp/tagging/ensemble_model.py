@@ -156,21 +156,22 @@ class EnsembleModel(flair.nn.Model):
         return loss, npreds
 
 
-    def cache_scoring_items(self, sentence: SentenceWrapper):
-        derivation = sentence.get_derivation()
-        if self.abort_brass <= 1:
-            with torch.no_grad():
-                parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
-                embeds = self._batch_to_embeddings([sentence], batch_first=True)
-                scores = dict(self.forward(embeds))
-                topweights, toptags = scores["supertag"][0].topk(self.ktags, dim=-1)
-                topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
-                self.scoring.init_embeddings(embeds[0])
+    def cache_scoring_items(self, batch: list[SentenceWrapper]):
+        if self.abort_brass > 1:
+            return
+        with torch.no_grad():
+            embeds = self._batch_to_embeddings(batch)
+            scores = dict(self.forward(embeds))
+            parser = EnsembleParser(self.__grammar__, snd_order_weights=self.scoring.snd_order)
+            topweights, toptags = scores["supertag"].topk(self.ktags, dim=-1)
+            topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
+            for i, sentence in enumerate(batch):
+                self.scoring.init_embeddings(embeds[:, i])
                 predicted_tags = [
-                    [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
-                    for ktags, kweights in zip(toptags[:len(sentence)], topweights[:len(sentence)])]
+                    [(tag.item()-1, weight.item()) for tag, weight in zip(ktags, kweights) if tag != 0]
+                    for ktags, kweights in zip(toptags[:len(sentence), i], topweights[:len(sentence), i])]
                 parser.init(self.scoring, *predicted_tags)
-                parser.add_nongold_filter(derivation, nongold_stopping_prob=self.abort_brass, early_stopping=False)
+                parser.add_nongold_filter(sentence.get_derivation(), nongold_stopping_prob=self.abort_brass, early_stopping=False)
                 parser.fill_chart()
                 brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
                 sentence.cache("brassitems", (brassitems, parser.backtraces))

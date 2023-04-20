@@ -4,6 +4,7 @@ from tqdm import tqdm
 
 import flair
 import torch
+from flair.datasets import DataLoader
 
 from sdcp.grammar.sdcp import grammar, sdcp_clause, rule
 from sdcp.tagging.ensemble_model import ModelParameters, EnsembleModel
@@ -33,7 +34,7 @@ def main(config: Parameter):
     model.abort_brass = config.abort_nongold_prob
     model.__ktags__ = config.ktags
     if config.cache:
-        for s in tqdm(corpus.train, desc="precomputing parses for each sentence"):
+        for s in tqdm(DataLoader(corpus.train, config.batch), desc="precomputing parses for each sentence"):
             model.cache_scoring_items(s)
     if not config.scoring is None:
         model.set_scoring(config.scoring, corpus.train, config.scoring_options, abort_brass = config.abort_nongold_prob)

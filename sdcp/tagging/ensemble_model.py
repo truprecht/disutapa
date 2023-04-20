@@ -144,7 +144,7 @@ class EnsembleModel(flair.nn.Model):
                 predicted_tags = [
                     [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
                     for ktags, kweights in zip(toptags, topweights)]
-                parser.init(self.scoring, embeds, *predicted_tags)
+                parser.init(self.scoring, *predicted_tags)
                 parser.add_nongold_filter(deriv, self.abort_brass)
                 parser.fill_chart()
                 brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
@@ -169,7 +169,7 @@ class EnsembleModel(flair.nn.Model):
                 predicted_tags = [
                     [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
                     for ktags, kweights in zip(toptags[:len(sentence)], topweights[:len(sentence)])]
-                parser.init(self.scoring, embeds, *predicted_tags)
+                parser.init(self.scoring, *predicted_tags)
                 parser.add_nongold_filter(derivation, nongold_stopping_prob=self.abort_brass, early_stopping=False)
                 parser.fill_chart()
                 brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
@@ -275,7 +275,7 @@ class EnsembleModel(flair.nn.Model):
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
 
                 self.scoring.init_embeddings(sembed[:len(sentence)])
-                parser.init(self.scoring, sembed[:len(sentence)], *predicted_tags)
+                parser.init(self.scoring, *predicted_tags)
                 parser.fill_chart()
                 sentence.set_label(label_name, str(AutoTree(parser.get_best()[0]).tree(pos)))
                 totalbacktraces += len(parser.backtraces)

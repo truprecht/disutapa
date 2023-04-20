@@ -43,7 +43,12 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
         lhs = override_lhs
     elif "+" in tree.label:
         lhs = tree.label.split("+")[0] + ("|<>" if "|<" in tree.label else "")
-    return Tree((lex, yd[0], rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx, fanout=fanout(yd))), rules)
+    
+    fo = fanout(yd)
+    if fo > 1:
+        lhs = f"D-{lhs}"
+    
+    return Tree((lex, yd[0], rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx, fanout=fo)), rules)
 
 
 def extract(tree: Tree, override_root: str = "ROOT"):

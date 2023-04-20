@@ -16,7 +16,7 @@ class EnsembleParser:
         self.sow = snd_order_weights
 
 
-    def init(self, parsing_scorer, sentence_embedding, *rules_per_position):
+    def init(self, parsing_scorer, *rules_per_position):
         self.len = len(rules_per_position)
         self.rootid = None
         self.weight = []
@@ -105,7 +105,7 @@ class EnsembleParser:
                 # TODO: check gaps first?
                 newpos = qi.item.leaves.with_leaf(i)
                 passive_item_lhs = rid if self.sow else rule.lhs
-                if newpos.gaps >= rule.fanout_hint:
+                if newpos.gaps != rule.fanout_hint-1:
                     continue
                 passive_item = PassiveItem(passive_item_lhs, newpos, rule.fanout_hint)
                 backt = backtrace(rid, i, (qi.bt,))
@@ -127,7 +127,7 @@ class EnsembleParser:
                             or not _leaves.isdisjoint(qi.item.leaves):
                         continue
                     newpos = qi.item.leaves.union(_leaves, and_leaf=i)
-                    if newpos.gaps >= rule.fanout_hint:
+                    if newpos.gaps != rule.fanout_hint-1:
                         continue
                     passive_item_lhs = rid if self.sow else rule.lhs
                     passive_item = PassiveItem(passive_item_lhs, newpos, rule.fanout_hint)
@@ -150,7 +150,7 @@ class EnsembleParser:
                             or not _leaves.isdisjoint(qi.item.leaves):
                         continue
                     newpos = qi.item.leaves.union(_leaves, and_leaf=i)
-                    if newpos.gaps >= rule.fanout_hint:
+                    if newpos.gaps != rule.fanout_hint-1:
                         continue
                     passive_item_lhs = rid if self.sow else rule.lhs
                     passive_item = PassiveItem(passive_item_lhs, newpos, rule.fanout_hint)

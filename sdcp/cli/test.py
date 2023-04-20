@@ -1,7 +1,7 @@
 from argparse import ArgumentParser, Namespace
 from sdcp.grammar.sdcp import rule, sdcp_clause, grammar
 from sdcp.grammar.ensemble_parser import EnsembleParser
-from sdcp.tagging.parsing_scorer import CombinatorialParsingScorer
+from sdcp.tagging.parsing_scorer import CombinatorialParsingScorer, DummyScorer
 from sdcp.tagging.data import DatasetWrapper
 from sdcp.autotree import AutoTree
 from discodop.eval import Evaluator, readparam
@@ -26,7 +26,7 @@ def main(config: Namespace):
     evaluator = Evaluator(readparam(config.param))
     data = DatasetWrapper(DatasetDict.load_from_disk(config.corpus)["dev"])
     snd_order_weights = CombinatorialParsingScorer(data, prior=config.snd_order_prior, separated=config.snd_order_separate) \
-        if config.snd_order else None
+        if config.snd_order else DummyScorer()
     p = EnsembleParser(grammar([eval(str_hr) for str_hr in data.labels()]),
                     snd_order_weights=snd_order_weights.snd_order if snd_order_weights else None)
     idtopos = data.labels("pos")
@@ -36,7 +36,7 @@ def main(config: Namespace):
         data = ((i,s) for i,s in data if i in range(*config.range))
     for i, sample in tqdm(data, total=datalen):
         p.init(
-            snd_order_weights if snd_order_weights else lambda *x: 0,
+            snd_order_weights,
             *(rule_vector(len(p.grammar.rules), config.weighted, i) for i in sample.get_raw_labels("supertag")),
         )
         p.fill_chart()

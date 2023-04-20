@@ -171,7 +171,8 @@ class EnsembleModel(flair.nn.Model):
                     [(tag.item()-1, weight.item()) for tag, weight in zip(ktags, kweights) if tag != 0]
                     for ktags, kweights in zip(toptags[:len(sentence), i], topweights[:len(sentence), i])]
                 parser.init(self.scoring, *predicted_tags)
-                parser.add_nongold_filter(sentence.get_derivation(), nongold_stopping_prob=self.abort_brass, early_stopping=False)
+                maxweight = sum(scores["supertag"][j, i, s] for j, s in enumerate(sentence.get_raw_labels("supertag")))
+                parser.add_nongold_filter(sentence.get_derivation(), nongold_stopping_prob=self.abort_brass, early_stopping=maxweight)
                 parser.fill_chart()
                 brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
                 sentence.cache("brassitems", (brassitems, parser.backtraces))

@@ -5,8 +5,8 @@ import flair
 import torch
 
 from sdcp.grammar.sdcp import grammar, sdcp_clause, rule
-from tagging.model import ModelParameters, TaggerModel
-from tagging.data import CorpusWrapper
+from sdcp.tagging.ensemble_model import ModelParameters, EnsembleModel
+from sdcp.tagging.data import CorpusWrapper
 
 
 def main(config):
@@ -14,10 +14,10 @@ def main(config):
         flair.device = config.device
     corpus = CorpusWrapper(config.corpus)
     corpus = corpus.dev if config.dev else corpus.test
-    model = TaggerModel.load(config.model)
+    model = EnsembleModel.load(config.model)
     if config.ktags:
         model.__ktags__ = config.ktags
-    results = model.evaluate(corpus)
+    results = model.evaluate(corpus, progressbar=True)
     print(results.log_header)
     print(results.log_line)
     print(results.detailed_results)

@@ -1,15 +1,15 @@
-from dataclasses import dataclass, field
-from typing import Iterable, Optional, Tuple
+from dataclasses import dataclass
+from random import random
 
 
-from .extract_head import headed_rule, headed_clause, Tree
+from .extract_head import headed_rule, Tree
 from .buparser import BitSpan, backtrace, qelement
 from .sdcp import grammar
 from queue import PriorityQueue
-from bitarray import frozenbitarray, bitarray
-from bitarray.util import count_and
 from sortedcontainers import SortedList
 from collections import defaultdict
+from ..tagging.parsing_scorer import DummyScorer
+from .derivation import Derivation
 
 
 @dataclass
@@ -30,48 +30,82 @@ class ActiveItem:
     lhs: str
     leaf: int
     leaves: BitSpan
-    maxfo: int
+    fanout: int
     remaining: tuple[str]
     lexidx: int
 
     def freeze(self):
-        return (self.lhs, self.leaf, self.leaves.freeze(), self.maxfo, self.remaining)
+        return (self.lhs, self.leaf, self.leaves.freeze(), self.fanout, self.remaining)
 
     def __gt__(self, other: "ActiveItem") -> bool:
         if isinstance(other, PassiveItem): return True
-        return (self.lhs, self.leaves, self.maxfo, self.remaining) > (other.lhs, other.leaves, other.maxfo, other.remaining)
+        return (self.lhs, self.leaves, self.fanout, self.remaining) > (other.lhs, other.leaves, other.fanout, other.remaining)
 
 
 class ActiveParser:
-    def __init__(self, grammar: grammar, gamma: float = 0.1):
+    def __init__(self, grammar: grammar):
         self.grammar = grammar
-        self.discount = gamma
+        self.scoring = DummyScorer()
+
+
+    def set_scoring(self, scorer: DummyScorer):
+        self.scoring = scorer
+        if scorer.snd_order:
+            raise ValueError("this parser does not support second order scores at the moment")
 
 
     def init(self, *rules_per_position):
         self.len = len(rules_per_position)
         self.rootid = None
-        self.chart = {}
-        self.weight = {}
         self.queue = PriorityQueue()
         for i, rules in enumerate(rules_per_position):
-            maxweight = max(w for _, w in (rules or [(0,0)]))
+            minweight = min(w for _, w in (rules or [(0,0)]))
             for rid, weight in rules:
-                weight = maxweight - weight
+                weight = weight - minweight
                 rule: headed_rule = self.grammar.rules[rid]
                 self.queue.put_nowait(qelement(
                         ActiveItem(rule.lhs, i, BitSpan.fromit((), self.len), rule.fanout, rule.rhs, rule.lexidx),
                         backtrace(rid, i, ()),
-                        weight, 0
+                        weight
                 ))
+        self.golditems = None
+        self.stop_early = True
+
+    
+    def set_gold_item_filter(self, gold_tree: Derivation, nongold_stopping_prob: float = 0.9, early_stopping: float = None):
+        self.golditems = set()
+        self.brassitems = list()
+        for node in gold_tree.subderivs():
+            lhs = node.rule if self.sow else self.grammar.rules[node.rule].lhs
+            self.golditems.add((lhs, node.yd.freeze()))
+        self.nongold_stop_prob = nongold_stopping_prob
+        self.stop_early = early_stopping
 
 
     def fill_chart(self):
         expanded = set()
-        self.from_lhs: dict[str, list[tuple[BitSpan, int, float, float]]] = defaultdict(SortedList) 
-        self.actives: dict[str, list[tuple[ActiveItem, backtrace, float, float]]] = {}
-        self.backtraces = []
-        while not self.queue.empty():
+        self.from_lhs: dict[str, list[tuple[BitSpan, int, float]]] = defaultdict(SortedList) 
+        self.actives: dict[str, list[tuple[ActiveItem, backtrace, float]]] = {}
+        self.backtraces = []  
+        self.items = []
+
+        self.new_item_batch = []
+        self.new_item_batch_minweight = None
+        def register_passive_item(qele: qelement):
+            self.new_item_batch.append(qele)
+            if self.new_item_batch_minweight is None or self.new_item_batch_minweight > qele.weight:
+                self.new_item_batch_minweight = qele.weight
+        def flush_items():
+            if self.new_item_batch and (self.queue.empty() or self.new_item_batch_minweight < self.queue.queue[0].weight):
+                weights = self.scoring.score([(i.item, i.bt) for i in self.new_item_batch], self.backtraces)
+                for weight, qe in zip(weights, self.new_item_batch):
+                    qe.weight += weight
+                    self.queue.put_nowait(qe)
+                self.new_item_batch.clear()
+                self.new_item_batch_minweight = None
+        
+        while not self.queue.empty() or self.new_item_batch:
+            flush_items()
             qi: qelement = self.queue.get_nowait()
             fritem = qi.item.freeze()
             if fritem in expanded:
@@ -81,14 +115,29 @@ class ActiveParser:
             if isinstance(qi.item, PassiveItem):
                 backtrace_id = len(self.backtraces)
                 self.backtraces.append(qi.bt)
+                self.items.append(qi.item)
+
+                # check if a gold item filter was added and if the item is gold or brass
+                # if it is brass, then probabilistically ignore it
+                if not self.golditems is None and not qi.item in self.golditems:
+                    self.brassitems.append(backtrace_id)
+                    if qi.bt.children and random() < self.nongold_stop_prob:
+                        continue
+
+                # check if this is the root item and stop the parsing, if early stopping is activated
                 if qi.item.lhs == self.grammar.root and qi.item.leaves.leaves.all():
-                    self.rootid = -1
+                    if self.rootid is None:
+                        self.rootid = backtrace_id
+                    if self.stop_early is None:
+                        return
+                # if a root item was already found and the current weight is more than a threshold, then exit
+                if not self.rootid is None and qi.weight > self.stop_early:
                     return
 
                 qi.bt = backtrace_id
-                self.from_lhs[qi.item.lhs].add((qi.item.leaves, qi.bt, qi.weight, qi.gapscore))
+                self.from_lhs[qi.item.lhs].add((qi.item.leaves, qi.bt, qi.weight))
                 
-                for active, abt, _weight, _gapscore in self.actives.get(qi.item.lhs, []):
+                for active, abt, _weight in self.actives.get(qi.item.lhs, []):
                     if active.lexidx > 0 and not qi.item.leaves.leftmost < active.leaf or \
                             not active.leaves.leftmost < qi.item.leaves.leftmost or \
                             abt.leaf in qi.item.leaves or \
@@ -96,37 +145,34 @@ class ActiveParser:
                         continue
                     newpos = active.leaves.union(qi.item.leaves)
                     self.queue.put_nowait(qelement(
-                        ActiveItem(active.lhs, active.leaf, newpos, active.maxfo, active.remaining[1:], active.lexidx-1),
+                        ActiveItem(active.lhs, active.leaf, newpos, active.fanout, active.remaining[1:], active.lexidx-1),
                         backtrace(abt.rid, abt.leaf, abt.children+(backtrace_id,)),
                         qi.weight+_weight,
-                        newpos.gaps + self.discount*(qi.gapscore+_gapscore)
                     ))
                 continue
 
+            # todo: skip this
             assert isinstance(qi.item, ActiveItem)
             if qi.item.lexidx == 0:
                 leaves = qi.item.leaves.with_leaf(qi.item.leaf)
-                gapchange = leaves.numgaps() - qi.item.leaves.numgaps()
                 self.queue.put_nowait(qelement(
-                    ActiveItem(qi.item.lhs, qi.item.leaf, leaves, qi.item.maxfo, qi.item.remaining, -1),
+                    ActiveItem(qi.item.lhs, qi.item.leaf, leaves, qi.item.fanout, qi.item.remaining, -1),
                     qi.bt,
                     qi.weight,
-                    qi.gapscore + gapchange
                 ))
                 continue
 
             if not qi.item.remaining:
-                if not qi.item.leaves.numgaps() < qi.item.maxfo: continue
-                self.queue.put_nowait(qelement(
+                if not qi.item.leaves.numgaps()+1 == qi.item.fanout: continue
+                register_passive_item(qelement(
                     PassiveItem(qi.item.lhs, qi.item.leaves),
                     qi.bt,
                     qi.weight,
-                    qi.gapscore
                 ))
                 continue
 
-            self.actives.setdefault(qi.item.remaining[0], []).append((qi.item, qi.bt, qi.weight, qi.gapscore))
-            for (span, pbt, pweight, pgaps) in self.from_lhs.get(qi.item.remaining[0], []):
+            self.actives.setdefault(qi.item.remaining[0], []).append((qi.item, qi.bt, qi.weight))
+            for (span, pbt, pweight) in self.from_lhs.get(qi.item.remaining[0], []):
                 if qi.item.lexidx > 0 and not span.leftmost < qi.item.leaf or \
                         not qi.item.leaves.leftmost < span.leftmost or \
                         qi.bt.leaf in span or \
@@ -134,10 +180,9 @@ class ActiveParser:
                     continue
                 newpos = qi.item.leaves.union(span)
                 self.queue.put_nowait(qelement(
-                    ActiveItem(qi.item.lhs, qi.item.leaf, newpos, qi.item.maxfo, qi.item.remaining[1:], qi.item.lexidx-1),
+                    ActiveItem(qi.item.lhs, qi.item.leaf, newpos, qi.item.fanout, qi.item.remaining[1:], qi.item.lexidx-1),
                     backtrace(qi.bt.rid, qi.bt.leaf, qi.bt.children+(pbt,)),
-                    qi.weight+pweight,
-                    newpos.gaps + self.discount*(qi.gapscore+pgaps)
+                    qi.weight+pweight
                 ))
 
 
@@ -148,17 +193,20 @@ class ActiveParser:
                 return [Tree("NOPARSE", list(range(self.len)))]
         bt: backtrace = self.backtraces[item]
         fn, push = self.grammar.rules[bt.rid].fn(bt.leaf, pushed)
-        # match bt.as_tuple():
-        #     case (rid, ()):
-        #         return fn()
-        #     case (rid, (pos,)):
-        #         return fn(self.get_best(bt.children[0], push[0]))
-        #     case (rid, (pos1,pos2)):
-        #         return fn(self.get_best(bt.children[0], push[0]), self.get_best(bt.children[1], push[1]))
         return fn(*(self.get_best(c, p) for c, p in zip(bt.children, push)))
 
+    # todo: merge with function below
     def get_best_deriv(self, item = None):
         if item is None:
             item = self.rootid
         bt: backtrace = self.backtraces[item]
         return Tree((bt.leaf, self.grammar.rules[bt.rid]), (self.get_best_deriv(c) for c in bt.children))
+
+    def get_best_derivation(self, item=None):
+        if item is None:
+            item = self.rootid
+            if self.rootid is None:
+                return None, None
+        bt: backtrace = self.backtraces[item]
+        w: float = self.weight[item]
+        return Tree((bt.rid, bt.leaf), [self.get_best_derivation(i) for i in bt.children])

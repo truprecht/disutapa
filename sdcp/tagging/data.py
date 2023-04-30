@@ -1,13 +1,26 @@
 from datasets import Dataset, DatasetDict
 from flair.data import Sentence, Dictionary, Token
 from collections import Counter
-
+from ..grammar.derivation import Derivation
 
 class SentenceWrapper(Sentence):
     def __init__(self, dataobj: dict):
         super().__init__(dataobj["sentence"], use_tokenizer=False)
         self.__gold_label_ids = dataobj
         self.__predicted_label_ids = {}
+        self.__cache = {}
+
+    def get_derivation(self):
+        if not "derivation" in self.__cache:
+            deriv = self.get_raw_labels("derivation")
+            st = self.get_raw_labels("supertag")
+            self.__cache["derivation"] = Derivation.from_str(deriv, st)
+        return self.__cache["derivation"]
+    
+    def cache(self, key, value=None):
+        if not value is None:
+            self.__cache[key] = value
+        return self.__cache.get(key)
 
     def get_raw_labels(self, field: str):
         return self.__gold_label_ids[field]
@@ -22,9 +35,10 @@ class SentenceWrapper(Sentence):
 class DatasetWrapper:
     def __init__(self, dataset: Dataset):
         self.dataset = dataset
+        self.sentences = [SentenceWrapper(s) for s in self.dataset]
 
     def __getitem__(self, idx: int = 0) -> SentenceWrapper:
-        return SentenceWrapper(self.dataset[idx])
+        return self.sentences[idx]
 
     def __len__(self):
         return len(self.dataset)

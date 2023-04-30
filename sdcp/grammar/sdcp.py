@@ -1,18 +1,23 @@
 from dataclasses import dataclass
 from typing import Tuple
 from itertools import chain
+from discodop.tree import Tree
 
 class node_constructor:
     def __init__(self, label: str, *fixed_children):
         self.label = label
         self.fixed_children = fixed_children
 
-    def __call__(self, *children) -> str:
-        childstrs = chain((str(i) for i in self.fixed_children if not i is None), children)
-        childstrs = ' '.join(childstrs)
-        if self.label:
-            childstrs = f"({self.label} {childstrs})"                
-        return childstrs
+    def __call__(self, *children) -> list[Tree]:
+        children = list(chain(
+            (t for t in self.fixed_children if not t is None),
+            (t for ts in children for t in ts)
+        ))
+        if self.label is None: return children
+        trees = children
+        for l in reversed(self.label.split("+")):
+            trees = [Tree(l, trees)]
+        return trees
 
     def __str__(self):
         return f"~{self()}"
@@ -55,21 +60,24 @@ class rule:
     lhs: str
     fn: sdcp_clause
     rhs: tuple[str] = ()
-    fanout_hint: int = 1
+    fanout: int = 1
+    lexidx: int = 1
 
 
-    def __init__(self, lhs: str, rhs: Tuple[str,...], fn_node: str = None, fn_push: int = -1, fanout: int = 1):
+    def __init__(self, lhs: str, rhs: Tuple[str,...], fn_node: str = None, fn_push: int = -1, fanout: int = 1, lexidx: int = 1):
         object.__setattr__(self, "lhs", lhs)
         object.__setattr__(self, "rhs", rhs)
         object.__setattr__(self, "fn", sdcp_clause(fn_node, len(self.rhs), fn_push))
-        object.__setattr__(self, "fanout_hint", fanout)
+        object.__setattr__(self, "fanout", fanout)
+        object.__setattr__(self, "lexidx", min(len(rhs), lexidx))
 
 
     def __repr__(self):
         fn = f", fn_node={repr(self.fn.label)}" if not self.fn.label is None else ""
         fp = f", fn_push={repr(self.fn.push_idx)}" if not self.fn.push_idx == -1 and not (self.fn.arity==2 and self.fn.push_idx == 1) else ""
-        fh = f", fanout={self.fanout_hint}" if not self.fanout_hint == 1 else ""
-        return f"rule({repr(self.lhs)}, {repr(self.rhs)}{fn}{fp}{fh})"
+        fh = f", fanout={self.fanout}" if not self.fanout == 1 else ""
+        fl = f", lexidx={self.lexidx}" if not self.lexidx == min(1, len(self.rhs)) else ""
+        return f"rule({repr(self.lhs)}, {repr(self.rhs)}{fn}{fp}{fh}{fl})"
 
 
 @dataclass

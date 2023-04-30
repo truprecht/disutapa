@@ -5,9 +5,8 @@ import flair
 import torch
 
 from sdcp.grammar.sdcp import grammar, sdcp_clause, rule
-from sdcp.grammar.extract_head import headed_clause, headed_rule
-from tagging.model import ModelParameters, TaggerModel
-from tagging.data import CorpusWrapper
+from sdcp.tagging.ensemble_model import ModelParameters, EnsembleModel
+from sdcp.tagging.data import CorpusWrapper
 
 @dataclass
 class TrainingParameter:
@@ -25,10 +24,10 @@ def main(config: TrainingParameter):
     if not config.device is None:
         flair.device = config.device
     corpus = CorpusWrapper(config.corpus)
-    model = TaggerModel.from_corpus(
+    model = EnsembleModel.from_corpus(
         corpus.train,
         grammar([eval(t) for t in corpus.train.labels()]),
-        ModelParameters(embeddings=config.embeddings, ktags=config.ktags, dropout=config.dropout)
+        ModelParameters(embedding=config.embedding, embedding_options=config.embedding_options, ktags=config.ktags, dropout=config.dropout, scoring=config.scoring, scoring_options=config.scoring_options)
     )
     trainer = flair.trainers.ModelTrainer(model, corpus)
     train = trainer.fine_tune if any(em.fine_tune() for em in model.embedding_builder) else \
@@ -41,6 +40,9 @@ def main(config: TrainingParameter):
         max_epochs=config.epochs,
         weight_decay=config.weight_decay,
         optimizer=torch.optim.__dict__[config.optimizer],
+        checkpoint=True,
+        use_final_model_for_eval=True,
+        patience=config.epochs
         #scheduler=torch.optim.lr_scheduler.OneCycleLR
     )
 
@@ -51,6 +53,12 @@ def subcommand(sub: ArgumentParser):
         optional = f.default is MISSING and f.default_factory is MISSING
         name = f.name if optional else f"--{f.name}"
         default = None if optional else f.default
-        sub.add_argument(name, type=f.type, default=default)
+        ftype = f.type
+        nargs = None
+        if f.type == list[str]:
+            ftype = str
+            nargs = "+"
+            default = list()
+        sub.add_argument(name, type=ftype, default=default, nargs=nargs)
     sub.add_argument("--device", type=torch.device, default=None)
     sub.set_defaults(func=lambda args: main(args))

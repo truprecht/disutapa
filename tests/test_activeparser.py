@@ -1,7 +1,6 @@
 from sdcp.grammar.sdcp import rule, grammar
-from sdcp.grammar.extract_head import headed_rule, headed_clause
+from sdcp.grammar.extract_head import headed_rule, headed_clause, Extractor
 from sdcp.grammar.activeparser import ActiveParser
-from sdcp.grammar.extract_head import extract_head
 from sdcp.corpus import corpus_extractor
 from sdcp.autotree import with_pos
 from random import sample, randint, shuffle
@@ -23,7 +22,7 @@ def test_active_parser():
 
 
 def rule_weight_vector(totallen: int, hot: int):
-    vec = [(rid, totallen-abs(rid-hot)) for rid in range(totallen)]
+    vec = [(rid, abs(rid-hot)) for rid in range(totallen)]
     shuffle(vec)
     return vec
 
@@ -49,7 +48,8 @@ def test_pipeline():
     t[(0, 1)].type = HEAD
     t[(0, 0, 1)].type = HEAD
     t[(1, 1)].type = HEAD
-    rules = list(extract_head(HeadedTree.convert(t)))
+    rules, _ = Extractor()(HeadedTree.convert(t))
+    print(rules)
     parse = ActiveParser(grammar(rules))
     parse.init(*([(r, 0)] for r in range(6)))
     parse.fill_chart()

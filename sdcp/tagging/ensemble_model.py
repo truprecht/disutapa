@@ -1,37 +1,46 @@
-from ast import parse
 import torch
 import flair
+from tqdm import tqdm
+from math import ceil
 
 CPU = torch.device("cpu")
 
 from typing import Tuple, Optional
 from sdcp.grammar.sdcp import grammar
-from sdcp.grammar.buparser import BuParser
 from sdcp.grammar.activeparser import ActiveParser
 from sdcp.autotree import AutoTree, with_pos
 
 from discodop.eval import readparam
 
 from .data import DatasetWrapper, SentenceWrapper
-from .embeddings import TokenEmbeddingBuilder, EmbeddingPresets
+from .embeddings import TokenEmbeddingBuilder, EmbeddingPresets, PretrainedBuilder
+from .parsing_scorer import ScoringBuilder
 
 
 from dataclasses import dataclass, field
 
 @dataclass
 class ModelParameters:
-    embeddings: str = "Supervised"
+    embedding: str = "Supervised"
+    embedding_options: list[str] = field(default_factory=list)
+    scoring: str = None
+    scoring_options: list[str] = field(default_factory=list)
+    abort_nongold_prob: float = 0.9
     ktags: int = 1
     dropout: float = 0.1
     evalparam: Optional[dict] = None
 
     def __post_init__(self):
-        self.embeddings = EmbeddingPresets[self.embeddings].value
+        if self.embedding in EmbeddingPresets:
+            self.embedding = EmbeddingPresets[self.embedding]
+        else:
+            options = eval(f"dict({','.join(self.embedding_options)})")
+            self.embedding = [PretrainedBuilder(self.embedding, **options)]
         if self.evalparam is None:
             self.evalparam = readparam("../disco-dop/proper.prm")
-        
 
-class TaggerModel(flair.nn.Model):
+
+class EnsembleModel(flair.nn.Model):
     @classmethod
     def from_corpus(cls, corpus: DatasetWrapper, grammar: grammar, parameters: ModelParameters):
         """ Construct an instance of the model using
@@ -42,29 +51,45 @@ class TaggerModel(flair.nn.Model):
 
         embeddings = [
             embedding.build_vocab(corpus)
-            for embedding in parameters.embeddings
+            for embedding in parameters.embedding
         ]
-        return cls(embeddings, tag_dicts, grammar, parameters.dropout, parameters.ktags, parameters.evalparam)
+        parsing_scorer = ScoringBuilder(parameters.scoring, corpus, *parameters.scoring_options)
+        return cls(embeddings, tag_dicts, grammar, parsing_scorer, parameters.dropout, parameters.ktags, parameters.evalparam, parameters.abort_nongold_prob)
 
-    def __init__(self, embeddings, dictionaries, grammar, dropout: float = 0.1, ktags: int = 1, evalparam: dict = None):
-        super(TaggerModel, self).__init__()
+    def set_scoring(self, scoring_str, corpus, option_strs, abort_brass: float = 0.9):
+        self.scoring_builder = ScoringBuilder(scoring_str, corpus, *option_strs)
+        self.scoring = self.scoring_builder.produce(self.embedding.embedding_length)
+        self.abort_brass = abort_brass
+
+    def fix_tagging(self):
+        self.__fix_tagging__ = True
+        for e in self.embedding.embeddings:
+            if "fine_tune" in e.__dict__:
+                e.fine_tune = False
+
+    def __init__(self, embeddings, dictionaries, grammar, parsing_scorer, dropout: float = 0.1, ktags: int = 1, evalparam: dict = None, abort_brass: float = 2):
+        super().__init__()
         self.embedding_builder = embeddings
         self.embedding = flair.embeddings.StackedEmbeddings([
             builder.produce() for builder in embeddings
         ])
+        inputlen = self.embedding.embedding_length
+        self.scoring_builder = parsing_scorer
+        self.scoring = self.scoring_builder.produce(inputlen)
+        self.abort_brass = abort_brass
 
         self.dropoutprob = dropout
         self.dropout = torch.nn.Dropout(dropout)
         self.dictionaries = dictionaries
-        inputlen = self.embedding.embedding_length
         self.scores = torch.nn.ModuleDict({
-            field: torch.nn.Linear(inputlen, len(dict))
+            field: torch.nn.Linear(self.embedding.embedding_length, len(dict))
             for field, dict in self.dictionaries.items()
         })
 
         self.__grammar__ = grammar
         self.__evalparam__ = evalparam
         self.__ktags__ = ktags
+        self.__fix_tagging__ = False
         self.to(flair.device)
 
     def set_eval_param(self, ktags: int, evalparam: dict):
@@ -82,7 +107,7 @@ class TaggerModel(flair.nn.Model):
     def label_type(self):
         return "supertag"
 
-    def _batch_to_embeddings(self, batch):
+    def _batch_to_embeddings(self, batch, batch_first: bool = False):
         if not type(batch) is list:
             batch = [batch]
         self.embedding.embed(batch)
@@ -90,10 +115,72 @@ class TaggerModel(flair.nn.Model):
         input = torch.nn.utils.rnn.pad_sequence([
             torch.stack([ word.get_embedding(embedding_name) for word in sentence ])
             for sentence in batch]).to(flair.device)
+        if batch_first:
+            input = input.transpose(0,1)
         return input
 
 
-    def _calculate_loss(self, feats, batch: list[SentenceWrapper], batch_first: bool = False, check_bounds: bool = False):
+    def _parsing_loss(self, batch: list[SentenceWrapper], embeddings: torch.Tensor, feats: torch.Tensor):
+        loss = torch.tensor(0.0, device=flair.device)
+        npreds = 0
+        if self.__fix_tagging__:
+            feats = feats.detach()
+            embeddings = embeddings.detach()
+
+        for i, sent in enumerate(batch):
+            embeds = embeddings[:len(sent), i]
+            self.scoring.init_embeddings(embeds)
+            deriv = sent.get_derivation()
+            loss += self.scoring.forward_loss(deriv)
+            npreds += deriv.inner_nodes
+
+            brassitems = None
+            if not (cache := sent.cache("brassitems")) is None:
+                brassitems, backtraces = cache
+            elif self.abort_brass <= 1:
+                parser = ActiveParser(self.__grammar__)
+                parser.set_scoring(self.scoring)
+                topweights, toptags = feats[:len(sent), i].topk(self.ktags, dim=-1)
+                topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
+                predicted_tags = [
+                    [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
+                    for ktags, kweights in zip(toptags, topweights)]
+                parser.init(*predicted_tags)
+                parser.add_nongold_filter(deriv, self.abort_brass)
+                parser.fill_chart()
+                brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
+                backtraces = parser.backtraces
+            if brassitems:
+                loss += self.scoring.norule_loss(brassitems, backtraces)
+                npreds += len(brassitems)
+
+        return loss, npreds
+
+
+    def cache_scoring_items(self, batch: list[SentenceWrapper]):
+        if self.abort_brass > 1:
+            return
+        with torch.no_grad():
+            embeds = self._batch_to_embeddings(batch)
+            scores = dict(self.forward(embeds))
+            parser = ActiveParser(self.__grammar__)
+            parser.set_scoring(self.scoring)
+            topweights, toptags = scores["supertag"].topk(self.ktags, dim=-1)
+            topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
+            for i, sentence in enumerate(batch):
+                self.scoring.init_embeddings(embeds[:, i])
+                predicted_tags = [
+                    [(tag.item()-1, weight.item()) for tag, weight in zip(ktags, kweights) if tag != 0]
+                    for ktags, kweights in zip(toptags[:len(sentence), i], topweights[:len(sentence), i])]
+                parser.init(*predicted_tags)
+                maxweight = sum(scores["supertag"][j, i, s] for j, s in enumerate(sentence.get_raw_labels("supertag")))
+                parser.set_gold_item_filter(sentence.get_derivation(), nongold_stopping_prob=self.abort_brass, early_stopping=maxweight)
+                parser.fill_chart()
+                brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
+                sentence.cache("brassitems", (brassitems, parser.backtraces))
+
+
+    def _tagging_loss(self, feats, batch: list[SentenceWrapper], batch_first: bool = False, check_bounds: bool = False):
         loss = torch.tensor(0.0, device=flair.device)
         for field, logits in feats:
             gold = torch.nn.utils.rnn.pad_sequence([
@@ -115,16 +202,25 @@ class TaggerModel(flair.nn.Model):
 
 
     def forward_loss(self, batch):
-        feats = self.forward(batch)
-        return self._calculate_loss(feats, batch)
+        embeds = self._batch_to_embeddings(batch)
+        feats = dict(self.forward(embeds))
+        loss, predictions = torch.tensor(0.0, device=flair.device), 0
+        if not self.__fix_tagging__:
+            pl, pp = self._tagging_loss(feats.items(), batch)
+            loss += pl
+            predictions += pp
+        if self.scoring.requires_training:
+            lparse, nparse = self._parsing_loss(batch, embeds, feats["supertag"])
+            loss += lparse
+            predictions += nparse
+        return loss, predictions
 
 
-    def forward(self, batch, batch_first: bool = False):
-        inputfeats = self._batch_to_embeddings(batch)
-        inputfeats = self.dropout(inputfeats)
+    def forward(self, embeddings):
+        inputfeats = self.dropout(embeddings)
         for field, layer in self.scores.items():
             logits = layer(inputfeats)
-            yield field, (logits if not batch_first else logits.transpose(0,1))
+            yield field, logits #(logits if not batch_first else logits.transpose(0,1))
 
 
     def predict(self,
@@ -161,31 +257,41 @@ class TaggerModel(flair.nn.Model):
 
         with torch.no_grad():
             parser = ActiveParser(self.__grammar__)
-            scores = dict(self.forward(batch, batch_first=True))
-            tagscores = scores["supertag"].cpu()
-            tags = argpartition(-tagscores, self.ktags, axis=2)[:, :, 0:self.ktags]
+            parser.set_scoring(self.scoring)
+            embeds = self._batch_to_embeddings(batch, batch_first=True)
+            scores = dict(self.forward(embeds))
+            topweights, toptags = scores["supertag"].topk(self.ktags, dim=-1)
+            topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
             postags = scores["pos"].argmax(dim=-1)
+            totalbacktraces = 0
+            totalqueuelen = 0
 
-            for sentence, senttags, sentweights, postag in zip(batch, tags, tagscores.gather(2, tags), postags):
+            for sentence, sembed, senttags, sentweights, postag in zip(batch, embeds, toptags, topweights, postags):
                 # store tags in tokens
                 sentence.store_raw_prediction("supertag-k", senttags[:len(sentence)])
-                sentence.store_raw_prediction("supertag", senttags.gather(1, sentweights.argmax(dim=1, keepdim=True)).squeeze()[:len(sentence)])
+                sentence.store_raw_prediction("supertag", senttags.gather(1, sentweights.argmin(dim=1, keepdim=True)).squeeze()[:len(sentence)])
                 sentence.store_raw_prediction("pos", postag[:len(sentence)])
 
                 # parse sentence and store parse tree in sentence
-                sentweights = torch.nn.functional.log_softmax(sentweights[:len(sentence)], dim=-1)
                 predicted_tags = [
                     [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
                     for ktags, kweights in zip(senttags[:len(sentence)], sentweights)]
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
 
+                self.scoring.init_embeddings(sembed[:len(sentence)])
                 parser.init(*predicted_tags)
                 parser.fill_chart()
                 sentence.set_label(label_name, str(with_pos(parser.get_best()[0], pos)))
+                totalbacktraces += len(parser.backtraces)
+                totalqueuelen += parser.queue._qsize()
+            print("finished parsing in prediction phase, saw", totalbacktraces, "backtraces")
+            print(totalqueuelen, "items left in queue")
 
             store_embeddings(batch, storage_mode=embedding_storage_mode)
             if return_loss:
-                return self._calculate_loss(scores.items(), batch, batch_first=True, check_bounds=True)
+                l, n = self._tagging_loss(scores.items(), batch, batch_first=True, check_bounds=True)
+                # return l + self._parsing_loss(batch), n
+                return l, n
 
     def evaluate(self,
             dataset: DatasetWrapper,
@@ -200,7 +306,8 @@ class TaggerModel(flair.nn.Model):
             main_evaluation_metric = (),
             gold_label_dictionary = None,
             return_loss: bool = True,
-            exclude_labels = []) -> Tuple[flair.training_utils.Result, float]:
+            exclude_labels = [],
+            progressbar: bool = False) -> Tuple[flair.training_utils.Result, float]:
         """ Predicts supertags, pos tags and parse trees, and reports the
             predictions scores for a set of sentences.
             :param sentences: a ``DataSet`` of sentences. For each sentence
@@ -238,6 +345,7 @@ class TaggerModel(flair.nn.Model):
                 strmode: Evaluator({ **self.evalparam, "DISC_ONLY": mode })}
         
         data_loader = DataLoader(dataset, batch_size=mini_batch_size, num_workers=num_workers)
+        iterator = data_loader if not progressbar else tqdm(data_loader)
 
         # predict supertags and parse trees
         eval_loss = 0
@@ -246,8 +354,8 @@ class TaggerModel(flair.nn.Model):
 
         trees = []
         supertags = []
-        postags = []
-        for batch in data_loader:
+        postags = [] 
+        for batch in iterator:
             loss = self.predict(
                 batch,
                 embedding_storage_mode=embedding_storage_mode,
@@ -315,7 +423,8 @@ class TaggerModel(flair.nn.Model):
             "tags": self.dictionaries,
             "ktags": self.ktags,
             "evalparam": self.evalparam,
-            "grammar": (self.__grammar__.rules, self.__grammar__.root)
+            "grammar": (self.__grammar__.rules, self.__grammar__.root),
+            "scoring_builder": self.scoring_builder
         }
 
     @classmethod
@@ -324,6 +433,7 @@ class TaggerModel(flair.nn.Model):
             state["embedding_builder"],
             state["tags"],
             grammar(*state["grammar"]),
+            state["scoring_builder"],
             dropout = state["dropout"],
             ktags = state["ktags"],
             evalparam = state["evalparam"]

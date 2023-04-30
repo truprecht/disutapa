@@ -27,7 +27,7 @@ def test_extract():
         Tree((5, 5, rule("VP|<>", ())),[])
     ])
     
-    assert list(extract(tree)) == [
+    assert extract(tree)[0] == [
         rule("L-VP", ()),
         rule("ROOT", ("VP", "NP"), fn_node="SBAR+S"),
         rule("NP", (), fn_node="NP"),
@@ -99,9 +99,9 @@ def test_derivations():
                 Tree((1, 0, rule("PP", ("L-PP",), fn_node="PP")), [
                     Tree((0, 0, rule("L-PP", ())), [])
                 ]),
-                Tree((3, 3, rule("DU|<>", ("SMAIN",), fn_push=0, fanout=2)), [
-                    Tree((4, 4, rule("SMAIN", ("PP", "NP"), fn_node="SMAIN", fn_push=0, fanout=2)), [
-                        Tree((5, 5, rule("PP", ("NP",), fn_node="PP", fn_push=0)), [
+                Tree((3, 3, rule("DU|<>", ("SMAIN",), fn_push=0, fanout=2, lexidx=0)), [
+                    Tree((4, 4, rule("SMAIN", ("PP", "NP"), fn_node="SMAIN", fn_push=0, fanout=2, lexidx=0)), [
+                        Tree((5, 5, rule("PP", ("NP",), fn_node="PP", fn_push=0, lexidx=0)), [
                             Tree((6, 6, rule("NP", (), fn_node="NP")), [])
                         ]),
                         Tree((8, 8, rule("NP", (), fn_node="NP")), []),

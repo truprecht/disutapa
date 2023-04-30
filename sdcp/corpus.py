@@ -26,8 +26,12 @@ class corpus_extractor:
         self.goldtrees = []
         self.goldrules = []
         self.goldpos = []
+        self.goldderivs = []
         self.idx = {}
         self._binparams = binparams
+        # todo: merge headed and strict extraction and remove this
+        if not headrules:
+            self._binparams = {"vertmarkov": binparams.get("vertmarkov", 1), "horzmarkov": binparams.get("horzmarkov", 2)}
         self.mode = "head" if not headrules is None else "inorder"
 
     def read(self, lrange: range = None):
@@ -39,29 +43,35 @@ class corpus_extractor:
             treeit = zip(lrange, treeit) if not lrange is None else enumerate(treeit)
         else:
             treeit = enumerate(self.trees)
-
         for i, (tree, sent) in treeit:
             if not isinstance(self.trees, CorpusReader) and not (lrange is None or i in lrange): continue
             self.idx[i] = len(self.goldtrees)
             if self.mode == "head":
                 ht = HeadedTree.convert(tree)
-                rules = tuple(self.rules[gr] for gr in Extractor(**self._binparams)(ht))
+                rules, deriv = Extractor(**self._binparams)(ht)
+                rules = tuple(self.rules[gr] for gr in rules)
                 pos = tuple(p for _, p in sorted(ht.postags.items()))
             else:
                 if len(sent) == 1:
                     stree = collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True)
                     rules, pos = singleton(stree)
                     rules = tuple(self.rules[gr] for gr in rules)
+                    deriv = 0
                 else:
                     bintree = binarize(
                         collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True),
                         **self._binparams)
                     bintree = AutoTree.convert(bintree)
-                    rules = tuple(self.rules[gr] for gr in extract(bintree))
+                    rules, deriv = extract(bintree)
+                    rules = tuple(self.rules[gr] for gr in rules)
+                    for node in deriv.subtrees():
+                        # node.label = rules[node.label]
+                        node.children = [(c if len(c) > 0 else c.label) for c in node]
                     pos = tuple(p for _, p in sorted(bintree.postags.items()))
             self.goldtrees.append(tree)
             self.sentences.append(tuple(sent))
             self.goldpos.append(pos)
+            self.goldderivs.append(deriv)
             self.goldrules.append(rules)
     
     def __getitem__(self, idx):
@@ -71,6 +81,7 @@ class corpus_extractor:
             self.sentences[idx],
             self.goldpos[idx],
             self.goldrules[idx],
+            self.goldderivs[idx],
         )
 
 

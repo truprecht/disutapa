@@ -4,7 +4,7 @@ from .sdcp import rule, sdcp_clause
 
 def singleton(tree: Tree, nonterminal: str = "ROOT"):
     label, pos = "+".join(tree.label.split("+")[:-1]), tree.label.split("+")[-1]
-    return (rule(nonterminal, (), fn_node=label),), (pos,)
+    return (rule(nonterminal, (), fn_node=label, lexidx=0),), (pos,)
 
 
 def fanout(leaves: set[int]) -> int:
@@ -18,7 +18,7 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
             return None
         lhs = override_lhs if not override_lhs is None else \
             "L-" + parent.split("+")[0]
-        return Tree((tree, tree, rule(lhs, (), fanout=1)), [])
+        return Tree((tree, tree, rule(lhs, (), fanout=1, lexidx=0)), [])
     lex = min(tree[1].leaves()) if isinstance(tree[1], Tree) else tree[1]
     yd = sorted(l for l in tree.leaves() if not l in exclude)
     exclude.add(lex)
@@ -43,9 +43,22 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
         lhs = override_lhs
     elif "+" in tree.label:
         lhs = tree.label.split("+")[0] + ("|<>" if "|<" in tree.label else "")
-    return Tree((lex, yd[0], rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx, fanout=fanout(yd))), rules)
+    
+    fo = fanout(yd)
+    # if fo > 1:
+    #     lhs = f"D-{lhs}"
+    lexidx = 0
+    if rules:
+        child_min_leaves = tuple(c.label[1] for c in rules)
+        child_min_leaves += (9999,)
+        lexidx = next(i for i,l2 in enumerate(child_min_leaves) if l2 > lex)
+    
+    return Tree((lex, yd[0], rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx, fanout=fo, lexidx=lexidx)), rules)
 
 
 def extract(tree: Tree, override_root: str = "ROOT"):
     derivation = __extract_tree(tree, "ROOT", set(), override_lhs=override_root)
-    return (r for _, _, r in sorted(node.label for node in derivation.subtrees()))
+    rules = [r for _, _, r in sorted(node.label for node in derivation.subtrees())]
+    for node in derivation.subtrees():
+        node.label = node.label[0]
+    return rules, derivation

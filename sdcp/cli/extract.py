@@ -38,15 +38,16 @@ def main(config: ExtractionParameter):
     rules = list(ex.rules)
     datasets = {}
     for split, portion in splitdict.items():
-        dataset = { "sentence": [], "supertag": [], "pos": [], "tree": [] }
+        dataset = { "sentence": [], "supertag": [], "pos": [], "tree": [], "derivation": [] }
         total = portion.stop-portion.start
         desc = f"extracting {split} portion"
         for idx in tqdm(range(portion.start, portion.stop), total=total, desc=desc):
-            gtree, sentence, gpos, grules = ex[idx]
+            gtree, sentence, gpos, grules, gderiv = ex[idx]
             dataset["sentence"].append(list(sentence))
             dataset["supertag"].append([repr(rules[r]) for r in grules])
             dataset["pos"].append(list(gpos))
             dataset["tree"].append(str(gtree))
+            dataset["derivation"].append(str(gderiv))
         datasets[split] = dataset
     tagsets = {
         "train": {
@@ -66,7 +67,8 @@ def main(config: ExtractionParameter):
             "sentence": Sequence(Value("string")),
             "supertag": Sequence(ClassLabel(names = list(tagsets[split]["supertag"]))),
             "pos": Sequence(ClassLabel(names = list(tagsets[split]["pos"]))),
-            "tree": Value("string")
+            "tree": Value("string"),
+            "derivation": Value("string")
         }))
         for split, dataset in datasets.items()
     }

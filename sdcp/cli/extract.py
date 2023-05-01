@@ -14,7 +14,7 @@ class ExtractionParameter:
     corpus: str
     output: str = None
     split: splitstr = None # e.g. "dict(train=range(18602), dev=range(18602, 19602), test=range(19602, 20602))"
-    hmarkov: int = 0
+    hmarkov: int = 999
     vmarkov: int = 1
     rightmostunary: bool = False
     headrules: str = None

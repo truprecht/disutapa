@@ -141,35 +141,45 @@ class Extractor:
         self.nonterminals = Nonterminal(**ntargs)
         self.root = root
 
-    def read_spine(self, tree: HeadedTree, parents: tuple[str, ...], firstvar: int = 1):
+    def read_spine(self, tree: HeadedTree, parents: tuple[str, ...], firstvar: int = 1, group_successors: bool = False):
         if not isinstance(tree, HeadedTree):
             return 0, [], firstvar
         children = []
         successors = []
         parents += (self.nonterminals.get_label(tree),)
         if tree.headidx > 0:
-            successors.append((parents, tree[:tree.headidx], -1))
-            children.append(firstvar)
-            firstvar+=1
+            if not group_successors:
+                ts = [[tree[i]] for i in range(tree.headidx)]
+            else:
+                ts = [tree[:tree.headidx]]
+            for t in ts:
+                successors.append((parents, t, -1))
+                children.append(firstvar)
+                firstvar+=1
         child, successors_, firstvar = self.read_spine(tree[tree.headidx], parents, firstvar)
         successors.extend(successors_)
         children.append(child)
         if tree.headidx < len(tree)-1:
-            successors.append((parents, tree[tree.headidx+1:], +1))
-            children.append(firstvar)
-            firstvar+=1
+            if not group_successors:
+                ts = [[t] for t in tree[tree.headidx+1:]]
+            else:
+                ts = [tree[tree.headidx+1:]]
+            for t in ts:
+                successors.append((parents, t, +1))
+                children.append(firstvar)
+                firstvar+=1
         return Tree(tree.label, children), successors, firstvar
 
 
     def extract_node(self, tree: HeadedTree, overridelhs: str = None, parents: tuple[str, ...] = ()):
         if not isinstance(tree, HeadedTree):
             # TODO: use pos symbol?
-            lhs = overridelhs if not overridelhs is None else "ARG"
+            lhs = overridelhs if not overridelhs is None else f"ARG({parents[-1]})"
             return Tree((tree, tree, headed_rule(lhs, (), headed_clause(0), 1)), [])
         lex = tree.headterm
         children = []
         rhs_nts = []
-        c, succs, _ = self.read_spine(tree, parents)
+        c, succs, _ = self.read_spine(tree, parents, group_successors=self.nonterminals.horzmarkov < 999)
         for nparents, succ, direction in succs:
             children.append(self.extract_nodes(succ, nparents, direction=direction))
             rhs_nts.append(children[-1].label[2].lhs)
@@ -205,8 +215,9 @@ class Extractor:
             yd += tree.leaves() if isinstance(tree, Tree) else [tree]
             child = self.extract_node(tree, self.nonterminals.vert(parents, markovnts), parents)
             deriv = self._fuse_modrule(child, deriv, yd)
-        direction = {-1: "[L]", +1: ""}[direction]
-        deriv.label = (*deriv.label[:2], deriv.label[2].with_lhs(deriv.label[2].lhs+direction))
+        if self.nonterminals.bindirection:
+            direction = {-1: "[L]", +1: ""}[direction]
+            deriv.label = (*deriv.label[:2], deriv.label[2].with_lhs(deriv.label[2].lhs+direction))
         return deriv
 
 

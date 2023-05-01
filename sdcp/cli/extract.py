@@ -19,7 +19,7 @@ class ExtractionParameter:
     rightmostunary: bool = False
     headrules: str = None
     coarsents: str = None
-    labelbyhead: bool = False
+    bindirection: bool = False
 
 
 preset_splits = {
@@ -31,7 +31,9 @@ preset_splits = {
         
 
 def main(config: ExtractionParameter):
-    ex = corpus_extractor(config.corpus, horzmarkov=config.hmarkov, vertmarkov=config.vmarkov, headrules=config.headrules, rightmostunary=config.rightmostunary, coarselabels=config.coarsents, byhead=config.labelbyhead)
+    ex = corpus_extractor(config.corpus,
+            horzmarkov=config.hmarkov, vertmarkov=config.vmarkov, headrules=config.headrules,
+            rightmostunary=config.rightmostunary, coarselabels=config.coarsents, bindirection=config.bindirection)
     splitdict = config.split or next(preset_splits[k] for k in preset_splits if k in config.corpus.lower())
     for r in Split(**splitdict).nonoverlapping():
         ex.read(r)
@@ -80,5 +82,8 @@ def subcommand(sub: ArgumentParser):
         required = f.default is MISSING and f.default_factory is MISSING
         name = f.name if required else f"--{f.name}"
         default = None if required else (f.default if not f.default is MISSING else f.default_factory())
-        sub.add_argument(name, type=f.type, default=default)
+        if f.type is bool:
+            sub.add_argument(name, action="store_true", default=False)
+        else:
+            sub.add_argument(name, type=f.type, default=default)
     sub.set_defaults(func=lambda args: main(args))

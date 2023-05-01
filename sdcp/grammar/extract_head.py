@@ -92,16 +92,19 @@ class headed_rule:
         fostr = f", fanout={self.fanout}" if self.fanout > 1 else ""
         lexposstr = f", lexidx={self.lexidx}" if self.lexidx != headed_clause(self.clause).guess_lex_position() else ""
         return f"{self.__class__.__name__}({repr(self.lhs)}, {repr(self.rhs)}{clausestr}{fostr}{lexposstr})"
+    
+    def with_lhs(self, lhs):
+        return self.__class__(lhs, self.rhs, self.clause, self.fanout, self.lexidx)
 
 
 @dataclass
 class Nonterminal:
     horzmarkov: int = 999
     vertmarkov: int = 1
-    rightmostunary: bool = True
-    markrepeats: bool = True
-    byhead: bool = False
+    rightmostunary: bool = False
+    markrepeats: bool = False
     coarselabels: dict[str, str] = None
+    bindirection: bool = False
 
     def __post_init__(self):
         if self.horzmarkov < 0 or self.vertmarkov < 1:
@@ -111,12 +114,12 @@ class Nonterminal:
 
     def get_label(self, node: HeadedTree) -> str:
         if not isinstance(node, Tree): return "ARG"
-        label = node.postags[node.headterm] if self.byhead else node.label
+        label = node.label
         if not self.coarselabels is None:
             if not (nlabel := self.coarselabels.get(label, None)) is None:
                 label = nlabel
             else:
-                print(label, "was not found")
+                print(f"Warning: in {self.__class__}.get_label: no coarse label found for", label)
         return label
 
     def vert(self, parents: tuple[str, ...], siblings: tuple[str, ...]) -> str:
@@ -145,14 +148,14 @@ class Extractor:
         successors = []
         parents += (self.nonterminals.get_label(tree),)
         if tree.headidx > 0:
-            successors.append((parents, tree[:tree.headidx]))
+            successors.append((parents, tree[:tree.headidx], -1))
             children.append(firstvar)
             firstvar+=1
         child, successors_, firstvar = self.read_spine(tree[tree.headidx], parents, firstvar)
         successors.extend(successors_)
         children.append(child)
         if tree.headidx < len(tree)-1:
-            successors.append((parents, tree[tree.headidx+1:]))
+            successors.append((parents, tree[tree.headidx+1:], +1))
             children.append(firstvar)
             firstvar+=1
         return Tree(tree.label, children), successors, firstvar
@@ -167,8 +170,8 @@ class Extractor:
         children = []
         rhs_nts = []
         c, succs, _ = self.read_spine(tree, parents)
-        for nparents, succ in succs:
-            children.append(self.extract_nodes(succ, nparents))
+        for nparents, succ, direction in succs:
+            children.append(self.extract_nodes(succ, nparents, direction=direction))
             rhs_nts.append(children[-1].label[2].lhs)
         lhs = overridelhs if not overridelhs is None else \
                 self.nonterminals(parents + (self.nonterminals.get_label(tree),))
@@ -190,15 +193,20 @@ class Extractor:
         return Tree((*mod_deriv.label[:2], newrule), children)
  
 
-    def extract_nodes(self, trees: list[HeadedTree], parents: tuple[str, ...]):
+    def extract_nodes(self, trees: list[HeadedTree], parents: tuple[str, ...], direction: int = 0):
         markovnts = [trees[-1].label if isinstance(trees[-1], Tree) else "POS"]
-        deriv = self.extract_node(trees[-1], self.nonterminals.vert(parents, markovnts) if self.nonterminals.rightmostunary else None, parents)
+        lowestnt = None
+        if self.nonterminals.rightmostunary:
+            lowestnt = self.nonterminals.vert(parents, markovnts)
+        deriv = self.extract_node(trees[-1], lowestnt, parents)
         yd = trees[-1].leaves() if isinstance(trees[-1], Tree) else [trees[-1]]
         for tree in trees[-2::-1]:
             markovnts.append(tree.label if isinstance(tree, Tree) else "POS")
             yd += tree.leaves() if isinstance(tree, Tree) else [tree]
             child = self.extract_node(tree, self.nonterminals.vert(parents, markovnts), parents)
             deriv = self._fuse_modrule(child, deriv, yd)
+        direction = {-1: "[L]", +1: ""}[direction]
+        deriv.label = (*deriv.label[:2], deriv.label[2].with_lhs(deriv.label[2].lhs+direction))
         return deriv
 
 

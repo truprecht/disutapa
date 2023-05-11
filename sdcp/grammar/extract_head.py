@@ -1,8 +1,10 @@
 from discodop.tree import Tree, ImmutableTree
 from dataclasses import dataclass, field
+from sortedcontainers import SortedSet
+from collections import namedtuple
 
 from ..headed_tree import HeadedTree, HEAD
-from .extract import fanout
+from .lcfrs import lcfrs_composition, ordered_union_composition
 
 
 def read_clusters(filename):
@@ -38,16 +40,6 @@ class headed_clause:
             return [Tree(tree.label, children)]
         return _subst(self.spine, lex, *args)
 
-    def guess_lex_position(self) -> int:
-        lexidx, clause = 0, self.spine
-        while clause != 0:
-            for c in clause:
-                if isinstance(c, Tree) or c == 0:
-                    clause = c
-                    break
-                lexidx = max(lexidx, c)
-        return lexidx
-
     def __call__(self, lex: int):
         return (lambda *args: self.subst(lex, *args))
 
@@ -65,42 +57,40 @@ class headed_rule:
     lhs: str
     rhs: tuple[str]
     clause: ImmutableTree
-    fanout: int
-    lexidx: int
+    composition: lcfrs_composition | ordered_union_composition = None
 
-    def __init__(self, lhs, rhs, clause: str | headed_clause = 0, fanout: int = 1, lexidx: int = None):
+    def __init__(self, lhs, rhs, clause: str | headed_clause = 0, composition: lcfrs_composition | str | None = None):
         if isinstance(clause, str):
             clause = ImmutableTree(clause)
         if isinstance(clause, headed_clause):
             clause = ImmutableTree.convert(clause.spine)
-        self.__dict__["lhs"], self.__dict__["rhs"], self.__dict__["clause"], self.__dict__["fanout"] = lhs, tuple(rhs), clause, fanout
-        self.__dict__["lexidx"] = lexidx if not lexidx is None else headed_clause(clause).guess_lex_position()
+        self.__dict__["lhs"], self.__dict__["rhs"], self.__dict__["clause"] = lhs, tuple(rhs), clause
+        if composition is None:
+            composition = lcfrs_composition(range(len(rhs)+1))
+        if isinstance(composition, str):
+            composition = lcfrs_composition(composition)
+        self.__dict__["composition"] = composition
+
+    @property
+    def fanout(self):
+        return self.composition.fanout        
 
     def fn(self, lex, _):
         return headed_clause(self.clause)(lex), [None]*len(self.rhs)
 
-    def reorder(self, leftmosts: tuple[int]):
-        srti = sorted(range(len(leftmosts)), key=leftmosts.__getitem__)
-        rordi = {o: i+1 for i, o in enumerate(i for i in srti if not i == 0)}
-        lxidx = next(i for i, o in enumerate(srti) if o == 0)
-        clause = subvars(self.clause, rordi)
-        rhs = (self.rhs[i-1] for i in srti if not i == 0)
-        return self.__class__(self.lhs, rhs, clause, self.fanout, lxidx)
-
     def __repr__(self) -> str:
         clausestr = f", '{self.clause}'" if self.clause != 0 else ""
-        fostr = f", fanout={self.fanout}" if self.fanout > 1 else ""
-        lexposstr = f", lexidx={self.lexidx}" if self.lexidx != headed_clause(self.clause).guess_lex_position() else ""
-        return f"{self.__class__.__name__}({repr(self.lhs)}, {repr(self.rhs)}{clausestr}{fostr}{lexposstr})"
+        comp = f", composition='{self.composition}'" if self.composition != lcfrs_composition(range(len(self.rhs)+1)) else ""
+        return f"{self.__class__.__name__}({repr(self.lhs)}, {repr(self.rhs)}{clausestr}{comp})"
     
     def with_lhs(self, lhs):
-        return self.__class__(lhs, self.rhs, self.clause, self.fanout, self.lexidx)
+        return self.__class__(lhs, self.rhs, self.clause, self.composition)
 
 
 @dataclass
 class Nonterminal:
     horzmarkov: int = 999
-    vertmarkov: int = 1
+    vertmarkov: int = 1 
     rightmostunary: bool = False
     markrepeats: bool = False
     coarselabels: dict[str, str] = None
@@ -132,23 +122,25 @@ class Nonterminal:
         return lab
 
 
-
+extraction_result = namedtuple("extracion_result", ["lex", "leaves", "rule"])
 @dataclass(init=False)
 class Extractor:
+    nonterminals: Nonterminal
     root: str = "ROOT"
 
     def __init__(self, root: str = "ROOT", **ntargs):
         self.nonterminals = Nonterminal(**ntargs)
         self.root = root
+        self.__binarize = self.nonterminals.horzmarkov < 999
 
-    def read_spine(self, tree: HeadedTree, parents: tuple[str, ...], firstvar: int = 1, group_successors: bool = False):
+    def read_spine(self, tree: HeadedTree, parents: tuple[str, ...], firstvar: int = 1):
         if not isinstance(tree, HeadedTree):
             return 0, [], firstvar
         children = []
         successors = []
         parents += (self.nonterminals.get_label(tree),)
         if tree.headidx > 0:
-            if not group_successors:
+            if not self.__binarize:
                 ts = [[tree[i]] for i in range(tree.headidx)]
             else:
                 ts = [tree[:tree.headidx]]
@@ -160,7 +152,7 @@ class Extractor:
         successors.extend(successors_)
         children.append(child)
         if tree.headidx < len(tree)-1:
-            if not group_successors:
+            if not self.__binarize:
                 ts = [[t] for t in tree[tree.headidx+1:]]
             else:
                 ts = [tree[tree.headidx+1:]]
@@ -175,49 +167,66 @@ class Extractor:
         if not isinstance(tree, HeadedTree):
             # TODO: use pos symbol?
             lhs = overridelhs if not overridelhs is None else f"ARG({parents[-1]})"
-            return Tree((tree, tree, headed_rule(lhs, (), headed_clause(0), 1)), [])
+            resultnode = extraction_result(tree, SortedSet([tree]), headed_rule(lhs, ()))
+            return Tree(resultnode, [])
         lex = tree.headterm
         children = []
         rhs_nts = []
-        c, succs, _ = self.read_spine(tree, parents, group_successors=self.nonterminals.horzmarkov < 999)
+        c, succs, _ = self.read_spine(tree, parents)
         for nparents, succ, direction in succs:
-            children.append(self.extract_nodes(succ, nparents, direction=direction))
-            rhs_nts.append(children[-1].label[2].lhs)
+            children.append(self.extract_nodes(succ, nparents, direction_marker=direction))
+            rhs_nts.append(children[-1].label.rule.lhs)
         lhs = overridelhs if not overridelhs is None else \
                 self.nonterminals(parents + (self.nonterminals.get_label(tree),))
-        leftmost = min(lex, *(c.label[1] for c in children)) if children else lex
-        rule = headed_rule(lhs, tuple(rhs_nts), headed_clause(c), fanout(sorted(tree.leaves()))).reorder((lex,) + tuple(c.label[1] for c in children))
-        return Tree((lex, leftmost, rule), children)
+        
+        leaves = SortedSet([lex])
+        for child in children:
+            leaves |= child.label.leaves
+        lcfrs = lcfrs_composition.from_positions(leaves, [c.label.leaves for c in children])
+
+        rule = headed_rule(lhs, tuple(rhs_nts), headed_clause(c), composition=lcfrs)
+        # rule = rule.reorder((lex,) + tuple(c.label.leaves[0] for c in children))
+        return Tree(extraction_result(lex, leaves, rule), children)
 
 
     def _fuse_modrule(_self, mod_deriv: Tree, successor_mods: Tree, all_leaves):
-        toprule = mod_deriv.label[2]
-        botrule = successor_mods.label[2]
-        lex = mod_deriv.label[0]
+        toprule = mod_deriv.label.rule
+        botrule = successor_mods.label.rule
+
         children = [*mod_deriv.children, successor_mods]
+        lcfrs = lcfrs_composition.from_positions(all_leaves, [c.label.leaves for c in children])
+
         newrule = headed_rule(
             toprule.lhs,
             toprule.rhs+(botrule.lhs,),
             clause=ImmutableTree(RMLABEL, [toprule.clause, len(toprule.rhs)+1]),
-            fanout=fanout(sorted(all_leaves))).reorder((lex,) + tuple(c.label[1] for c in children))
-        return Tree((*mod_deriv.label[:2], newrule), children)
+            composition=lcfrs
+        )
+        positions = mod_deriv.label.leaves | successor_mods.label.leaves
+        # newrule = newrule.reorder((lex,) + tuple(c.label.leaves[0] for c in children))
+        return Tree(
+            extraction_result(mod_deriv.label.lex, positions, newrule), children)
  
 
-    def extract_nodes(self, trees: list[HeadedTree], parents: tuple[str, ...], direction: int = 0):
+    def extract_nodes(self, trees: list[HeadedTree], parents: tuple[str, ...], direction_marker: int = 0):
         markovnts = [trees[-1].label if isinstance(trees[-1], Tree) else "POS"]
         lowestnt = None
         if self.nonterminals.rightmostunary:
             lowestnt = self.nonterminals.vert(parents, markovnts)
         deriv = self.extract_node(trees[-1], lowestnt, parents)
-        yd = trees[-1].leaves() if isinstance(trees[-1], Tree) else [trees[-1]]
+        yd = trees[-1].leaves() if isinstance(trees[-1], Tree) else SortedSet([trees[-1]])
         for tree in trees[-2::-1]:
             markovnts.append(tree.label if isinstance(tree, Tree) else "POS")
-            yd += tree.leaves() if isinstance(tree, Tree) else [tree]
+            yd = yd.union(tree.leaves() if isinstance(tree, Tree) else SortedSet([tree]))
             child = self.extract_node(tree, self.nonterminals.vert(parents, markovnts), parents)
             deriv = self._fuse_modrule(child, deriv, yd)
         if self.nonterminals.bindirection:
-            direction = {-1: "[L]", +1: ""}[direction]
-            deriv.label = (*deriv.label[:2], deriv.label[2].with_lhs(deriv.label[2].lhs+direction))
+            direction_marker = {-1: "[L]", +1: ""}[direction_marker]
+            deriv.label = extraction_result(
+                deriv.label.lex,
+                deriv.label.leaves,
+                deriv.label.rule.with_lhs(deriv.label.rule.lhs+direction_marker)
+            )
         return deriv
 
 

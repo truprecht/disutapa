@@ -1,26 +1,23 @@
 from discodop.tree import Tree
+from sortedcontainers import SortedSet
 from .sdcp import rule, sdcp_clause
+from .lcfrs import lcfrs_composition
 
 
 def singleton(tree: Tree, nonterminal: str = "ROOT"):
     label, pos = "+".join(tree.label.split("+")[:-1]), tree.label.split("+")[-1]
-    return (rule(nonterminal, (), fn_node=label, lexidx=0),), (pos,)
+    return (rule(nonterminal, (), fn_node=label),), (pos,)
 
 
-def fanout(leaves: set[int]) -> int:
-    # ol = sorted(leaves)
-    return 1+sum(1 for x,y in zip(leaves[:-1], leaves[1:]) if x+1 != y)
-
-
-def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = None):
+def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = None) -> Tree:
     if not isinstance(tree, Tree):
         if tree in exclude:
             return None
         lhs = override_lhs if not override_lhs is None else \
             "L-" + parent.split("+")[0]
-        return Tree((tree, tree, rule(lhs, (), fanout=1, lexidx=0)), [])
+        return Tree((tree, SortedSet([tree]), rule(lhs, ())), [])
     lex = min(tree[1].leaves()) if isinstance(tree[1], Tree) else tree[1]
-    yd = sorted(l for l in tree.leaves() if not l in exclude)
+    yd = SortedSet([lex])
     exclude.add(lex)
     rules = []
     rhs = []
@@ -29,13 +26,9 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
         if not crules is None:
             rhs.append(crules.label[2].lhs)
             rules.append(crules)
+            yd |= crules.label[1]
 
     push_idx = 1 if len(rules) == 2 else (-1 if not isinstance(tree[1], Tree) else 0)
-    if len(rules) == 2 and rules[0].label[1] > rules[1].label[1]:
-        # TODO if rules[1] is a binarization node, this should not be swapped
-        rules = rules[::-1]
-        rhs = rhs[::-1]
-        push_idx = 0
 
     nodestr = None if "|<" in tree.label else tree.label.split("^")[0]
     lhs = tree.label
@@ -43,17 +36,10 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
         lhs = override_lhs
     elif "+" in tree.label:
         lhs = tree.label.split("+")[0] + ("|<>" if "|<" in tree.label else "")
-    
-    fo = fanout(yd)
     # if fo > 1:
     #     lhs = f"D-{lhs}"
-    lexidx = 0
-    if rules:
-        child_min_leaves = tuple(c.label[1] for c in rules)
-        child_min_leaves += (9999,)
-        lexidx = next(i for i,l2 in enumerate(child_min_leaves) if l2 > lex)
-    
-    return Tree((lex, yd[0], rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx, fanout=fo, lexidx=lexidx)), rules)
+    composition = lcfrs_composition.from_positions(yd, [c.label[1] for c in rules])
+    return Tree((lex, yd, rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx, composition=composition)), rules)
 
 
 def extract(tree: Tree, override_root: str = "ROOT"):

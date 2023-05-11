@@ -1,4 +1,5 @@
 from discodop.tree import Tree, ImmutableTree, ImmutableParentedTree, HEAD
+from sortedcontainers import SortedSet
 
 
 def unmerge(tree_or_label: Tree|str, children: list = None):
@@ -23,12 +24,14 @@ class HeadedTree(Tree):
         self.postags = {}
         self.headidx = None
         self.headterm = None
-        self._minleaf = None
+        self._leaves = SortedSet()
         for i in range(len(self.children)):
             if not isinstance(self[i], Tree): # just a pos node, child is a sent position
                 self.headidx = i
                 self.headterm = self[i]
+                self._leaves.add(self[i])
                 continue
+            self._leaves |= self[i]._leaves
             if self[i].type == HEAD:
                 self.headidx = i
                 self.headterm = self[i].headterm
@@ -37,9 +40,11 @@ class HeadedTree(Tree):
                 self[i] = self[(i,0)]
             else:
                 self.postags.update(self[i].postags)
-        self._minleaf = min(c._minleaf if isinstance(c, HeadedTree) else c for c in self)
         if self.headidx is None:
             raise Exception(f"{self.__class__} should be converted from Tree class with initialized head markings")
+        
+    def leaves(self) -> SortedSet:
+        return self._leaves
 
     def tree(self, override_postags: list[str]|dict[int,str] = None):
         if not override_postags:

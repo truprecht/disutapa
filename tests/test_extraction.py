@@ -1,15 +1,8 @@
-from sdcp.grammar.extract import rule, extract, __extract_tree, singleton, fanout
+from sdcp.grammar.extract import rule, extract, __extract_tree, singleton
 from sdcp.corpus import corpus_extractor
 from sdcp.autotree import AutoTree, Tree
 
-
-def test_fanout():
-    assert fanout([1]) == 1
-    assert fanout(range(7)) == 1
-    assert fanout([0,2]) == 2
-    assert fanout([0,1,2,3,6,7,8]) == 2
-    assert fanout([0,4,5,6,9]) == 3
-
+from sortedcontainers import SortedSet
 
 def test_singleton():
     tree = AutoTree("(ROOT 0)")
@@ -21,18 +14,18 @@ def test_singleton():
 def test_extract():
     tree = AutoTree("(SBAR+S (VP (VP 0 (VP|<> 4 5)) 3) (NP 1 2))")
     
-    assert __extract_tree(tree[(0,0,1)], "VP", {4}) == Tree((5, 5, rule("VP|<>", ())), [])
-    assert __extract_tree(tree[(0,0)], "VP", set()) == Tree((4, 0, rule("VP", ("L-VP", "VP|<>"), fn_node="VP", fanout=2)), [
-        Tree((0, 0, rule("L-VP", ())), []),
-        Tree((5, 5, rule("VP|<>", ())),[])
+    assert __extract_tree(tree[(0,0,1)], "VP", {4}) == Tree((5, SortedSet([5]), rule("VP|<>", ())), [])
+    assert __extract_tree(tree[(0,0)], "VP", set()) == Tree((4, SortedSet([0,4,5]), rule("VP", ("L-VP", "VP|<>"), fn_node="VP", composition="1,02")), [
+        Tree((0, SortedSet([0]), rule("L-VP", ())), []),
+        Tree((5, SortedSet([5]), rule("VP|<>", ())),[])
     ])
     
     assert extract(tree)[0] == [
         rule("L-VP", ()),
-        rule("ROOT", ("VP", "NP"), fn_node="SBAR+S"),
+        rule("ROOT", ("VP", "NP"), fn_node="SBAR+S", composition="1021"),
         rule("NP", (), fn_node="NP"),
-        rule("VP", ("VP",), fn_node="VP", fanout=2),
-        rule("VP", ("L-VP", "VP|<>"), fn_node="VP", fanout=2),
+        rule("VP", ("VP",), fn_node="VP", composition="1,01"),
+        rule("VP", ("L-VP", "VP|<>"), fn_node="VP", composition="1,02"),
         rule("VP|<>", ()),
     ]
 
@@ -47,10 +40,10 @@ def test_corpus_extractor():
     assert c.goldpos == [tuple("WRB PT NN VBD VBN RP".split())]
     assert list(c.rules) == [
         rule("L-VP", ()),
-        rule("ROOT", ("VP", "NP"), fn_node="SBAR+S"),
+        rule("ROOT", ("VP", "NP"), fn_node="SBAR+S", composition="1021"),
         rule("NP", (), fn_node="NP"),
-        rule("VP", ("VP",), fn_node="VP", fanout=2),
-        rule("VP", ("L-VP", "VP|<VBN,RP>"), fn_node="VP", fanout=2),
+        rule("VP", ("VP",), fn_node="VP", composition="1,01"),
+        rule("VP", ("L-VP", "VP|<VBN,RP>"), fn_node="VP", composition="1,02"),
         rule("VP|<VBN,RP>", ()),
     ]
     
@@ -79,35 +72,35 @@ def test_derivations():
 
     t = AutoTree("(SBAR+S (VP (VP (WRB 0) (VP|<> (VBN 4) (RP 5))) (VBD 3)) (NP (PT 1) (NN 2)))")
     assert __extract_tree(t, "ROOT", set()) == Tree(
-        (1, 0, rule("SBAR", ("VP", "NP"), fn_node="SBAR+S")), [
-            Tree((3, 0, rule("VP", ("VP",), fn_node="VP", fanout=2)), [
-                Tree((4, 0, rule("VP", ("L-VP", "VP|<>"), fn_node="VP", fanout=2)), [
-                    Tree((0, 0, rule("L-VP", ()),), []),
-                    Tree((5, 5, rule("VP|<>", ())), [])
+        (1, SortedSet(range(6)), rule("SBAR", ("VP", "NP"), fn_node="SBAR+S", composition="1021")), [
+            Tree((3, SortedSet([0,3,4,5]), rule("VP", ("VP",), fn_node="VP", composition="1,01")), [
+                Tree((4, SortedSet([0,4,5]), rule("VP", ("L-VP", "VP|<>"), fn_node="VP", composition="1,02")), [
+                    Tree((0, SortedSet([0]), rule("L-VP", ()),), []),
+                    Tree((5, SortedSet([5]), rule("VP|<>", ())), [])
                 ])
             ]),
-            Tree((2, 2, rule("NP", (), fn_node="NP")), [])
+            Tree((2, SortedSet([2]), rule("NP", (), fn_node="NP")), [])
         ]
     )
-    assert AutoTree(eval_derivation(__extract_tree(t, "ROOT", set()))) == AutoTree("(SBAR+S (VP (VP 0 4 5) 3) (NP 1 2))")
+    assert AutoTree.convert(eval_derivation(__extract_tree(t, "ROOT", set()))[0]) == AutoTree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
 
 
     t = AutoTree("(ROOT (DU (PP 0 1) (DU|<> 2 (SMAIN (NP 3 8) (PP 4 (NP 5 6))))) 7)")
     assert __extract_tree(t, "ROOT", set()) == Tree(
-        (7, 0, rule("ROOT", ("DU",), fn_node="ROOT")), [
-            Tree((2, 0, rule("DU", ("PP", "DU|<>"), fn_node="DU", fanout=2)), [
-                Tree((1, 0, rule("PP", ("L-PP",), fn_node="PP")), [
-                    Tree((0, 0, rule("L-PP", ())), [])
+        (7, SortedSet(range(9)), rule("ROOT", ("DU",), fn_node="ROOT", composition="101")), [
+            Tree((2, SortedSet(list(range(7))+[8]), rule("DU", ("PP", "DU|<>"), fn_node="DU", composition="102,2")), [
+                Tree((1, SortedSet(range(2)), rule("PP", ("L-PP",), fn_node="PP", composition="10")), [
+                    Tree((0, SortedSet([0]), rule("L-PP", ())), [])
                 ]),
-                Tree((3, 3, rule("DU|<>", ("SMAIN",), fn_push=0, fanout=2, lexidx=0)), [
-                    Tree((4, 4, rule("SMAIN", ("PP", "NP"), fn_node="SMAIN", fn_push=0, fanout=2, lexidx=0)), [
-                        Tree((5, 5, rule("PP", ("NP",), fn_node="PP", fn_push=0, lexidx=0)), [
-                            Tree((6, 6, rule("NP", (), fn_node="NP")), [])
+                Tree((3, SortedSet([3,4,5,6,8]), rule("DU|<>", ("SMAIN",), fn_push=0, composition="01,1")), [
+                    Tree((4, SortedSet([4,5,6,8]), rule("SMAIN", ("NP", "PP"), fn_node="SMAIN", composition="02,1")), [
+                        Tree((8, SortedSet([8]), rule("NP", (), fn_node="NP")), []),
+                        Tree((5, SortedSet([5,6]), rule("PP", ("NP",), fn_node="PP", fn_push=0)), [
+                            Tree((6, SortedSet([6]), rule("NP", (), fn_node="NP")), [])
                         ]),
-                        Tree((8, 8, rule("NP", (), fn_node="NP")), []),
                     ])
                 ])
             ])
         ]
     )
-    assert AutoTree(eval_derivation(__extract_tree(t, "ROOT", set()))) == AutoTree("(ROOT (DU (PP 0 1) 2 (SMAIN (NP 3 8) (PP 4 (NP 5 6)))) 7)")
+    assert AutoTree.convert(eval_derivation(__extract_tree(t, "ROOT", set()))[0]) == AutoTree("(ROOT (DU (PP 0 1) 2 (SMAIN (NP 3 8) (PP 4 (NP 5 6)))) 7)")

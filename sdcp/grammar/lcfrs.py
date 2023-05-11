@@ -12,6 +12,9 @@ class disco_span:
     spans: array
     len: int
 
+    def __hash__(self) -> int:
+        return hash((*self.spans, self.len))
+
     def __init__(self, *spans: tuple[int, int]):
         self.__dict__["spans"] = array('H', (i for lr in spans for i in lr))
         self.__dict__["len"] = len(spans)
@@ -21,6 +24,9 @@ class disco_span:
             raise IndexError()
         l, r = self.spans[2*idx:2*(idx+1)]
         return (l, r)
+    
+    def __bool__(self):
+        return bool(self.len)
     
     def __len__(self):
         return self.len
@@ -102,6 +108,8 @@ class ordered_union_composition:
         return spans
         
     def partial(self, x: disco_span, y: disco_span) -> tuple[disco_span, "ordered_union_composition"]:
+        if not x:
+            return y, self
         if x < y and not (spans := x.exclusive_union(y)) is None:
             return spans, self
         return None, None
@@ -132,7 +140,7 @@ class lcfrs_composition:
 
     @property
     def fanout(self):
-        return sum(1 for c in self.inner if c == 255)
+        return sum(1 for c in self.inner if c == 255)+1
     
     def reorder_rhs(self, rhs):
         return self, (None,)+ rhs
@@ -155,6 +163,7 @@ class lcfrs_composition:
     
 
     def __call__(self, *xs: disco_span) -> disco_span:
+        fs = [len(x) for x in xs]
         xs = [iter(x) for x in xs]
         total, current_l, current_r = [], None, None
         for var in chain(self.inner, (255,)):
@@ -162,6 +171,8 @@ class lcfrs_composition:
                 total.append((current_l, current_r))
                 current_l = current_r = None
                 continue
+            if fs[var] == 0: return None
+            fs[var] -= 1
             if current_l is None:
                 current_l, current_r = next(xs[var])
                 if total and total[-1][1] >= current_l:
@@ -172,11 +183,15 @@ class lcfrs_composition:
                     current_r = r
                 else:
                     return None
+        if any(f!=0 for f in fs): return None
         return disco_span(*total)
         
     
     def partial(self, part: disco_span, x: disco_span) -> tuple[disco_span, "lcfrs_composition"]:
+        if not part:
+            return x, self
         xs = [iter(part), iter(x)]
+        fs = [len(part), len(x)]
         total, current_l, current_r = [], None, None
         remainder = []
         for var in chain(self.inner, (255,)):
@@ -189,10 +204,13 @@ class lcfrs_composition:
             
             if not remainder or remainder[-1] != 0:
                 remainder.append(0)
+
+            if fs[var] == 0: return None, None
+            fs[var] -= 1
             if current_l is None:
                 current_l, current_r = next(xs[var])
                 if total and total[-1][1] >= current_l:
-                    return None
+                    return None, None
             else:
                 l,r = next(xs[var])
                 if current_r == l:

@@ -79,7 +79,7 @@ class rule:
     def __repr__(self):
         fn = f", fn_node={repr(self.fn.label)}" if not self.fn.label is None else ""
         fp = "" if (self.fn.arity < 2 and self.fn.push_idx == -1) or (self.fn.arity==2 and self.fn.push_idx == 1) else f", fn_push={self.fn.push_idx}"
-        comp = f", composition='{self.composition}'" if self.composition != lcfrs_composition(range(len(self.rhs)+1)) else ""
+        comp = f", composition={repr(self.composition)}" if self.composition != lcfrs_composition(range(len(self.rhs)+1)) else ""
         return f"rule({repr(self.lhs)}, {repr(self.rhs)}{fn}{fp}{comp})"
 
 

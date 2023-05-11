@@ -1,4 +1,4 @@
-from discodop.tree import Tree, ImmutableTree, ImmutableParentedTree
+from discodop.tree import Tree, ImmutableTree, ParentedTree
 
 
 def unmerge(tree_or_label: Tree|str, children: list = None):
@@ -44,11 +44,11 @@ class AutoTree(Tree):
         )
         return unmerge(self.label, children)
 
-    def immutable(self):
-        return ImmutableTree(self.tree())
+    def immutable(self, *args):
+        return ImmutableTree.convert(self.tree(*args))
 
-    def parented(self):
-        return ImmutableParentedTree(self.tree())
+    def parented(self, *args):
+        return ParentedTree.convert(self.tree(*args))
 
 
 def fix_rotation(tree: Tree):
@@ -60,5 +60,9 @@ def fix_rotation(tree: Tree):
 
 def with_pos(tree: Tree, pos: tuple[str, ...]):
     if not isinstance(tree, Tree):
-        return Tree(pos[tree], [tree])
+        cs = [tree]
+        labels = pos[tree].split("+")
+        for l in reversed(labels[1:]):
+            cs = [Tree(l, cs)]
+        return Tree(labels[0], cs)
     return Tree(tree.label, [with_pos(t, pos) for t in tree])

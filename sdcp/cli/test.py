@@ -1,6 +1,6 @@
 from argparse import ArgumentParser, Namespace
 from sdcp.grammar.sdcp import rule, sdcp_clause, grammar
-from sdcp.grammar.activeparser import ActiveParser, headed_rule
+from sdcp.grammar.activeparser import ActiveParser, headed_rule, lcfrs_composition
 from sdcp.grammar.extract_head import headed_clause
 from sdcp.autotree import AutoTree, with_pos, fix_rotation
 from sdcp.tagging.parsing_scorer import CombinatorialParsingScorer, DummyScorer
@@ -42,13 +42,14 @@ def main(config: Namespace):
         )
         p.fill_chart()
         prediction = p.get_best()[0]
-        _, prediction = fix_rotation(with_pos(prediction, [idtopos[i] for i in sample.get_raw_labels("pos")]))
+        prediction = with_pos(prediction, [idtopos[i] for i in sample.get_raw_labels("pos")])
         evaluator.add(i, ParentedTree(sample.get_raw_labels("tree")), list(sample.get_raw_labels("sentence")),
                 ParentedTree.convert(prediction), list(sample.get_raw_labels("sentence")))
-        if str(prediction) != sample.get_raw_labels("tree"):
+        if str(fix_rotation(prediction)[1]) != sample.get_raw_labels("tree"):
             print(sample.get_raw_labels("tree"))
             print(prediction)
     print(evaluator.summary())
+    print(evaluator.breakdowns())
 
 
 def subcommand(sub: ArgumentParser):

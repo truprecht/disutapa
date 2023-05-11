@@ -80,7 +80,7 @@ class headed_rule:
 
     def __repr__(self) -> str:
         clausestr = f", '{self.clause}'" if self.clause != 0 else ""
-        comp = f", composition='{self.composition}'" if self.composition != lcfrs_composition(range(len(self.rhs)+1)) else ""
+        comp = f", composition={repr(self.composition)}" if self.composition != lcfrs_composition(range(len(self.rhs)+1)) else ""
         return f"{self.__class__.__name__}({repr(self.lhs)}, {repr(self.rhs)}{clausestr}{comp})"
     
     def with_lhs(self, lhs):

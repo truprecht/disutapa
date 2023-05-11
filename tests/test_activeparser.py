@@ -10,9 +10,9 @@ def test_active_parser():
     rules = [
         headed_rule("VP|<>", []),
         headed_rule("NP|<>", []),
-        headed_rule("S|<>", ["NP|<>"], "(NP 1  0)"),
-        headed_rule("ROOT", ["VP|<>", "S|<>"], "(SBAR (S (VP 1 0) 2))", lexidx=2),
-        headed_rule("VP|<>", ["VP|<>", "VP|<>"], "(VP 1 0 2)", 2),
+        headed_rule("S|<>", ["NP|<>"], "(NP 1 0)", composition="10"),
+        headed_rule("ROOT", ["VP|<>", "S|<>"], "(SBAR (S (VP 1 0) 2))", composition="1201"),
+        headed_rule("VP|<>", ["VP|<>", "VP|<>"], "(VP 1 0 2)", composition="1,02"),
         headed_rule("VP|<>", []),
     ]
     parse = ActiveParser(grammar(rules, "ROOT"))
@@ -31,9 +31,9 @@ def test_weighted_active_parser():
     rules = [
         headed_rule("VP|<>", [], headed_clause(0)),
         headed_rule("NP|<>", [], headed_clause(0)),
-        headed_rule("S|<>", ["NP|<>"], headed_clause("(NP 1  0)")),
-        headed_rule("ROOT", ["VP|<>", "S|<>"], headed_clause("(SBAR (S (VP 1 0) 2))"), lexidx=2),
-        headed_rule("VP|<>", ["VP|<>", "VP|<>"], headed_clause("(VP 1 0 2)"), 2),
+        headed_rule("S|<>", ["NP|<>"], headed_clause("(NP 1  0)"), composition="10"),
+        headed_rule("ROOT", ["VP|<>", "S|<>"], headed_clause("(SBAR (S (VP 1 0) 2))"), composition="1201"),
+        headed_rule("VP|<>", ["VP|<>", "VP|<>"], headed_clause("(VP 1 0 2)"), composition="1,02"),
         headed_rule("VP|<>", [], headed_clause(0)),
     ]
     parse = ActiveParser(grammar(rules, "ROOT"))

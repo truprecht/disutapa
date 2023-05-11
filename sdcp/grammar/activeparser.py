@@ -3,22 +3,23 @@ from random import random
 
 
 from .extract_head import headed_rule, Tree
-from .buparser import BitSpan, backtrace, qelement
+from .buparser import backtrace, qelement
 from .sdcp import grammar
 from queue import PriorityQueue
 from sortedcontainers import SortedList
 from collections import defaultdict
 from ..tagging.parsing_scorer import DummyScorer
 from .derivation import Derivation
+from .lcfrs import disco_span, lcfrs_composition
 
 
 @dataclass
 class PassiveItem:
     lhs: str
-    leaves: BitSpan
+    leaves: disco_span
 
     def freeze(self):
-        return (self.lhs, self.leaves.freeze())
+        return (self.lhs, self.leaves)
 
     def __gt__(self, other: "PassiveItem") -> bool:
         if isinstance(other, ActiveItem): return False
@@ -29,17 +30,16 @@ class PassiveItem:
 class ActiveItem:
     lhs: str
     leaf: int
-    leaves: BitSpan
-    fanout: int
+    leaves: disco_span
+    remaining_function: lcfrs_composition
     remaining: tuple[str]
-    lexidx: int
 
     def freeze(self):
-        return (self.lhs, self.leaf, self.leaves.freeze(), self.fanout, self.remaining)
+        return (self.lhs, self.leaf, self.leaves, self.remaining, self.remaining_function)
 
     def __gt__(self, other: "ActiveItem") -> bool:
         if isinstance(other, PassiveItem): return True
-        return (self.lhs, self.leaves, self.fanout, self.remaining) > (other.lhs, other.leaves, other.fanout, other.remaining)
+        return (self.lhs, self.leaves, self.remaining) > (other.lhs, other.leaves, other.remaining)
 
 
 class ActiveParser:
@@ -64,7 +64,7 @@ class ActiveParser:
                 weight = weight - minweight
                 rule: headed_rule = self.grammar.rules[rid]
                 self.queue.put_nowait(qelement(
-                        ActiveItem(rule.lhs, i, BitSpan.fromit((), self.len), rule.fanout, rule.rhs, rule.lexidx),
+                        ActiveItem(rule.lhs, i, disco_span(), *rule.composition.reorder_rhs(rule.rhs)),
                         backtrace(rid, i, ()),
                         weight
                 ))
@@ -72,7 +72,7 @@ class ActiveParser:
         self.stop_early = True
 
     
-    def set_gold_item_filter(self, gold_tree: Derivation, nongold_stopping_prob: float = 0.9, early_stopping: float = None):
+    def set_gold_item_filter(self, gold_tree: Derivation, nongold_stopping_prob: float = 0.9, early_stopping: float | bool = True):
         self.golditems = set()
         self.brassitems = list()
         for node in gold_tree.subderivs():
@@ -84,7 +84,7 @@ class ActiveParser:
 
     def fill_chart(self):
         expanded = set()
-        self.from_lhs: dict[str, list[tuple[BitSpan, int, float]]] = defaultdict(SortedList) 
+        self.from_lhs: dict[str, list[tuple[disco_span, int, float]]] = defaultdict(SortedList) 
         self.actives: dict[str, list[tuple[ActiveItem, backtrace, float]]] = {}
         self.backtraces = []  
         self.items = []
@@ -107,6 +107,7 @@ class ActiveParser:
         while not self.queue.empty() or self.new_item_batch:
             flush_items()
             qi: qelement = self.queue.get_nowait()
+            print(qi.item)
             fritem = qi.item.freeze()
             if fritem in expanded:
                 continue
@@ -125,10 +126,10 @@ class ActiveParser:
                         continue
 
                 # check if this is the root item and stop the parsing, if early stopping is activated
-                if qi.item.lhs == self.grammar.root and qi.item.leaves.leaves.all():
+                if qi.item.lhs == self.grammar.root and qi.item.leaves == disco_span((0, self.len)):
                     if self.rootid is None:
                         self.rootid = backtrace_id
-                    if self.stop_early is None:
+                    if self.stop_early is True:
                         return
                 # if a root item was already found and the current weight is more than a threshold, then exit
                 if not self.rootid is None and qi.weight > self.stop_early:
@@ -138,14 +139,15 @@ class ActiveParser:
                 self.from_lhs[qi.item.lhs].add((qi.item.leaves, qi.bt, qi.weight))
                 
                 for active, abt, _weight in self.actives.get(qi.item.lhs, []):
-                    if active.lexidx > 0 and not qi.item.leaves.leftmost < active.leaf or \
-                            not active.leaves.leftmost < qi.item.leaves.leftmost or \
-                            abt.leaf in qi.item.leaves or \
-                            not active.leaves.isdisjoint(qi.item.leaves):
-                        continue
-                    newpos = active.leaves.union(qi.item.leaves)
+                    # if active.lexidx > 0 and not qi.item.leaves.leftmost < active.leaf or \
+                    #         not active.leaves.leftmost < qi.item.leaves.leftmost or \
+                    #         abt.leaf in qi.item.leaves or \
+                    #         not active.leaves.isdisjoint(qi.item.leaves):
+                    #     continue
+                    newpos, newcomp = active.remaining_function.partial(active.leaves, qi.item.leaves)
+                    if newpos is None: continue
                     self.queue.put_nowait(qelement(
-                        ActiveItem(active.lhs, active.leaf, newpos, active.fanout, active.remaining[1:], active.lexidx-1),
+                        ActiveItem(active.lhs, active.leaf, newpos, newcomp, active.remaining[1:]),
                         backtrace(abt.rid, abt.leaf, abt.children+(backtrace_id,)),
                         qi.weight+_weight,
                     ))
@@ -153,17 +155,18 @@ class ActiveParser:
 
             # todo: skip this
             assert isinstance(qi.item, ActiveItem)
-            if qi.item.lexidx == 0:
-                leaves = qi.item.leaves.with_leaf(qi.item.leaf)
+            if qi.item.remaining and qi.item.remaining[0] is None:
+                leaves, remaining = qi.item.remaining_function.partial(qi.item.leaves, disco_span.singleton(qi.item.leaf))
+                if leaves is None: continue
                 self.queue.put_nowait(qelement(
-                    ActiveItem(qi.item.lhs, qi.item.leaf, leaves, qi.item.fanout, qi.item.remaining, -1),
+                    ActiveItem(qi.item.lhs, qi.item.leaf, leaves, remaining, qi.item.remaining[1:]),
                     qi.bt,
                     qi.weight,
                 ))
                 continue
 
             if not qi.item.remaining:
-                if not qi.item.leaves.numgaps()+1 == qi.item.fanout: continue
+                if len(qi.item.leaves) != qi.item.remaining_function.fanout: continue
                 register_passive_item(qelement(
                     PassiveItem(qi.item.lhs, qi.item.leaves),
                     qi.bt,
@@ -173,14 +176,15 @@ class ActiveParser:
 
             self.actives.setdefault(qi.item.remaining[0], []).append((qi.item, qi.bt, qi.weight))
             for (span, pbt, pweight) in self.from_lhs.get(qi.item.remaining[0], []):
-                if qi.item.lexidx > 0 and not span.leftmost < qi.item.leaf or \
-                        not qi.item.leaves.leftmost < span.leftmost or \
-                        qi.bt.leaf in span or \
-                        not qi.item.leaves.isdisjoint(span):
-                    continue
-                newpos = qi.item.leaves.union(span)
+                # if qi.item.lexidx > 0 and not span.leftmost < qi.item.leaf or \
+                #         not qi.item.leaves.leftmost < span.leftmost or \
+                #         qi.bt.leaf in span or \
+                #         not qi.item.leaves.isdisjoint(span):
+                #     continue
+                newpos, newfunc = qi.item.remaining_function.partial(qi.item.leaves, span)
+                if newpos is None: continue
                 self.queue.put_nowait(qelement(
-                    ActiveItem(qi.item.lhs, qi.item.leaf, newpos, qi.item.fanout, qi.item.remaining[1:], qi.item.lexidx-1),
+                    ActiveItem(qi.item.lhs, qi.item.leaf, newpos, newfunc, qi.item.remaining[1:]),
                     backtrace(qi.bt.rid, qi.bt.leaf, qi.bt.children+(pbt,)),
                     qi.weight+pweight
                 ))

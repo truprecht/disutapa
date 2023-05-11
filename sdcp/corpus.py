@@ -58,9 +58,12 @@ class corpus_extractor:
                     rules = tuple(self.rules[gr] for gr in rules)
                     deriv = 0
                 else:
-                    bintree = binarize(
-                        collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True),
-                        **self._binparams)
+                    # bintree = binarize(
+                    #     collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True),
+                    #     **self._binparams)
+                    bintree = collapseunary(
+                        binarize(Tree.convert(tree), **self._binparams),
+                        collapsepos=True, collapseroot=True)
                     bintree = AutoTree.convert(bintree)
                     rules, deriv = extract(bintree)
                     rules = tuple(self.rules[gr] for gr in rules)

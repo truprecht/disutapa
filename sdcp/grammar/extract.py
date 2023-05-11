@@ -1,7 +1,7 @@
 from discodop.tree import Tree
 from sortedcontainers import SortedSet
 from .sdcp import rule, sdcp_clause
-from .lcfrs import lcfrs_composition
+from .lcfrs import lcfrs_composition, ordered_union_composition
 
 
 def singleton(tree: Tree, nonterminal: str = "ROOT"):
@@ -9,7 +9,7 @@ def singleton(tree: Tree, nonterminal: str = "ROOT"):
     return (rule(nonterminal, (), fn_node=label),), (pos,)
 
 
-def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = None) -> Tree:
+def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = None, ctype = lcfrs_composition) -> Tree:
     if not isinstance(tree, Tree):
         if tree in exclude:
             return None
@@ -22,7 +22,7 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
     rules = []
     rhs = []
     for c in tree:
-        crules = __extract_tree(c, parent=tree.label, exclude=exclude)
+        crules = __extract_tree(c, parent=tree.label, exclude=exclude, ctype=ctype)
         if not crules is None:
             rhs.append(crules.label[2].lhs)
             rules.append(crules)
@@ -38,12 +38,14 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
         lhs = tree.label.split("+")[0] + ("|<>" if "|<" in tree.label else "")
     # if fo > 1:
     #     lhs = f"D-{lhs}"
-    composition = lcfrs_composition.from_positions(yd, [c.label[1] for c in rules])
+    composition = ctype.from_positions(yd, [c.label[1] for c in rules]) \
+        if rules else None
     return Tree((lex, yd, rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx, composition=composition)), rules)
 
 
-def extract(tree: Tree, override_root: str = "ROOT"):
-    derivation = __extract_tree(tree, "ROOT", set(), override_lhs=override_root)
+def extract(tree: Tree, override_root: str = "ROOT", ctype = "lcfrs"):
+    ctype = {"lcfrs": lcfrs_composition, "dcp": ordered_union_composition}.get(ctype, ctype)
+    derivation = __extract_tree(tree, "ROOT", set(), override_lhs=override_root, ctype = ctype)
     rules = [r for _, _, r in sorted(node.label for node in derivation.subtrees())]
     for node in derivation.subtrees():
         node.label = node.label[0]

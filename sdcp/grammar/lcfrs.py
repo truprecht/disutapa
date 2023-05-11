@@ -45,7 +45,7 @@ class disco_span:
             else:
                 l,r =  other[yi]
                 yi += 1
-            
+
             if current_l is None:
                 current_l, current_r = l, r
             elif current_r == l:
@@ -54,7 +54,7 @@ class disco_span:
                 return None
             else:
                 spans.append((current_l, current_r))
-                current_r = current_l = None
+                current_r, current_l = r, l
         spans.append((current_l, current_r))
         return self.__class__(*spans)
     
@@ -85,8 +85,13 @@ class ordered_union_composition:
     def reorder_rhs(self, rhs: tuple[str]):
         rhs = (None,) + rhs
         canon_composition = self.__class__([], self.order_and_fanout[-1])
-        reordered_rhs = tuple(map(rhs.__getitem__, sorted(range(len(rhs)), key=self.order_and_fanout.__getitem__)))
+        reordered_rhs = tuple(rhs[i] for i in self.order_and_fanout[:-1])
         return canon_composition, reordered_rhs
+    
+    def undo_reorder(self, successors: tuple) -> tuple:
+        varpos = (v for v in self.order_and_fanout[:-1] if not v == 0)
+        indices = (i for i, _ in sorted(enumerate(varpos), key=lambda x: x[1]))
+        return (successors[i] for i in indices)
 
     @classmethod
     def from_positions(cls, positions, successor_positions: list[set]):
@@ -110,6 +115,8 @@ class ordered_union_composition:
     def partial(self, x: disco_span, y: disco_span) -> tuple[disco_span, "ordered_union_composition"]:
         if not x:
             return y, self
+        if len(x) >= self.fanout and x[self.fanout-1][1] < y[0][0]:
+            return None, None
         if x < y and not (spans := x.exclusive_union(y)) is None:
             return spans, self
         return None, None
@@ -237,3 +244,6 @@ class lcfrs_composition:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({str(self)})"
+    
+    def undo_reorder(self, successors):
+        return successors

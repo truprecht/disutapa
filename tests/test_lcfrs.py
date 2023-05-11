@@ -81,6 +81,14 @@ def test_union_composition():
     assert c3.order_and_fanout == bytes((0,1,2))
     assert c4.order_and_fanout == bytes((0,1,2,3,4,2))
 
+    c5 = ordered_union_composition('120', fanout=2)
+    assert c1.reorder_rhs(("1",)) == (ordered_union_composition([], 1), (None, "1",))
+    assert c2.reorder_rhs((1,2,3,4)) == (ordered_union_composition([], 5), (None, 1,2,3,4))
+    assert c5.reorder_rhs((1,2)) == (ordered_union_composition([], 2), (1,2,None))
+    assert tuple(c1.undo_reorder((1,))) == (1,)
+    assert tuple(c2.undo_reorder((1,2,3,4))) == (1,2,3,4)
+    assert tuple(c5.undo_reorder((1,2))) == (1,2)
+
     assert repr(c1) == "ordered_union_composition('01')" and eval(repr(c1)) == c1
     assert repr(c3) == "ordered_union_composition('01', fanout=2)" and eval(repr(c3)) == c3
 

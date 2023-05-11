@@ -12,7 +12,7 @@ from .headed_tree import HeadedTree
 
 
 class corpus_extractor:
-    def __init__(self, filename_or_iterator: str | Iterable[Tuple[Tree, Iterable[str]]], headrules: str = None, mode="head", **binparams):
+    def __init__(self, filename_or_iterator: str | Iterable[Tuple[Tree, Iterable[str]]], headrules: str = None, guide="head", cmode="lcfrs", **binparams):
         if isinstance(filename_or_iterator, str):
             filetype = filename_or_iterator.split(".")[-1]
             if filetype == "xml":
@@ -32,7 +32,8 @@ class corpus_extractor:
         # todo: merge headed and strict extraction and remove this
         if not headrules:
             self._binparams = {"vertmarkov": binparams.get("vertmarkov", 1), "horzmarkov": binparams.get("horzmarkov", 2)}
-        self.mode = "head" if not headrules is None else "inorder"
+        self.guide = "head" if not headrules is None else "inorder"
+        self.cmode = cmode
 
     def read(self, lrange: range = None):
         if isinstance(self.trees, CorpusReader):
@@ -46,9 +47,9 @@ class corpus_extractor:
         for i, (tree, sent) in treeit:
             if not isinstance(self.trees, CorpusReader) and not (lrange is None or i in lrange): continue
             self.idx[i] = len(self.goldtrees)
-            if self.mode == "head":
+            if self.guide == "head":
                 ht = HeadedTree.convert(tree)
-                rules, deriv = Extractor(**self._binparams)(ht)
+                rules, deriv = Extractor(**self._binparams, composition=self.cmode)(ht)
                 rules = tuple(self.rules[gr] for gr in rules)
                 pos = tuple(p for _, p in sorted(ht.postags.items()))
             else:
@@ -65,7 +66,7 @@ class corpus_extractor:
                         binarize(Tree.convert(tree), **self._binparams),
                         collapsepos=True, collapseroot=True)
                     bintree = AutoTree.convert(bintree)
-                    rules, deriv = extract(bintree)
+                    rules, deriv = extract(bintree, ctype=self.cmode)
                     rules = tuple(self.rules[gr] for gr in rules)
                     for node in deriv.subtrees():
                         # node.label = rules[node.label]

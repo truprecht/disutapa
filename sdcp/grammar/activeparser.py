@@ -39,7 +39,7 @@ class ActiveItem:
 
     def __gt__(self, other: "ActiveItem") -> bool:
         if isinstance(other, PassiveItem): return True
-        return (self.lhs, self.leaves, self.remaining) > (other.lhs, other.leaves, other.remaining)
+        return (self.lhs, self.leaves, len(self.remaining)) > (other.lhs, other.leaves, len(other.remaining))
 
 
 class ActiveParser:
@@ -115,6 +115,7 @@ class ActiveParser:
 
             if isinstance(qi.item, PassiveItem):
                 backtrace_id = len(self.backtraces)
+                qi.bt.children = self.grammar.rules[qi.bt.rid].composition.undo_reorder(qi.bt.children)
                 self.backtraces.append(qi.bt)
                 self.items.append(qi.item)
 

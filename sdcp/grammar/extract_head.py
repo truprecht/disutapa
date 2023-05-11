@@ -127,11 +127,13 @@ extraction_result = namedtuple("extracion_result", ["lex", "leaves", "rule"])
 class Extractor:
     nonterminals: Nonterminal
     root: str = "ROOT"
+    ctype: str = "lcfrs"
 
-    def __init__(self, root: str = "ROOT", **ntargs):
+    def __init__(self, root: str = "ROOT", composition: str = "lcfrs", **ntargs):
         self.nonterminals = Nonterminal(**ntargs)
         self.root = root
         self.__binarize = self.nonterminals.horzmarkov < 999
+        self.ctype = {"lcfrs": lcfrs_composition, "dcp": ordered_union_composition}.get(composition, composition)
 
     def read_spine(self, tree: HeadedTree, parents: tuple[str, ...], firstvar: int = 1):
         if not isinstance(tree, HeadedTree):
@@ -182,19 +184,19 @@ class Extractor:
         leaves = SortedSet([lex])
         for child in children:
             leaves |= child.label.leaves
-        lcfrs = lcfrs_composition.from_positions(leaves, [c.label.leaves for c in children])
+        lcfrs = self.ctype.from_positions(leaves, [c.label.leaves for c in children])
 
         rule = headed_rule(lhs, tuple(rhs_nts), headed_clause(c), composition=lcfrs)
         # rule = rule.reorder((lex,) + tuple(c.label.leaves[0] for c in children))
         return Tree(extraction_result(lex, leaves, rule), children)
 
 
-    def _fuse_modrule(_self, mod_deriv: Tree, successor_mods: Tree, all_leaves):
+    def _fuse_modrule(self, mod_deriv: Tree, successor_mods: Tree, all_leaves):
         toprule = mod_deriv.label.rule
         botrule = successor_mods.label.rule
 
         children = [*mod_deriv.children, successor_mods]
-        lcfrs = lcfrs_composition.from_positions(all_leaves, [c.label.leaves for c in children])
+        lcfrs = self.ctype.from_positions(all_leaves, [c.label.leaves for c in children])
 
         newrule = headed_rule(
             toprule.lhs,

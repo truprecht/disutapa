@@ -107,7 +107,6 @@ class ActiveParser:
         while not self.queue.empty() or self.new_item_batch:
             flush_items()
             qi: qelement = self.queue.get_nowait()
-            print(qi.item)
             fritem = qi.item.freeze()
             if fritem in expanded:
                 continue

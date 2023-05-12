@@ -35,12 +35,12 @@ def main(config: Namespace):
     idtopos = data.labels("pos")
     datalen = len(data) if config.range is None else config.range[1]-config.range[0]
     data = enumerate(data)
-    if not config.range is None:
-        data = ((i,s) for i,s in data if i in range(*config.range))
     for i, sample in tqdm(data, total=datalen):
         p.init(
             *(rule_vector(len(p.grammar.rules), config.weighted, i) for i in sample.get_raw_labels("supertag")),
         )
+        if not config.range is None and not i in range(*config.range):
+            continue
         p.fill_chart()
         prediction = p.get_best()[0]
         prediction = with_pos(prediction, [idtopos[i] for i in sample.get_raw_labels("pos")])

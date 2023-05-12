@@ -139,11 +139,6 @@ class ActiveParser:
                 self.from_lhs[qi.item.lhs].add((qi.item.leaves, qi.bt, qi.weight))
                 
                 for active, abt, _weight in self.actives.get(qi.item.lhs, []):
-                    # if active.lexidx > 0 and not qi.item.leaves.leftmost < active.leaf or \
-                    #         not active.leaves.leftmost < qi.item.leaves.leftmost or \
-                    #         abt.leaf in qi.item.leaves or \
-                    #         not active.leaves.isdisjoint(qi.item.leaves):
-                    #     continue
                     newpos, newcomp = active.remaining_function.partial(active.leaves, qi.item.leaves)
                     if newpos is None: continue
                     self.queue.put_nowait(qelement(
@@ -176,11 +171,6 @@ class ActiveParser:
 
             self.actives.setdefault(qi.item.remaining[0], []).append((qi.item, qi.bt, qi.weight))
             for (span, pbt, pweight) in self.from_lhs.get(qi.item.remaining[0], []):
-                # if qi.item.lexidx > 0 and not span.leftmost < qi.item.leaf or \
-                #         not qi.item.leaves.leftmost < span.leftmost or \
-                #         qi.bt.leaf in span or \
-                #         not qi.item.leaves.isdisjoint(span):
-                #     continue
                 newpos, newfunc = qi.item.remaining_function.partial(qi.item.leaves, span)
                 if newpos is None: continue
                 self.queue.put_nowait(qelement(

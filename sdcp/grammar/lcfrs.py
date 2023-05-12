@@ -100,17 +100,6 @@ class ordered_union_composition:
         succs[lex] = 0
         order = (succs[p] for p in sorted(succs.keys()))
         return cls(order, fanout(positions))
-    
-    def __call__(self, *xs: disco_span):
-        spans = xs[0]
-        for x in xs[1:]:
-            if not spans < x:
-                return None
-            if (spans := spans.exclusive_union(x)) is None:
-                return None
-        if spans.len != self.order_and_fanout[-1]:
-            return None
-        return spans
         
     def partial(self, x: disco_span, y: disco_span) -> tuple[disco_span, "ordered_union_composition"]:
         if not x:
@@ -167,31 +156,6 @@ class lcfrs_composition:
                 vars.append(var)
             last_position = p
         return cls(vars)
-    
-
-    def __call__(self, *xs: disco_span) -> disco_span:
-        fs = [len(x) for x in xs]
-        xs = [iter(x) for x in xs]
-        total, current_l, current_r = [], None, None
-        for var in chain(self.inner, (255,)):
-            if var == 255:
-                total.append((current_l, current_r))
-                current_l = current_r = None
-                continue
-            if fs[var] == 0: return None
-            fs[var] -= 1
-            if current_l is None:
-                current_l, current_r = next(xs[var])
-                if total and total[-1][1] >= current_l:
-                    return None
-            else:
-                l,r = next(xs[var])
-                if current_r == l:
-                    current_r = r
-                else:
-                    return None
-        if any(f!=0 for f in fs): return None
-        return disco_span(*total)
         
     
     def partial(self, part: disco_span, x: disco_span) -> tuple[disco_span, "lcfrs_composition"]:
@@ -224,11 +188,8 @@ class lcfrs_composition:
                     current_r = r
                 else:
                     return None, None
+        if any(f!=0 for f in fs): return None, None
         return disco_span(*total), lcfrs_composition(remainder[:-1])
-    
-
-    # def reorder(self, oldtonew: dict[int, int]):
-    #     return self.__class__((oldtonew[v] if v < 255 else 255) for v in self.inner)
 
 
     def __str__(self) -> str:

@@ -24,6 +24,8 @@ class PretrainedBuilder(TokenEmbeddingBuilder):
         if any((spec in name.lower()) for spec in ("bert", "gpt", "xlnet")):
             self.embedding_t = TransformerWordEmbeddings
             self.model_str = name
+            # by default, flair activates fine tuning
+            kwargs.setdefault("fine_tune", True)
         elif name == "flair":
             self.embedding_t = FlairEmbeddings
             self.model_str = kwargs.pop("language") if "language" in kwargs else "en"

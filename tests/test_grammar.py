@@ -1,4 +1,4 @@
-from sdcp.grammar.sdcp import sdcp_clause, node_constructor, rule
+from sdcp.grammar.sdcp import sdcp_clause, node_constructor, rule, Tree
 
 def test_str_rule():
     rules = [
@@ -46,9 +46,9 @@ def test_sdcp_fn():
     assert functions[4](4, None) == consts[4]
     assert functions[5](5, 4) == consts[5]
 
-    assert consts[0][0]() == "0"
-    assert consts[5][0]() == "4 5"
-    assert consts[4][0]("0", "4 5") == "(VP 0 4 5)"
-    assert consts[3][0]("(VP 0 4 5)") == "(VP 3 (VP 0 4 5))"
-    assert consts[2][0]() == "(NP 1 2)"
-    assert consts[1][0]("(VP 3 (VP 0 4 5))", "(NP 1 2)") == "(SBAR+S (VP 3 (VP 0 4 5)) (NP 1 2))"
+    assert consts[0][0]() == [0]
+    assert consts[5][0]() == [4,5]
+    assert consts[4][0]([0], [4,5]) == [Tree("VP", [0,4,5])]
+    assert consts[3][0]([Tree("VP", [0,4,5])]) == [Tree("VP", [3, Tree("VP", [0,4,5])])]
+    assert consts[2][0]() == [Tree("NP", [1,2])]
+    assert consts[1][0]([Tree("VP", [Tree("VP", [0,4,5]), 3])], [Tree("NP", [1,2])]) == [Tree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")]

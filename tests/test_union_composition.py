@@ -1,5 +1,5 @@
 from sdcp.grammar.extract import rule, extract, __extract_tree
-from sdcp.grammar.activeparser import ActiveParser, grammar
+from sdcp.grammar.parser.activeparser import ActiveParser, grammar
 from sdcp.autotree import AutoTree, Tree
 
 from sdcp.grammar.extract_head import headed_rule, Extractor, SortedSet, ordered_union_composition
@@ -68,7 +68,7 @@ def test_active_parser():
     parse = ActiveParser(grammar(rules, "ROOT"))
     parse.init(*([(rid, 0)] for rid in range(6)))
     parse.fill_chart()
-    assert parse.get_best() == [Tree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")]
+    assert parse.get_best() == [Tree("(SBAR (S (VP 3 (VP 0 4 5)) (NP 1 2)))")]
 
 
 def test_pipeline():

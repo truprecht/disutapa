@@ -1,45 +1,15 @@
-from dataclasses import dataclass
-from random import random
-
-
-from .extract_head import headed_rule, Tree
-from .buparser import backtrace, qelement
-from .sdcp import grammar
-from queue import PriorityQueue
-from sortedcontainers import SortedList
 from collections import defaultdict
-from ..tagging.parsing_scorer import DummyScorer
-from .derivation import Derivation
-from .lcfrs import disco_span, lcfrs_composition
+from queue import PriorityQueue
+from random import random
+from sortedcontainers import SortedList
 
 
-@dataclass
-class PassiveItem:
-    lhs: str
-    leaves: disco_span
-
-    def freeze(self):
-        return (self.lhs, self.leaves)
-
-    def __gt__(self, other: "PassiveItem") -> bool:
-        if isinstance(other, ActiveItem): return False
-        return (self.lhs, self.leaves) > (other.lhs, other.leaves)
-
-
-@dataclass
-class ActiveItem:
-    lhs: str
-    leaf: int
-    leaves: disco_span
-    remaining_function: lcfrs_composition
-    remaining: tuple[str]
-
-    def freeze(self):
-        return (self.lhs, self.leaf, self.leaves, self.remaining, self.remaining_function)
-
-    def __gt__(self, other: "ActiveItem") -> bool:
-        if isinstance(other, PassiveItem): return True
-        return (self.lhs, self.leaves, len(self.remaining)) > (other.lhs, other.leaves, len(other.remaining))
+from ..extract_head import headed_rule, Tree
+from ..sdcp import grammar
+from ...tagging.parsing_scorer import DummyScorer
+from ..derivation import Derivation
+from ..lcfrs import disco_span
+from .item import qelement, PassiveItem, ActiveItem, backtrace, item
 
 
 class ActiveParser:
@@ -64,9 +34,9 @@ class ActiveParser:
                 weight = weight - minweight
                 rule: headed_rule = self.grammar.rules[rid]
                 self.queue.put_nowait(qelement(
-                        ActiveItem(rule.lhs, i, disco_span(), *rule.composition.reorder_rhs(rule.rhs)),
-                        backtrace(rid, i, ()),
-                        weight
+                    item(rule.lhs, disco_span(), *rule.composition.reorder_rhs(rule.rhs, i)),
+                    backtrace(rid, i, ()),
+                    weight
                 ))
         self.golditems = None
         self.stop_early = True
@@ -91,10 +61,14 @@ class ActiveParser:
 
         self.new_item_batch = []
         self.new_item_batch_minweight = None
-        def register_passive_item(qele: qelement):
-            self.new_item_batch.append(qele)
-            if self.new_item_batch_minweight is None or self.new_item_batch_minweight > qele.weight:
-                self.new_item_batch_minweight = qele.weight
+        def register_item(qele: qelement):
+            if qele.item.leaves is None: return
+            if isinstance(qele, PassiveItem):
+                self.new_item_batch.append(qele)
+                if self.new_item_batch_minweight is None or self.new_item_batch_minweight > qele.weight:
+                    self.new_item_batch_minweight = qele.weight
+            else:
+                self.queue.put_nowait(qele)
         def flush_items():
             if self.new_item_batch and (self.queue.empty() or self.new_item_batch_minweight < self.queue.queue[0].weight):
                 weights = self.scoring.score([(i.item, i.bt) for i in self.new_item_batch], self.backtraces)
@@ -140,41 +114,21 @@ class ActiveParser:
                 
                 for active, abt, _weight in self.actives.get(qi.item.lhs, []):
                     newpos, newcomp = active.remaining_function.partial(active.leaves, qi.item.leaves)
-                    if newpos is None: continue
-                    self.queue.put_nowait(qelement(
-                        ActiveItem(active.lhs, active.leaf, newpos, newcomp, active.remaining[1:]),
+                    if newpos is None or abt.leaf in qi.item.leaves: continue
+                    register_item(qelement(
+                        item(active.lhs, newpos, newcomp, active.remaining[1:]),
                         backtrace(abt.rid, abt.leaf, abt.children+(backtrace_id,)),
                         qi.weight+_weight,
                     ))
                 continue
 
-            # todo: skip this
             assert isinstance(qi.item, ActiveItem)
-            if qi.item.remaining and qi.item.remaining[0] is None:
-                leaves, remaining = qi.item.remaining_function.partial(qi.item.leaves, disco_span.singleton(qi.item.leaf))
-                if leaves is None: continue
-                self.queue.put_nowait(qelement(
-                    ActiveItem(qi.item.lhs, qi.item.leaf, leaves, remaining, qi.item.remaining[1:]),
-                    qi.bt,
-                    qi.weight,
-                ))
-                continue
-
-            if not qi.item.remaining:
-                if len(qi.item.leaves) != qi.item.remaining_function.fanout: continue
-                register_passive_item(qelement(
-                    PassiveItem(qi.item.lhs, qi.item.leaves),
-                    qi.bt,
-                    qi.weight,
-                ))
-                continue
-
             self.actives.setdefault(qi.item.remaining[0], []).append((qi.item, qi.bt, qi.weight))
             for (span, pbt, pweight) in self.from_lhs.get(qi.item.remaining[0], []):
                 newpos, newfunc = qi.item.remaining_function.partial(qi.item.leaves, span)
-                if newpos is None: continue
-                self.queue.put_nowait(qelement(
-                    ActiveItem(qi.item.lhs, qi.item.leaf, newpos, newfunc, qi.item.remaining[1:]),
+                if newpos is None or qi.bt.leaf in span: continue
+                register_item(qelement(
+                    item(qi.item.lhs, newpos, newfunc, qi.item.remaining[1:]),
                     backtrace(qi.bt.rid, qi.bt.leaf, qi.bt.children+(pbt,)),
                     qi.weight+pweight
                 ))

@@ -1,22 +1,22 @@
 from discodop.tree import Tree
 from dataclasses import dataclass, field
-from .buparser import BitSpan
+from .lcfrs import disco_span
 
 @dataclass(init=False)
 class Derivation:
     rule: int
     leaf: int
     children: tuple["Derivation"]
-    yd: BitSpan
+    yd: disco_span
     size: int
 
     def __init__(self, rule, leaf, len: int, children: tuple["Derivation"] = ()):
         self.rule = rule
         self.leaf = leaf
         self.children = children
-        self.yd = BitSpan.fromit((leaf,), len) if not children else children[0].yd.with_leaf(leaf)
-        for child in children[1:]:
-            self.yd = self.yd.union(child.yd)
+        self.yd = disco_span.singleton(self.leaf)
+        for child in children:
+            self.yd = self.yd.exclusive_union(child.yd)
         self.size = 1 + sum(c.size for c in self.children)
         self.inner_nodes = (1 + sum(c.inner_nodes for c in self.children)) \
             if self.children else 0

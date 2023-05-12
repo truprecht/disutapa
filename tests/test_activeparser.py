@@ -1,6 +1,6 @@
 from sdcp.grammar.sdcp import rule, grammar
 from sdcp.grammar.extract_head import headed_rule, headed_clause, Extractor
-from sdcp.grammar.activeparser import ActiveParser
+from sdcp.grammar.parser.activeparser import ActiveParser
 from sdcp.corpus import corpus_extractor
 from sdcp.autotree import with_pos
 from random import sample, randint, shuffle

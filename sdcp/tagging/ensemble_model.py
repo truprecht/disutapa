@@ -7,7 +7,7 @@ CPU = torch.device("cpu")
 
 from typing import Tuple, Optional
 from sdcp.grammar.sdcp import grammar
-from sdcp.grammar.activeparser import ActiveParser
+from sdcp.grammar.parser.activeparser import ActiveParser
 from sdcp.autotree import AutoTree, with_pos
 
 from discodop.eval import readparam

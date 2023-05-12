@@ -7,7 +7,8 @@ from math import log
 
 from ..grammar.sdcp import rule
 from ..grammar.derivation import Derivation
-from ..grammar.buparser import BitSpan, PassiveItem, backtrace
+from ..grammar.lcfrs import disco_span
+from ..grammar.parser.item import backtrace, PassiveItem
 from .data import DatasetWrapper
 
 
@@ -261,11 +262,11 @@ class SpanScorer(t.nn.Module):
         )[0]
 
 
-    def to_vec(self, span: BitSpan):
+    def to_vec(self, span: disco_span):
         mask = t.zeros((self.word_embeddings.size(0),), dtype=t.bool, device=f.device)
         for j in span:
             mask[j] = True
-        lefts, rights = zip(*span.fences())
+        lefts, rights = zip(*span)
         lefts, rights = t.tensor(lefts, device=f.device), t.tensor(rights, device=f.device)
         fenceposts = t.cat([
             self.fenceposts[rights, :self.fencepost_dim]-self.fenceposts[lefts, :self.fencepost_dim],
@@ -277,7 +278,7 @@ class SpanScorer(t.nn.Module):
         ))
         
 
-    def forward(self, spans: list[BitSpan], rids: t.Tensor):
+    def forward(self, spans: list[disco_span], rids: t.Tensor):
         feats = t.empty((len(spans), self.vecdim), device=f.device)
         for i, s in enumerate(spans):
             feats[i, :] = self.to_vec(s)

@@ -66,6 +66,12 @@ class disco_span:
             if s1 < s2: return True
             if s1 > s2: return False
         return self.len <= other.len
+    
+    def spanlen(self) -> int:
+        return sum(r-l for l,r in self)
+    
+    def __contains__(self, position: int) -> bool:
+        return any(l <= position < r for l,r in self)
 
 
 @dataclass(init=False, frozen=True)
@@ -82,8 +88,8 @@ class ordered_union_composition:
     def fanout(self):
         return self.order_and_fanout[-1]
 
-    def reorder_rhs(self, rhs: tuple[str]):
-        rhs = (None,) + rhs
+    def reorder_rhs(self, rhs: tuple[str], leaf: int):
+        rhs = (leaf,) + rhs
         canon_composition = self.__class__([], self.order_and_fanout[-1])
         reordered_rhs = tuple(rhs[i] for i in self.order_and_fanout[:-1])
         return canon_composition, reordered_rhs
@@ -138,8 +144,8 @@ class lcfrs_composition:
     def fanout(self):
         return sum(1 for c in self.inner if c == 255)+1
     
-    def reorder_rhs(self, rhs):
-        return self, (None,)+ rhs
+    def reorder_rhs(self, rhs, leaf):
+        return self, (leaf,)+ rhs
     
     @classmethod
     def from_positions(cls, positions: Iterable[int], successor_positions: list[set]):

@@ -283,7 +283,7 @@ class EnsembleModel(flair.nn.Model):
                 parser.fill_chart()
                 sentence.set_label(label_name, str(with_pos(parser.get_best()[0], pos)))
                 totalbacktraces += len(parser.backtraces)
-                totalqueuelen += parser.queue._qsize()
+                totalqueuelen += len(parser.queue)
             print("finished parsing in prediction phase, saw", totalbacktraces, "backtraces")
             print(totalqueuelen, "items left in queue")
 

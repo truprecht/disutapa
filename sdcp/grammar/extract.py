@@ -41,13 +41,14 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
 
     nodestr = None if "|<" in tree.label else tree.label.split("^")[0]
     lhs = tree.label
-    if not override_lhs is None:
-        lhs = override_lhs
-    elif "+" in tree.label:
-        lhs = tree.label.split("+")[0] + ("|<>" if "|<" in tree.label else "")
     composition = ctype.from_positions(yd, [c.label[1] for c in rules]) \
         if rules else None
-    lhs = getnt(ntype, lhs, composition.fanout if composition else 1)
+    if not override_lhs is None:
+        lhs = override_lhs
+    else:
+        if "+" in tree.label:
+            lhs = tree.label.split("+")[0] + ("|<>" if "|<" in tree.label else "")
+        lhs = getnt(ntype, lhs, composition.fanout if composition else 1)
     return Tree((lex, yd, rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx, composition=composition)), rules)
 
 

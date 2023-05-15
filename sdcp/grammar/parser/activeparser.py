@@ -1,5 +1,5 @@
 from collections import defaultdict
-from queue import PriorityQueue
+from heapq import heapify, heappush, heappop
 from random import random
 from sortedcontainers import SortedList
 
@@ -27,17 +27,18 @@ class ActiveParser:
     def init(self, *rules_per_position):
         self.len = len(rules_per_position)
         self.rootid = None
-        self.queue = PriorityQueue()
+        self.queue = []
         for i, rules in enumerate(rules_per_position):
             minweight = min(w for _, w in (rules or [(0,0)]))
             for rid, weight in rules:
                 weight = weight - minweight
                 rule: headed_rule = self.grammar.rules[rid]
-                self.queue.put_nowait(qelement(
+                self.queue.append(qelement(
                     item(rule.lhs, disco_span(), *rule.composition.reorder_rhs(rule.rhs, i)),
                     backtrace(rid, i, ()),
                     weight
                 ))
+        heapify(self.queue)
         self.golditems = None
         self.stop_early = True
 
@@ -68,19 +69,19 @@ class ActiveParser:
                 if self.new_item_batch_minweight is None or self.new_item_batch_minweight > qele.weight:
                     self.new_item_batch_minweight = qele.weight
             else:
-                self.queue.put_nowait(qele)
+                heappush(self.queue, qele)
         def flush_items():
-            if self.new_item_batch and (self.queue.empty() or self.new_item_batch_minweight < self.queue.queue[0].weight):
+            if self.new_item_batch and (not self.queue or self.new_item_batch_minweight < self.queue.queue[0].weight):
                 weights = self.scoring.score([(i.item, i.bt) for i in self.new_item_batch], self.backtraces)
                 for weight, qe in zip(weights, self.new_item_batch):
                     qe.weight += weight
-                    self.queue.put_nowait(qe)
+                    heappush(self.queue, qe)
                 self.new_item_batch.clear()
                 self.new_item_batch_minweight = None
         
-        while not self.queue.empty() or self.new_item_batch:
+        while self.queue or self.new_item_batch:
             flush_items()
-            qi: qelement = self.queue.get_nowait()
+            qi: qelement = heappop(self.queue)
             fritem = qi.item.freeze()
             if fritem in expanded:
                 continue

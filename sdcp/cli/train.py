@@ -20,11 +20,14 @@ class TrainingParameter:
     weight_decay: float = 0.01
     optimizer: str = "AdamW"
     output_dir: str = "/tmp/sdcp-training"
+    random_seed: int = 0
+
 
 
 def main(config: TrainingParameter):
     if not config.device is None:
         flair.device = config.device
+    torch.manual_seed(config.random_seed)
     corpus = CorpusWrapper(config.corpus)
     model = EnsembleModel.from_corpus(
         corpus.train,

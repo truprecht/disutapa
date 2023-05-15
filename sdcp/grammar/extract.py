@@ -9,7 +9,16 @@ def singleton(tree: Tree, nonterminal: str = "ROOT"):
     return (rule(nonterminal, (), fn_node=label),), (pos,)
 
 
-def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = None, ctype = lcfrs_composition) -> Tree:
+def getnt(type: str, base: str, fanout: int):
+    if type == "plain":
+        return base
+    if type.startswith("d"):
+        return base + ("/D" if fanout > 1 else "")
+    if type.startswith("f"):
+        return f"{base}/{fanout}"
+
+
+def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = None, ctype = lcfrs_composition, ntype = "plain") -> Tree:
     if not isinstance(tree, Tree):
         if tree in exclude:
             return None
@@ -22,7 +31,7 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
     rules = []
     rhs = []
     for c in tree:
-        crules = __extract_tree(c, parent=tree.label, exclude=exclude, ctype=ctype)
+        crules = __extract_tree(c, parent=tree.label, exclude=exclude, ctype=ctype, ntype=ntype)
         if not crules is None:
             rhs.append(crules.label[2].lhs)
             rules.append(crules)
@@ -36,16 +45,15 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
         lhs = override_lhs
     elif "+" in tree.label:
         lhs = tree.label.split("+")[0] + ("|<>" if "|<" in tree.label else "")
-    # if fo > 1:
-    #     lhs = f"D-{lhs}"
     composition = ctype.from_positions(yd, [c.label[1] for c in rules]) \
         if rules else None
+    lhs = getnt(ntype, lhs, composition.fanout if composition else 1)
     return Tree((lex, yd, rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx, composition=composition)), rules)
 
 
-def extract(tree: Tree, override_root: str = "ROOT", ctype = "lcfrs"):
+def extract(tree: Tree, override_root: str = "ROOT", ctype = "lcfrs", ntype = "plain"):
     ctype = {"lcfrs": lcfrs_composition, "dcp": ordered_union_composition}.get(ctype, ctype)
-    derivation = __extract_tree(tree, "ROOT", set(), override_lhs=override_root, ctype = ctype)
+    derivation = __extract_tree(tree, "ROOT", set(), override_lhs=override_root, ctype=ctype, ntype=ntype)
     rules = [r for _, _, r in sorted(node.label for node in derivation.subtrees())]
     for node in derivation.subtrees():
         node.label = node.label[0]

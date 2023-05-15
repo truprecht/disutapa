@@ -21,6 +21,7 @@ class ExtractionParameter:
     coarsents: str = None
     bindirection: bool = False
     composition: str = "lcfrs"
+    nts: str = "fanout"
 
 
 preset_splits = {
@@ -34,7 +35,7 @@ preset_splits = {
 def main(config: ExtractionParameter):
     ex = corpus_extractor(config.corpus,
             horzmarkov=config.hmarkov, vertmarkov=config.vmarkov, headrules=config.headrules,
-            rightmostunary=config.rightmostunary, coarselabels=config.coarsents, bindirection=config.bindirection, cmode=config.composition)
+            rightmostunary=config.rightmostunary, coarselabels=config.coarsents, bindirection=config.bindirection, cmode=config.composition, ntmode=config.nts)
     splitdict = config.split or next(preset_splits[k] for k in preset_splits if k in config.corpus.lower())
     for r in Split(**splitdict).nonoverlapping():
         ex.read(r)

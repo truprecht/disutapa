@@ -12,7 +12,7 @@ from .headed_tree import HeadedTree
 
 
 class corpus_extractor:
-    def __init__(self, filename_or_iterator: str | Iterable[Tuple[Tree, Iterable[str]]], headrules: str = None, guide="head", cmode="lcfrs", **binparams):
+    def __init__(self, filename_or_iterator: str | Iterable[Tuple[Tree, Iterable[str]]], headrules: str = None, guide="head", cmode="lcfrs", ntmode="plain", **binparams):
         if isinstance(filename_or_iterator, str):
             filetype = filename_or_iterator.split(".")[-1]
             if filetype == "xml":
@@ -34,6 +34,7 @@ class corpus_extractor:
             self._binparams = {"vertmarkov": binparams.get("vertmarkov", 1), "horzmarkov": binparams.get("horzmarkov", 2)}
         self.guide = "head" if not headrules is None else "inorder"
         self.cmode = cmode
+        self.ntmode = ntmode
 
     def read(self, lrange: range = None):
         if isinstance(self.trees, CorpusReader):
@@ -63,7 +64,7 @@ class corpus_extractor:
                         collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True),
                         **self._binparams)
                     bintree = AutoTree.convert(bintree)
-                    rules, deriv = extract(bintree, ctype=self.cmode)
+                    rules, deriv = extract(bintree, ctype=self.cmode, ntype=self.ntmode)
                     rules = tuple(self.rules[gr] for gr in rules)
                     for node in deriv.subtrees():
                         # node.label = rules[node.label]

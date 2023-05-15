@@ -1,7 +1,6 @@
 from collections import defaultdict
 from heapq import heapify, heappush, heappop
 from random import random
-from sortedcontainers import SortedList
 
 
 from ..extract_head import headed_rule, Tree
@@ -28,6 +27,7 @@ class ActiveParser:
         self.len = len(rules_per_position)
         self.rootid = None
         self.queue = []
+        self.actives: dict[str, list[tuple[ActiveItem, backtrace, float]]] = {}
         for i, rules in enumerate(rules_per_position):
             minweight = min(w for _, w in (rules or [(0,0)]))
             for rid, weight in rules:
@@ -48,15 +48,14 @@ class ActiveParser:
         self.brassitems = list()
         for node in gold_tree.subderivs():
             lhs = node.rule if self.sow else self.grammar.rules[node.rule].lhs
-            self.golditems.add((lhs, node.yd.freeze()))
+            self.golditems.add(PassiveItem(lhs, node.yd))
         self.nongold_stop_prob = nongold_stopping_prob
         self.stop_early = early_stopping
 
 
     def fill_chart(self):
         expanded = set()
-        self.from_lhs: dict[str, list[tuple[disco_span, int, float]]] = defaultdict(SortedList) 
-        self.actives: dict[str, list[tuple[ActiveItem, backtrace, float]]] = {}
+        self.from_lhs: dict[str, list[tuple[disco_span, int, float]]] = defaultdict(list)
         self.backtraces = []  
         self.items = []
 
@@ -82,10 +81,9 @@ class ActiveParser:
         while self.queue or self.new_item_batch:
             flush_items()
             qi: qelement = heappop(self.queue)
-            fritem = qi.item.freeze()
-            if fritem in expanded:
+            if qi.item in expanded:
                 continue
-            expanded.add(fritem)
+            expanded.add(qi.item)
 
             if isinstance(qi.item, PassiveItem):
                 backtrace_id = len(self.backtraces)
@@ -111,7 +109,7 @@ class ActiveParser:
                     return
 
                 qi.bt = backtrace_id
-                self.from_lhs[qi.item.lhs].add((qi.item.leaves, qi.bt, qi.weight))
+                self.from_lhs[qi.item.lhs].append((qi.item.leaves, qi.bt, qi.weight))
                 
                 for active, abt, _weight in self.actives.get(qi.item.lhs, []):
                     newpos, newcomp = active.remaining_function.partial(active.leaves, qi.item.leaves)

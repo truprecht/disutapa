@@ -95,6 +95,7 @@ class Nonterminal:
     markrepeats: bool = False
     coarselabels: dict[str, str] = None
     bindirection: bool = False
+    mark: str = "plain"
 
     def __post_init__(self):
         if self.horzmarkov < 0 or self.vertmarkov < 1:
@@ -120,6 +121,11 @@ class Nonterminal:
         if self.markrepeats and len(parents) >= 2 and parents[-1] == parents[-2]:
             lab += "+"
         return lab
+    
+    def fo(self, fanout: int):
+        if self.mark.startswith("f") and fanout > 1: return f"/{fanout}"
+        if self.mark.startswith("d") and fanout > 1: return "/D"
+        return ""
 
 
 extraction_result = namedtuple("extracion_result", ["lex", "leaves", "rule"])
@@ -185,6 +191,7 @@ class Extractor:
         for child in children:
             leaves |= child.label.leaves
         lcfrs = self.ctype.from_positions(leaves, [c.label.leaves for c in children])
+        lhs += self.nonterminals.fo(lcfrs.fanout)
 
         rule = headed_rule(lhs, tuple(rhs_nts), headed_clause(c), composition=lcfrs)
         # rule = rule.reorder((lex,) + tuple(c.label.leaves[0] for c in children))

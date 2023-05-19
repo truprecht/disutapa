@@ -20,7 +20,7 @@ def rule_vector(total: int, k: int, hot: int):
     shuffle(vec)
     weights = [exp(((total-abs(hot-rid))/total)*random()) for rid in vec]
     denom = sum(weights)
-    return [(rid, log(w/denom)) for rid, w in zip(vec, weights)]
+    return [(rid, -log(w/denom)) for rid, w in zip(vec, weights)]
 
 
 def main(config: Namespace):

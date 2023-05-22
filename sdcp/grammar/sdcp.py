@@ -1,86 +1,154 @@
 from dataclasses import dataclass
-from typing import Tuple
-from itertools import chain
-from discodop.tree import Tree
+from typing import Tuple, Iterable
+from itertools import chain, repeat
+from discodop.tree import Tree, ImmutableTree
 
 from .lcfrs import lcfrs_composition, ordered_union_composition
+    
 
-class node_constructor:
-    def __init__(self, label: str, *fixed_children):
-        self.label = label
-        self.fixed_children = fixed_children
+@dataclass
+class tree_constructor:
+    context: tuple[ImmutableTree|int, ...]
+    arguments: list[int, int|None]
 
-    def __call__(self, *children) -> list[Tree]:
-        children = list(chain(
-            (t for t in self.fixed_children if not t is None),
-            (t for ts in children for t in ts)
-        ))
-        if self.label is None: return children
-        trees = children
-        for l in reversed(self.label.split("+")):
-            trees = [Tree(l, trees)]
-        return trees
+    def subst(self, tree, *args):
+        if not isinstance(tree, Tree):
+            return args[tree]
+        children = list(restree for c in tree for restree in self.subst(c, *args))
+        for lab in reversed(tree.label.split("+")):
+            children = [Tree(lab, children)]
+        return children
 
-    def __str__(self):
-        return f"~{self()}"
+    def __call__(self, *children: list[Tree]) -> list[Tree]:
+        args = tuple([i] if not i is None else [] for i in self.arguments) + children
+        return [t for c in self.context for t in self.subst(c, *args)]
 
-    def __repr__(self):
-        return str(self)
 
-    def __eq__(self, o) -> bool:
-        return self.label == o.label and [l for l in self.fixed_children if not l is None] == [l for l in o.fixed_children if not l is None]
-
+def _increase_vars(context: Tree|int) -> Tree|int:
+    if not isinstance(context, Tree):
+        return 0 if context == 0 else context+1
+    for i, c in enumerate(context):
+        context[i] = _increase_vars(c)
+    return context
 
 @dataclass(frozen=True, init=False)
 class sdcp_clause:
-    label: str
-    arity: int
-    push_idx: int
+    tree: tuple[ImmutableTree|int, ...]
+    arguments: tuple[None|int, ...]
+    # arity: int
 
-    def __init__(self, label: str, arity: int, push_idx: int = None):
-        if push_idx is None:
-            push_idx = 1 if arity == 2 else -1
-        object.__setattr__(self, "label", label)
-        object.__setattr__(self, "arity", arity)
-        object.__setattr__(self, "push_idx",push_idx)
+    def __init__(self, context: tuple[ImmutableTree, ...], args: tuple[int|None, ...] | None = None):
+        if not isinstance(context, tuple):
+            context = (ImmutableTree(context),)
+        if args is None:
+            args = ()
+        object.__setattr__(self, "tree", context)
+        object.__setattr__(self, "arguments", args)
 
-    def __call__(self, lex: int, pushed: int) -> Tuple[node_constructor, Tuple[int, ...]]:
-        if self.push_idx == 0:
-            pushed, lex = lex, pushed
-        match self.arity:
-            case 2:
-                return node_constructor(self.label), (pushed, lex)
-            case 1:
-                return node_constructor(self.label, lex), (pushed,)
-            case 0:
-                return node_constructor(self.label, pushed, lex), ()
-        return NotImplementedError()
+    def __repr__(self) -> str:
+        args = []
+        args.append(
+            repr(self.tree) if len(self.tree) > 1 or isinstance(self.tree[0], int) else \
+                repr(str(self.tree[0])))
+        if self.arguments:
+            args.append("args="+repr(self.arguments))
+        return f"{self.__class__.__name__}({', '.join(args)})"
+        
+
+    @classmethod
+    def default(cls, arity: int):
+        return cls(tuple(range(arity+2)))
+
+    @classmethod
+    def binary_node(cls, node: str|None = None, arity: int = 0, transport_idx: int|None = None):
+        args = [None]*arity
+        children = [0, 1]
+        if arity == 2:
+            if transport_idx is None:
+                transport_idx = 1
+            args[transport_idx] = 0
+            args[1-transport_idx] = 1
+            children = [2, 3]
+        if arity == 1:
+            args[0] = 1 if transport_idx is None else 0
+            children = [0 if transport_idx is None else 1, 2]
+        node = (ImmutableTree(node, children),) if not node is None else tuple(children)
+        return cls(node, tuple(args))
+
+    @classmethod
+    def spine(cls, *context: Tree|int|str):
+        if context == (0,):
+            return cls.default(0)
+        context = (
+            _increase_vars(Tree(t) if isinstance(t, str) else t)
+            for t in context
+        )
+        context = tuple(
+            ImmutableTree.convert(t) if isinstance(t, Tree) else t
+            for t in context
+        )
+        return cls(context)
+
+    def __call__(self, lex: int, arg: int|None = None) -> tuple[tree_constructor, Iterable[int]]:
+        largs = [lex, arg]
+        for i in (0,1):
+            if i in self.arguments:
+                largs[i] = None
+        args = (
+            lex if sarg == 0 else (arg if sarg == 1 else None)
+            for sarg in chain(self.arguments, repeat(None))
+        )
+        return tree_constructor(self.tree, largs), args
 
 
 @dataclass(frozen=True, init=False)
 class rule:
     lhs: str
-    fn: sdcp_clause
     rhs: tuple[str] = ()
-    composition: lcfrs_composition | ordered_union_composition = None
+    scomp: lcfrs_composition | ordered_union_composition = None
+    dcp: sdcp_clause = None
 
-
-    def __init__(self, lhs: str, rhs: Tuple[str,...], fn_node: str = None, fn_push: int = None, composition: lcfrs_composition | str | None = None):
+    def __init__(self, lhs, rhs = (), scomp = None, dcp = None):
+        if scomp is None:
+            scomp = lcfrs_composition.default(len(rhs))
+        if dcp is None:
+            dcp = sdcp_clause.default(len(rhs))
         object.__setattr__(self, "lhs", lhs)
-        object.__setattr__(self, "rhs", rhs)
-        object.__setattr__(self, "fn", sdcp_clause(fn_node, len(self.rhs), fn_push))
-        if composition is None:
-            composition = lcfrs_composition(range(len(rhs)+1))
-        if isinstance(composition, str):
-            composition = lcfrs_composition(composition)
-        object.__setattr__(self, "composition", composition)
+        object.__setattr__(self, "rhs", tuple(rhs))
+        object.__setattr__(self, "scomp", scomp)
+        object.__setattr__(self, "dcp", dcp)
+
+
+    @classmethod
+    def from_guided(cls, lhs: str, rhs: tuple[str, ...], dnode: str = None, dtrans: int = None, scomp: str|ordered_union_composition = None):
+        dcp = sdcp_clause.binary_node(dnode, len(rhs), dtrans)
+        if scomp is None and dtrans == 0:
+            scomp = lcfrs_composition(range(len(rhs)+1))
+        if isinstance(scomp, str):
+            scomp = lcfrs_composition(scomp)
+        return cls(lhs, rhs, dcp=dcp, scomp=scomp)
+        
+    @classmethod
+    def from_spine(cls, lhs: str, rhs: tuple[str, ...], spine: tuple[str|int|Tree]|str|int|Tree, scomp: str|ordered_union_composition = None):
+        if not isinstance(spine, tuple):
+            spine = (spine,)
+        dcp = sdcp_clause.spine(spine)
+        if isinstance(scomp, str):
+            scomp = lcfrs_composition(scomp)
+        return cls(lhs, rhs, dcp=dcp, scomp=scomp)
 
 
     def __repr__(self):
-        fn = f", fn_node={repr(self.fn.label)}" if not self.fn.label is None else ""
-        fp = "" if (self.fn.arity < 2 and self.fn.push_idx == -1) or (self.fn.arity==2 and self.fn.push_idx == 1) else f", fn_push={self.fn.push_idx}"
-        comp = f", composition={repr(self.composition)}" if self.composition != lcfrs_composition(range(len(self.rhs)+1)) else ""
-        return f"rule({repr(self.lhs)}, {repr(self.rhs)}{fn}{fp}{comp})"
+        args = [repr(self.lhs)]
+        if self.rhs:
+            args.append(repr(self.rhs))
+        if self.scomp != lcfrs_composition.default(len(self.rhs)):
+            kw = "scomp=" if len(args) < 2 else ""
+            args.append(f"{repr(self.scomp)}")
+        if self.dcp != sdcp_clause.default(len(self.rhs)):
+            kw = "dcp=" if len(args) < 3 else ""
+            args.append(f"{kw}{repr(self.dcp)}")
+        return f"{self.__class__.__name__}({', '.join(args)})"
 
 
 @dataclass

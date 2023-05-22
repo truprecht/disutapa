@@ -6,7 +6,8 @@ from .lcfrs import lcfrs_composition, ordered_union_composition
 
 def singleton(tree: Tree, nonterminal: str = "ROOT"):
     label, pos = "+".join(tree.label.split("+")[:-1]), tree.label.split("+")[-1]
-    return (rule(nonterminal, (), fn_node=label),), (pos,)
+    label = label or None
+    return (rule(nonterminal, (), dcp=sdcp_clause.binary_node(label)),), (pos,)
 
 
 def getnt(type: str, base: str, fanout: int):
@@ -37,7 +38,7 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
             rules.append(crules)
             yd |= crules.label[1]
 
-    push_idx = 1 if len(rules) == 2 else (-1 if not isinstance(tree[1], Tree) else 0)
+    push_idx = 1 if len(rules) == 2 else (None if not isinstance(tree[1], Tree) else 0)
 
     nodestr = None if "|<" in tree.label else tree.label.split("^")[0]
     lhs = tree.label
@@ -49,7 +50,8 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = No
         if "+" in tree.label:
             lhs = tree.label.split("+")[0] + ("|<>" if "|<" in tree.label else "")
         lhs = getnt(ntype, lhs, composition.fanout if composition else 1)
-    return Tree((lex, yd, rule(lhs, tuple(rhs), fn_node=nodestr, fn_push=push_idx, composition=composition)), rules)
+    dcp = sdcp_clause.binary_node(nodestr, len(rules), push_idx)
+    return Tree((lex, yd, rule(lhs, tuple(rhs), dcp=dcp, scomp=composition)), rules)
 
 
 def extract(tree: Tree, override_root: str = "ROOT", ctype = "lcfrs", ntype = "plain"):

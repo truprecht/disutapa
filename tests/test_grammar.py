@@ -1,54 +1,57 @@
-from sdcp.grammar.sdcp import sdcp_clause, node_constructor, rule, Tree
+from sdcp.grammar.sdcp import sdcp_clause, tree_constructor, rule, Tree, lcfrs_composition, ImmutableTree
 
 def test_str_rule():
     rules = [
         rule("L-VP", ()),
-        rule("SBAR+S", ("VP", "NP"), fn_node="SBAR+S"),
-        rule("NP", (), fn_node="NP"),
-        rule("VP", ("VP",), fn_node="VP"),
-        rule("VP", ("L-VP", "VP|<>"), fn_node="VP"),
+        rule("SBAR+S", ("VP", "NP"), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=lcfrs_composition("1012")),
+        rule("NP", (), dcp=sdcp_clause.binary_node("NP")),
+        rule("VP", ("VP",), dcp=sdcp_clause.binary_node("VP", arity=1, transport_idx=None), scomp=lcfrs_composition("1,01")),
+        rule("VP", ("L-VP", "VP|<>"), dcp=sdcp_clause.binary_node("VP", arity=2), scomp=lcfrs_composition("1,02")),
         rule("VP|<>", ()),
     ]
     assert [repr(r) for r in rules] ==  [
-        "rule('L-VP', ())",
-        "rule('SBAR+S', ('VP', 'NP'), fn_node='SBAR+S')",
-        "rule('NP', (), fn_node='NP')",
-        "rule('VP', ('VP',), fn_node='VP')",
-        "rule('VP', ('L-VP', 'VP|<>'), fn_node='VP')",
-        "rule('VP|<>', ())",
+        "rule('L-VP')",
+        "rule('SBAR+S', ('VP', 'NP'), lcfrs_composition('1012'), sdcp_clause('(SBAR+S 2 3)', args=(1, 0)))",
+        "rule('NP', dcp=sdcp_clause('(NP 0 1)'))",
+        "rule('VP', ('VP',), lcfrs_composition('1,01'), sdcp_clause('(VP 0 2)', args=(1,)))",
+        "rule('VP', ('L-VP', 'VP|<>'), lcfrs_composition('1,02'), sdcp_clause('(VP 2 3)', args=(1, 0)))",
+        "rule('VP|<>')",
     ]
 
 
 
 def test_sdcp_fn():
+    assert sdcp_clause.default(0) == sdcp_clause((0, 1)) == sdcp_clause.spine(0)
+    assert sdcp_clause.default(1) == sdcp_clause((0, 1, 2)) != sdcp_clause.spine(0, 1)
+
     functions = [
-        sdcp_clause(None, 0),
-        sdcp_clause("SBAR+S", 2),
-        sdcp_clause("NP", 0),
-        sdcp_clause("VP", 1),
-        sdcp_clause("VP", 2),
-        sdcp_clause(None, 0)
+        sdcp_clause.default(0),
+        sdcp_clause.binary_node("SBAR+S", arity=2),
+        sdcp_clause.binary_node("NP"),
+        sdcp_clause.binary_node("VP", arity=1, transport_idx=None),
+        sdcp_clause.binary_node("VP", arity=2),
+        sdcp_clause.default(0)
     ]
 
     consts = [
-        (node_constructor(None, 0), ()),
-        (node_constructor("SBAR+S"), (None, 1)),
-        (node_constructor("NP", 1, 2), ()),
-        (node_constructor("VP", 3), (None,)),
-        (node_constructor("VP"), (None, 4)),
-        (node_constructor(None, 4, 5), ()),
+        (tree_constructor((0, 1), [0, None]), ()),
+        (tree_constructor((ImmutableTree("(SBAR+S 2 3)"),), [None, None]), (None, 1)),
+        (tree_constructor((ImmutableTree("(NP 0 1)"),), [2, 1]), ()),
+        (tree_constructor((ImmutableTree("(VP 0 2)"),), [3, None]), (None,)),
+        (tree_constructor((ImmutableTree("(VP 2 3)"),), [None, None]), (None, 4)),
+        (tree_constructor((0, 1), [5, 4]), ()),
     ]
 
-    assert functions[0](0, None) == consts[0]
-    assert functions[1](1, None) == consts[1]
-    assert functions[2](2, 1) == consts[2]
-    assert functions[3](3, None) == consts[3]
-    assert functions[4](4, None) == consts[4]
-    assert functions[5](5, 4) == consts[5]
+    assert functions[0](0, None)[0] == consts[0][0]
+    assert functions[1](1, None)[0] == consts[1][0]
+    assert functions[2](2, 1)[0] == consts[2][0]
+    assert functions[3](3, None)[0] == consts[3][0]
+    assert functions[4](4, None)[0] == consts[4][0]
+    assert functions[5](5, 4)[0] == consts[5][0]
 
     assert consts[0][0]() == [0]
-    assert consts[5][0]() == [4,5]
+    assert consts[5][0]() == [5, 4]
     assert consts[4][0]([0], [4,5]) == [Tree("VP", [0,4,5])]
     assert consts[3][0]([Tree("VP", [0,4,5])]) == [Tree("VP", [3, Tree("VP", [0,4,5])])]
-    assert consts[2][0]() == [Tree("NP", [1,2])]
+    assert consts[2][0]() == [Tree("NP", [2,1])]
     assert consts[1][0]([Tree("VP", [Tree("VP", [0,4,5]), 3])], [Tree("NP", [1,2])]) == [Tree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")]

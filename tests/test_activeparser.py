@@ -1,21 +1,22 @@
-from sdcp.grammar.sdcp import rule, grammar
-from sdcp.grammar.extract_head import headed_rule, headed_clause, Extractor
+from sdcp.grammar.sdcp import rule, grammar, lcfrs_composition, sdcp_clause
+from sdcp.grammar.extract_head import Extractor
 from sdcp.grammar.parser.activeparser import ActiveParser
 from sdcp.corpus import corpus_extractor
 from sdcp.autotree import with_pos
 from random import sample, randint, shuffle
 from sdcp.headed_tree import HeadedTree, Tree, HEAD
 
+hrules = [
+    rule("arg(V)[L]", ()),
+    rule("arg(N)[L]", ()),
+    rule("arg(S)[L]", ("arg(N)[L]",), dcp=sdcp_clause.spine("(NP 1 0)")),
+    rule("ROOT", ("arg(V)", "arg(S)[L]"), dcp=sdcp_clause.spine("(SBAR (S (VP 1 0) 2))"), scomp=lcfrs_composition("1201")),
+    rule("arg(V)", ("arg(V)[L]", "arg(V)"), dcp=sdcp_clause.spine("(VP 1 0 2)"), scomp=lcfrs_composition("1,02")),
+    rule("arg(V)", ()),
+]
+
 def test_active_parser():
-    rules = [
-        headed_rule("VP|<>", []),
-        headed_rule("NP|<>", []),
-        headed_rule("S|<>", ["NP|<>"], "(NP 1 0)", composition="10"),
-        headed_rule("ROOT", ["VP|<>", "S|<>"], "(SBAR (S (VP 1 0) 2))", composition="1201"),
-        headed_rule("VP|<>", ["VP|<>", "VP|<>"], "(VP 1 0 2)", composition="1,02"),
-        headed_rule("VP|<>", []),
-    ]
-    parse = ActiveParser(grammar(rules, "ROOT"))
+    parse = ActiveParser(grammar(hrules, "ROOT"))
     parse.init(*([(rid, 0)] for rid in range(6)))
     parse.fill_chart()
     assert parse.get_best() == [Tree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")]
@@ -28,15 +29,7 @@ def rule_weight_vector(totallen: int, hot: int):
 
 
 def test_weighted_active_parser():
-    rules = [
-        headed_rule("VP|<>", [], headed_clause(0)),
-        headed_rule("NP|<>", [], headed_clause(0)),
-        headed_rule("S|<>", ["NP|<>"], headed_clause("(NP 1  0)"), composition="10"),
-        headed_rule("ROOT", ["VP|<>", "S|<>"], headed_clause("(SBAR (S (VP 1 0) 2))"), composition="1201"),
-        headed_rule("VP|<>", ["VP|<>", "VP|<>"], headed_clause("(VP 1 0 2)"), composition="1,02"),
-        headed_rule("VP|<>", [], headed_clause(0)),
-    ]
-    parse = ActiveParser(grammar(rules, "ROOT"))
+    parse = ActiveParser(grammar(hrules, "ROOT"))
     parse.init(*(rule_weight_vector(6, position) for position in range(6)))
     parse.fill_chart()
     assert parse.get_best()[0] == Tree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
@@ -53,7 +46,7 @@ def test_pipeline():
     parse = ActiveParser(grammar(rules))
     parse.init(*([(r, 0)] for r in range(6)))
     parse.fill_chart()
-    assert parse.get_best()[0] == Tree("(SBAR+S (VP (VP 0 4 5) 3) (NP 1 2))")
+    assert parse.get_best()[0] == Tree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
 
 
 def test_sample():

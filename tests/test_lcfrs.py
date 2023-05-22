@@ -32,6 +32,14 @@ def test_spans():
 
 
 def test_composition():
+    assert lcfrs_composition.default(0) == lcfrs_composition("0")
+    assert list(lcfrs_composition.default(0).inner) == [0]
+    assert str(lcfrs_composition.default(0)) == "'0'"
+    assert lcfrs_composition.default(1) == lcfrs_composition("10")
+    assert list(lcfrs_composition.default(1).inner) == [1,0]
+    assert lcfrs_composition.default(2) == lcfrs_composition("102")
+    assert list(lcfrs_composition.default(2).inner) == [1,0,2]
+
     c1 = lcfrs_composition("010")
     c2 = lcfrs_composition("0,1,2,3,4")
     c3 = lcfrs_composition("01,0")

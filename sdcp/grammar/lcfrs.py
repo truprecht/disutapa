@@ -139,13 +139,22 @@ class lcfrs_composition:
                 for v in vars)
             vars = bytes(vars)
         self.__dict__["inner"] = vars
+    
+    @classmethod
+    def default(cls, arity: int):
+        return cls(i for i in (1,0,*range(2,arity+1)) if i <= arity)
 
     @property
     def fanout(self):
         return sum(1 for c in self.inner if c == 255)+1
     
     def reorder_rhs(self, rhs, leaf):
-        return self, (leaf,)+ rhs
+        rhs = (leaf,) + rhs
+        occs = sorted(range(len(rhs)), key=lambda x: next(i for i,v in enumerate(self.inner) if v ==x))
+        revoccs = {oldpos: newpos for newpos, oldpos in enumerate(occs)}
+        revoccs[255] = 255
+        comp = self.__class__(revoccs[v] for v in self.inner)
+        return comp, tuple(rhs[i] for i in occs)
     
     @classmethod
     def from_positions(cls, positions: Iterable[int], successor_positions: list[set]):
@@ -213,4 +222,6 @@ class lcfrs_composition:
         return f"{self.__class__.__name__}({str(self)})"
     
     def undo_reorder(self, successors):
-        return successors
+        occs = sorted(range(len(successors)), key=lambda x: next(i for i,v in enumerate(self.inner) if v==x+1))
+        revoccs = {oldpos: newpos for newpos, oldpos in enumerate(occs)}
+        return tuple(successors[revoccs[i]] for i in range(len(successors)))

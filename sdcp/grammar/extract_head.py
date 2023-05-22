@@ -5,6 +5,7 @@ from collections import namedtuple
 
 from ..headed_tree import HeadedTree, HEAD
 from .lcfrs import lcfrs_composition, ordered_union_composition
+from .sdcp import rule, sdcp_clause
 
 
 def read_clusters(filename):
@@ -17,74 +18,6 @@ def read_clusters(filename):
                 assert not label in label_to_clusterid, f"label {label} appears multiple times in {filename}"
                 label_to_clusterid[label] = clusterid
     return label_to_clusterid
-
-
-RMLABEL = "_|<>"
-
-@dataclass(init=False)
-class headed_clause:
-    spine: Tree
-
-    def __init__(self, spine: Tree|str) -> None:
-        self.spine = ImmutableTree(spine) if isinstance(spine, str) else spine
-
-    def subst(self, lex: int, *args: list[Tree]) -> list[Tree]:
-        def _subst(tree, lex, *args):
-            if tree == 0:
-                return [lex]
-            if not isinstance(tree, Tree):
-                return args[tree-1]
-            children = list(restree for c in tree for restree in _subst(c, lex, *args))
-            if tree.label == RMLABEL:
-                return children
-            return [Tree(tree.label, children)]
-        return _subst(self.spine, lex, *args)
-
-    def __call__(self, lex: int):
-        return (lambda *args: self.subst(lex, *args))
-
-
-def subvars(tree: ImmutableTree, newvars: dict[int, int]):
-    if tree == 0:
-        return tree
-    if not isinstance(tree, Tree):
-        return newvars[tree]
-    return ImmutableTree(tree.label, (subvars(c, newvars) for c in tree))
-
-
-@dataclass(frozen=True, init=False, repr=False)
-class headed_rule:
-    lhs: str
-    rhs: tuple[str]
-    clause: ImmutableTree
-    composition: lcfrs_composition | ordered_union_composition = None
-
-    def __init__(self, lhs, rhs, clause: str | headed_clause = 0, composition: lcfrs_composition | str | None = None):
-        if isinstance(clause, str):
-            clause = ImmutableTree(clause)
-        if isinstance(clause, headed_clause):
-            clause = ImmutableTree.convert(clause.spine)
-        self.__dict__["lhs"], self.__dict__["rhs"], self.__dict__["clause"] = lhs, tuple(rhs), clause
-        if composition is None:
-            composition = lcfrs_composition(range(len(rhs)+1))
-        if isinstance(composition, str):
-            composition = lcfrs_composition(composition)
-        self.__dict__["composition"] = composition
-
-    @property
-    def fanout(self):
-        return self.composition.fanout        
-
-    def fn(self, lex, _):
-        return headed_clause(self.clause)(lex), [None]*len(self.rhs)
-
-    def __repr__(self) -> str:
-        clausestr = f", '{self.clause}'" if self.clause != 0 else ""
-        comp = f", composition={repr(self.composition)}" if self.composition != lcfrs_composition(range(len(self.rhs)+1)) else ""
-        return f"{self.__class__.__name__}({repr(self.lhs)}, {repr(self.rhs)}{clausestr}{comp})"
-    
-    def with_lhs(self, lhs):
-        return self.__class__(lhs, self.rhs, self.clause, self.composition)
 
 
 @dataclass
@@ -139,7 +72,7 @@ class Extractor:
         self.nonterminals = Nonterminal(**ntargs)
         self.root = root
         self.__binarize = self.nonterminals.horzmarkov < 999
-        self.ctype = {"lcfrs": lcfrs_composition, "dcp": ordered_union_composition}.get(composition, composition)
+        self.ctype = {"lcfrs": lcfrs_composition, "dcp": ordered_union_composition}.get(composition, lcfrs_composition)
 
     def read_spine(self, tree: HeadedTree, parents: tuple[str, ...], firstvar: int = 1):
         if not isinstance(tree, HeadedTree):
@@ -175,7 +108,7 @@ class Extractor:
         if not isinstance(tree, HeadedTree):
             # TODO: use pos symbol?
             lhs = overridelhs if not overridelhs is None else f"ARG({parents[-1]})"
-            resultnode = extraction_result(tree, SortedSet([tree]), headed_rule(lhs, ()))
+            resultnode = extraction_result(tree, SortedSet([tree]), rule(lhs, ()))
             return Tree(resultnode, [])
         lex = tree.headterm
         children = []
@@ -193,9 +126,9 @@ class Extractor:
         lcfrs = self.ctype.from_positions(leaves, [c.label.leaves for c in children])
         lhs += self.nonterminals.fo(lcfrs.fanout)
 
-        rule = headed_rule(lhs, tuple(rhs_nts), headed_clause(c), composition=lcfrs)
+        r = rule(lhs, tuple(rhs_nts), dcp=sdcp_clause.spine(c), scomp=lcfrs)
         # rule = rule.reorder((lex,) + tuple(c.label.leaves[0] for c in children))
-        return Tree(extraction_result(lex, leaves, rule), children)
+        return Tree(extraction_result(lex, leaves, r), children)
 
 
     def _fuse_modrule(self, mod_deriv: Tree, successor_mods: Tree, all_leaves):
@@ -205,11 +138,12 @@ class Extractor:
         children = [*mod_deriv.children, successor_mods]
         lcfrs = self.ctype.from_positions(all_leaves, [c.label.leaves for c in children])
 
-        newrule = headed_rule(
+        newrule = rule(
             toprule.lhs,
             toprule.rhs+(botrule.lhs,),
-            clause=ImmutableTree(RMLABEL, [toprule.clause, len(toprule.rhs)+1]),
-            composition=lcfrs
+            dcp=sdcp_clause(toprule.dcp.tree + (len(toprule.rhs)+2,)),
+            # dcp=sdcp_clause.spine(toprule.dcp, len(toprule.rhs)+1),
+            scomp=lcfrs
         )
         positions = mod_deriv.label.leaves | successor_mods.label.leaves
         # newrule = newrule.reorder((lex,) + tuple(c.label.leaves[0] for c in children))

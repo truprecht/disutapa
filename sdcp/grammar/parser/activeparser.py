@@ -3,8 +3,8 @@ from heapq import heapify, heappush, heappop
 from random import random
 
 
-from ..extract_head import headed_rule, Tree
-from ..sdcp import grammar
+from ..extract_head import Tree
+from ..sdcp import grammar, rule
 from ...tagging.parsing_scorer import DummyScorer
 from ..derivation import Derivation
 from ..lcfrs import disco_span
@@ -32,9 +32,11 @@ class ActiveParser:
             minweight = min(w for _, w in (rules or [(0,0)]))
             for rid, weight in rules:
                 weight = weight - minweight
-                rule: headed_rule = self.grammar.rules[rid]
+                r: rule = self.grammar.rules[rid]
+                rhs = r.scomp.reorder_rhs(r.rhs, i)
+                it = item(r.lhs, disco_span(), *rhs) 
                 self.queue.append(qelement(
-                    item(rule.lhs, disco_span(), *rule.composition.reorder_rhs(rule.rhs, i)),
+                    it,
                     backtrace(rid, i, ()),
                     weight
                 ))
@@ -82,12 +84,14 @@ class ActiveParser:
             flush_items()
             qi: qelement = heappop(self.queue)
             if qi.item in expanded:
+                print("discarding item")
                 continue
             expanded.add(qi.item)
+            print("expand item #", len(self.items))
 
             if isinstance(qi.item, PassiveItem):
                 backtrace_id = len(self.backtraces)
-                qi.bt.children = self.grammar.rules[qi.bt.rid].composition.undo_reorder(qi.bt.children)
+                qi.bt.children = self.grammar.rules[qi.bt.rid].scomp.undo_reorder(qi.bt.children)
                 self.backtraces.append(qi.bt)
                 self.items.append(qi.item)
 
@@ -139,7 +143,7 @@ class ActiveParser:
             if self.rootid is None:
                 return [Tree("NOPARSE", list(range(self.len)))]
         bt: backtrace = self.backtraces[item]
-        fn, push = self.grammar.rules[bt.rid].fn(bt.leaf, pushed)
+        fn, push = self.grammar.rules[bt.rid].dcp(bt.leaf, pushed)
         return fn(*(self.get_best(c, p) for c, p in zip(bt.children, push)))
 
     # todo: merge with function below

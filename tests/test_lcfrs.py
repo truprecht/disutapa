@@ -14,17 +14,12 @@ def test_spans():
     sp4 = disco_span((2,3), (4,8))
     sp5 = disco_span((1,2), (3,6))
     
-    assert sp1.len == 2 and sp2.len == 1
-    assert list(sp1.spans) == [1,2,3,4]
-    assert list(sp2.spans) == [2,3]
+    assert len(sp1) == 2 and len(sp2) == 1
     
     assert sp1.exclusive_union(sp2) == disco_span((1,4))
     assert sp2.exclusive_union(sp3) is None
     assert sp1.exclusive_union(sp4) == disco_span((1,8))
     assert sp5.exclusive_union(sp4) is None
-
-    assert repr(sp1) == "disco_span((1, 2), (3, 4))"
-    assert repr(sp3) == "disco_span((2, 3))"
 
     assert sp1 < sp2
     assert sp1 < sp4
@@ -89,9 +84,9 @@ def test_union_composition():
     assert c4.order_and_fanout == bytes((0,1,2,3,4,2))
 
     c5 = ordered_union_composition('120', fanout=2)
-    assert c1.reorder_rhs(("1",), 0) == (ordered_union_composition([], 1), (0, "1",))
-    assert c2.reorder_rhs((1,2,3,4), 12) == (ordered_union_composition([], 5), (12, 1,2,3,4))
-    assert c5.reorder_rhs((1,2), 17) == (ordered_union_composition([], 2), (1,2, 17))
+    assert c1.reorder_rhs(("1",), 0) == (ordered_union_composition([], 1), (NtOrLeaf.leaf(0), NtOrLeaf.nt("1"),))
+    assert c2.reorder_rhs((1,2,3,4), 12) == (ordered_union_composition([], 5), (NtOrLeaf.leaf(12), *(NtOrLeaf.nt(i) for i in (1,2,3,4))))
+    assert c5.reorder_rhs((1,2), 17) == (ordered_union_composition([], 2), (NtOrLeaf.nt(1), NtOrLeaf.nt(2), NtOrLeaf.leaf(17)))
     assert tuple(c1.undo_reorder((1,))) == (1,)
     assert tuple(c2.undo_reorder((1,2,3,4))) == (1,2,3,4)
     assert tuple(c5.undo_reorder((1,2))) == (1,2)

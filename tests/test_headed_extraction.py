@@ -1,16 +1,16 @@
 from sdcp.grammar.extract_head import Extractor, Nonterminal, extraction_result, SortedSet, lcfrs_composition, rule, sdcp_clause
-from sdcp.headed_tree import HeadedTree, Tree, HEAD
+from sdcp.autotree import AutoTree, Tree, HEAD
 
 def test_read_spine():
     e = Extractor()
-    t = HeadedTree("(WRB 0)")
+    t = AutoTree("(WRB 0)")
     clause, succs, _ = e.read_spine(t, ())
     assert clause == Tree("WRB", [0])
     assert succs == []
 
     t = Tree("(S (WRB 0) (NN 1))")
     t[1].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     clause, succs, _ = e.read_spine(t, ())
     assert clause == Tree("S", [1, 0])
     assert succs == [(("S",), [t[0]], -1)]
@@ -20,7 +20,7 @@ def test_read_spine():
     t[(0, 1)].type = HEAD
     t[(0, 0, 1)].type = HEAD
     t[(1, 1)].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     clause, succs, _ = e.read_spine(t, ())
     assert clause == Tree("SBAR+S", [Tree("VP", [1, 0]), 2])
     assert succs == [(("SBAR+S", "VP"), [t[(0,0)]], -1), (("SBAR+S",), [t[1]], +1)]
@@ -28,7 +28,7 @@ def test_read_spine():
     e = Extractor(horzmarkov=0)
     t = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4))")
     t[1].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     clause, succs, _ = e.read_spine(t, ())
     assert clause == Tree("S", [1, 0, 2])
     assert succs == [(("S",), [t[0]], -1), (("S",), t[2:], +1)]
@@ -36,14 +36,14 @@ def test_read_spine():
 
 def test_extract():
     e = Extractor(horzmarkov=0, rightmostunary=True, markrepeats=True)
-    t = HeadedTree("(WRB 0)")
+    t = AutoTree("(WRB 0)")
     clause = sdcp_clause.spine(Tree("WRB", [0]))
     assert e.extract_node(t, "ROOT") == Tree(
         extraction_result(0, SortedSet([0]), rule("ROOT", (), dcp=clause)), [])
 
     t = Tree("(S (WRB 0) (NN 1))")
     t[1].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     r1 = rule("ROOT", ["S|<>"], dcp=sdcp_clause.spine(Tree("S", [1, 0])), scomp=lcfrs_composition("10"))
     r2 = rule("S|<>", [], dcp=sdcp_clause.spine(0))
     assert e.extract_node(t, "ROOT") == Tree(
@@ -53,7 +53,7 @@ def test_extract():
     t = Tree("(S (SBAR (WRB 0)) (NN 1))")
     t[1].type = HEAD
     t[(0,0)].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     r1 = rule("ROOT", ["S|<>"], dcp=sdcp_clause.spine("(S 1 0)"), scomp=lcfrs_composition("10"))
     r2 = rule("S|<>", [], dcp=sdcp_clause.spine("(SBAR 0)"))
     assert e.extract_node(t, "ROOT") == Tree(
@@ -66,7 +66,7 @@ def test_extract():
     t[(0,0,1)].type = HEAD
     t[(0,0,0,1)].type = HEAD
     t[(0,1,1)].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     deriv = e.extract_node(t, "ROOT")
     assert deriv.label == extraction_result(3, SortedSet(range(6)),
                                 rule("ROOT", ["VP|<>", "S|<>"], dcp=sdcp_clause.spine("(SBAR (S (VP 1 0) 2))"), scomp=lcfrs_composition("1201")))
@@ -96,7 +96,7 @@ def test_nonbin_extraction():
     e = Extractor(horzmarkov=0, rightmostunary=True)
     t = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4))")
     t[1].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     assert e(t)[0] == [
         rule("S|<>", ()),
         rule("ROOT", ("S|<>", "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=lcfrs_composition("102")),
@@ -108,7 +108,7 @@ def test_nonbin_extraction():
     t = Tree("(S (A 0) (B 1) (T (C 2) (D 3) (E 4)) (D 5) (E 6))")
     t[1].type = HEAD
     t[(2,1)].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     assert e(t)[0] == [
         rule("S|<>", ()),
         rule("ROOT", ("S|<>", "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=lcfrs_composition("102")),
@@ -122,7 +122,7 @@ def test_nonbin_extraction():
     t = Tree("(S (A 0) (B 1) (T (C 2) (D 3) (E 6)) (D 4) (E 5))")
     t[1].type = HEAD
     t[(2,1)].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     assert e(t)[0] == [
         rule("S|<>", ()),
         rule("ROOT", ("S|<>", "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=lcfrs_composition("102")),
@@ -137,7 +137,7 @@ def test_nonbin_extraction():
     t = Tree("(S (A 0) (B 1) (T (C 2) (D 3) (E 6)) (D 4) (E 5))")
     t[1].type = HEAD
     t[(2,1)].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     assert e(t)[0] == [
         rule("ARG(S)", ()),
         rule("ROOT", ("ARG(S)", "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=lcfrs_composition("102")),

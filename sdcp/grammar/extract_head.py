@@ -1,14 +1,15 @@
-from discodop.tree import Tree, ImmutableTree
+from discodop.tree import Tree, ImmutableTree  # type: ignore
 from dataclasses import dataclass, field
-from sortedcontainers import SortedSet
+from sortedcontainers import SortedSet  # type: ignore
 from collections import namedtuple
+from typing import Any
 
-from ..headed_tree import HeadedTree, HEAD
+from ..autotree import AutoTree
 from .lcfrs import lcfrs_composition, ordered_union_composition
 from .sdcp import rule, sdcp_clause
 
 
-def read_clusters(filename):
+def read_clusters(filename: str):
     label_to_clusterid = {}
     with open(filename, "r") as cfile:
         for line in cfile:
@@ -23,10 +24,10 @@ def read_clusters(filename):
 @dataclass
 class Nonterminal:
     horzmarkov: int = 999
-    vertmarkov: int = 1 
+    vertmarkov: int = 1
     rightmostunary: bool = False
     markrepeats: bool = False
-    coarselabels: dict[str, str] = None
+    coarselabels: dict[str, str] | None = None
     bindirection: bool = False
     mark: str = "plain"
 
@@ -36,7 +37,7 @@ class Nonterminal:
         if self.coarselabels:
             self.coarselabels = read_clusters(self.coarselabels)
 
-    def get_label(self, node: HeadedTree) -> str:
+    def get_label(self, node: AutoTree) -> str:
         if not isinstance(node, Tree): return "ARG"
         label = node.label
         if not self.coarselabels is None:
@@ -46,7 +47,7 @@ class Nonterminal:
                 print(f"Warning: in {self.__class__}.get_label: no coarse label found for", label)
         return label
 
-    def vert(self, parents: tuple[str, ...], siblings: tuple[str, ...]) -> str:
+    def vert(self, parents: tuple[str, ...], siblings: list[str]) -> str:
         return self(parents) + f"|<{','.join(siblings[:self.horzmarkov])}>"
 
     def __call__(self, parents: tuple[str, ...]) -> str:
@@ -61,12 +62,12 @@ class Nonterminal:
         return ""
 
 
-extraction_result = namedtuple("extracion_result", ["lex", "leaves", "rule"])
+extraction_result = namedtuple("extraction_result", ["lex", "leaves", "rule"])
 @dataclass(init=False)
 class Extractor:
     nonterminals: Nonterminal
     root: str = "ROOT"
-    ctype: str = "lcfrs"
+    ctype: Any = lcfrs_composition
 
     def __init__(self, root: str = "ROOT", composition: str = "lcfrs", **ntargs):
         self.nonterminals = Nonterminal(**ntargs)
@@ -74,8 +75,8 @@ class Extractor:
         self.__binarize = self.nonterminals.horzmarkov < 999
         self.ctype = {"lcfrs": lcfrs_composition, "dcp": ordered_union_composition}.get(composition, lcfrs_composition)
 
-    def read_spine(self, tree: HeadedTree, parents: tuple[str, ...], firstvar: int = 1):
-        if not isinstance(tree, HeadedTree):
+    def read_spine(self, tree: AutoTree, parents: tuple[str, ...], firstvar: int = 1):
+        if not isinstance(tree, AutoTree):
             return 0, [], firstvar
         children = []
         successors = []
@@ -104,8 +105,8 @@ class Extractor:
         return Tree(tree.label, children), successors, firstvar
 
 
-    def extract_node(self, tree: HeadedTree, overridelhs: str = None, parents: tuple[str, ...] = ()):
-        if not isinstance(tree, HeadedTree):
+    def extract_node(self, tree: AutoTree, overridelhs: str | None = None, parents: tuple[str, ...] = ()):
+        if not isinstance(tree, AutoTree):
             # TODO: use pos symbol?
             lhs = overridelhs if not overridelhs is None else f"ARG({parents[-1]})"
             resultnode = extraction_result(tree, SortedSet([tree]), rule(lhs, ()))
@@ -115,7 +116,7 @@ class Extractor:
         rhs_nts = []
         c, succs, _ = self.read_spine(tree, parents)
         for nparents, succ, direction in succs:
-            children.append(self.extract_nodes(succ, nparents, direction_marker=direction))
+            children.append(self.extract_nodes(succ, nparents, direction=direction))
             rhs_nts.append(children[-1].label.rule.lhs)
         lhs = overridelhs if not overridelhs is None else \
                 self.nonterminals(parents + (self.nonterminals.get_label(tree),))
@@ -151,7 +152,7 @@ class Extractor:
             extraction_result(mod_deriv.label.lex, positions, newrule), children)
  
 
-    def extract_nodes(self, trees: list[HeadedTree], parents: tuple[str, ...], direction_marker: int = 0):
+    def extract_nodes(self, trees: list[AutoTree], parents: tuple[str, ...], direction: int = 0):
         markovnts = [trees[-1].label if isinstance(trees[-1], Tree) else "POS"]
         lowestnt = None
         if self.nonterminals.rightmostunary:
@@ -164,7 +165,7 @@ class Extractor:
             child = self.extract_node(tree, self.nonterminals.vert(parents, markovnts), parents)
             deriv = self._fuse_modrule(child, deriv, yd)
         if self.nonterminals.bindirection:
-            direction_marker = {-1: "[L]", +1: ""}[direction_marker]
+            direction_marker = {-1: "[L]", +1: ""}[direction]
             deriv.label = extraction_result(
                 deriv.label.lex,
                 deriv.label.leaves,

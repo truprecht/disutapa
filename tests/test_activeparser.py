@@ -4,14 +4,14 @@ from sdcp.grammar.parser.activeparser import ActiveParser
 from sdcp.corpus import corpus_extractor
 from sdcp.autotree import with_pos
 from random import sample, randint, shuffle
-from sdcp.headed_tree import HeadedTree, Tree, HEAD
+from sdcp.autotree import AutoTree, Tree, HEAD
 
 hrules = [
     rule("arg(V)[L]", ()),
     rule("arg(N)[L]", ()),
     rule("arg(S)[L]", ("arg(N)[L]",), dcp=sdcp_clause.spine("(NP 1 0)")),
-    rule("ROOT", ("arg(V)", "arg(S)[L]"), dcp=sdcp_clause.spine("(SBAR (S (VP 1 0) 2))"), scomp=lcfrs_composition("1201")),
-    rule("arg(V)", ("arg(V)[L]", "arg(V)"), dcp=sdcp_clause.spine("(VP 1 0 2)"), scomp=lcfrs_composition("1,02")),
+    rule("ROOT", ("arg(V)[L]", "arg(S)[L]"), dcp=sdcp_clause.spine("(SBAR (S (VP 1 0) 2))"), scomp=lcfrs_composition("1201")),
+    rule("arg(V)[L]", ("arg(V)[L]", "arg(V)"), dcp=sdcp_clause.spine("(VP 1 0 2)"), scomp=lcfrs_composition("1,02")),
     rule("arg(V)", ()),
 ]
 
@@ -41,7 +41,7 @@ def test_pipeline():
     t[(0, 1)].type = HEAD
     t[(0, 0, 1)].type = HEAD
     t[(1, 1)].type = HEAD
-    rules, _ = Extractor()(HeadedTree.convert(t))
+    rules, _ = Extractor()(AutoTree.convert(t))
     print(rules)
     parse = ActiveParser(grammar(rules))
     parse.init(*([(r, 0)] for r in range(6)))

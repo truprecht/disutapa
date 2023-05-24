@@ -1,25 +1,23 @@
-from discodop.tree import Tree
-from sortedcontainers import SortedSet
+from discodop.tree import Tree   # type: ignore
+from sortedcontainers import SortedSet   # type: ignore
 from .sdcp import rule, sdcp_clause
 from .lcfrs import lcfrs_composition, ordered_union_composition
 
 
-def singleton(tree: Tree, nonterminal: str = "ROOT"):
+def singleton(tree: Tree, nonterminal: str = "ROOT") -> tuple[tuple[rule, ...], tuple[str, ...]]:
     label, pos = "+".join(tree.label.split("+")[:-1]), tree.label.split("+")[-1]
-    label = label or None
-    return (rule(nonterminal, (), dcp=sdcp_clause.binary_node(label)),), (pos,)
+    return (rule(nonterminal, (), dcp=sdcp_clause.binary_node(label or None)),), (pos,)
 
 
-def getnt(type: str, base: str, fanout: int):
-    if type == "plain":
-        return base
+def getnt(type: str, base: str, fanout: int) -> str:
     if type.startswith("d"):
         return base + ("/D" if fanout > 1 else "")
     if type.startswith("f"):
         return f"{base}/{fanout}"
+    return base
 
 
-def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str = None, ctype = lcfrs_composition, ntype = "plain") -> Tree:
+def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str | None = None, ctype = lcfrs_composition, ntype = "plain") -> Tree:
     if not isinstance(tree, Tree):
         if tree in exclude:
             return None

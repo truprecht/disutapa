@@ -1,11 +1,12 @@
 from dataclasses import dataclass
-from ..lcfrs import disco_span, lcfrs_composition
+from typing import cast
+from ..lcfrs import disco_span, lcfrs_composition, NtOrLeaf
 
 @dataclass
 class backtrace:
     rid: int
     leaf: int
-    children: tuple[int]
+    children: tuple[int, ...]
 
     def as_tuple(self):
         return self.rid, self.children
@@ -21,9 +22,25 @@ class PassiveItem:
         return other.leaves > self.leaves
 
 
+@dataclass(frozen=True)
+class ActiveItem:
+    lhs: str
+    leaves: disco_span
+    remaining_function: lcfrs_composition
+    remaining: tuple[NtOrLeaf, ...]
+
+    def __gt__(self, other: "ActiveItem") -> bool:
+        if isinstance(other, PassiveItem): return True
+        return (other.leaves, len(self.remaining)) > (self.leaves, len(other.remaining))
+    
+    def is_compatible(self, span: disco_span) -> bool:
+        # print(self.leaves, span, self.remaining, self.leaves < span and all(span < n.get_leaf() for n in self.remaining if n.is_leaf))
+        return self.leaves < span and all(span < n.get_leaf() for n in self.remaining if n.is_leaf)
+
+
 @dataclass(eq=False, order=False)
 class qelement:
-    item: int
+    item: ActiveItem | PassiveItem
     bt: backtrace
     weight: float
 
@@ -37,22 +54,13 @@ class qelement:
         return self.item, self.bt, self.weight
 
 
-@dataclass(frozen=True)
-class ActiveItem:
-    lhs: str
-    leaves: disco_span
-    remaining_function: lcfrs_composition
-    remaining: tuple[str]
-
-    def __gt__(self, other: "ActiveItem") -> bool:
-        if isinstance(other, PassiveItem): return True
-        return (other.leaves, len(self.remaining)) > (self.leaves, len(other.remaining))
-
-
-def item(lhs: str, leaves: disco_span, remaining_function: lcfrs_composition, remaining_rhs: tuple[str | int]):
-    if remaining_rhs and isinstance(remaining_rhs[0], int):
-        lr = remaining_rhs[0], remaining_rhs[0]+1
-        leaves, remaining_function = remaining_function.partial(leaves, disco_span(lr))
+def item(lhs: str, leaves: disco_span, remaining_function: lcfrs_composition, remaining_rhs: tuple[NtOrLeaf, ...]) -> ActiveItem | PassiveItem:
+    if remaining_rhs and remaining_rhs[0].is_leaf:
+        nleaves, nfunction = remaining_function.partial(leaves, disco_span.singleton(remaining_rhs[0].get_leaf()))
+        # if nleaves is None or nfunction is None:
+        #     # should not happen, because the spans are checked beforehand
+        #     raise ValueError("tried to construct item with spans", leaves, "and leaf", remaining_rhs[0].get_leaf())
+        leaves, remaining_function = nleaves, nfunction
         remaining_rhs = remaining_rhs[1:]
     if not remaining_rhs:
         return PassiveItem(lhs, leaves)

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Tuple, Iterable
 from itertools import chain, repeat
-from discodop.tree import Tree, ImmutableTree
+from discodop.tree import Tree, ImmutableTree # type: ignore
 
 from .lcfrs import lcfrs_composition, ordered_union_composition
     
@@ -9,7 +9,7 @@ from .lcfrs import lcfrs_composition, ordered_union_composition
 @dataclass
 class tree_constructor:
     context: tuple[ImmutableTree|int, ...]
-    arguments: list[int, int|None]
+    arguments: list[int|None]
 
     def subst(self, tree, *args):
         if not isinstance(tree, Tree):
@@ -61,7 +61,7 @@ class sdcp_clause:
 
     @classmethod
     def binary_node(cls, node: str|None = None, arity: int = 0, transport_idx: int|None = None):
-        args = [None]*arity
+        args: list[int|None] = [None]*arity
         children = [0, 1]
         if arity == 2:
             if transport_idx is None:
@@ -72,24 +72,24 @@ class sdcp_clause:
         if arity == 1:
             args[0] = 1 if transport_idx is None else 0
             children = [0 if transport_idx is None else 1, 2]
-        node = (ImmutableTree(node, children),) if not node is None else tuple(children)
-        return cls(node, tuple(args))
+        context = (ImmutableTree(node, children),) if not node is None else tuple(children)
+        return cls(context, tuple(args))
 
     @classmethod
     def spine(cls, *context: Tree|int|str):
         if context == (0,):
             return cls.default(0)
-        context = (
+        context_with_snd_order_var = (
             _increase_vars(Tree(t) if isinstance(t, str) else t)
             for t in context
         )
         context = tuple(
             ImmutableTree.convert(t) if isinstance(t, Tree) else t
-            for t in context
+            for t in context_with_snd_order_var
         )
         return cls(context)
 
-    def __call__(self, lex: int, arg: int|None = None) -> tuple[tree_constructor, Iterable[int]]:
+    def __call__(self, lex: int, arg: int|None = None) -> tuple[tree_constructor, Iterable[int|None]]:
         largs = [lex, arg]
         for i in (0,1):
             if i in self.arguments:
@@ -104,9 +104,9 @@ class sdcp_clause:
 @dataclass(frozen=True, init=False)
 class rule:
     lhs: str
-    rhs: tuple[str] = ()
-    scomp: lcfrs_composition | ordered_union_composition = None
-    dcp: sdcp_clause = None
+    rhs: tuple[str, ...]
+    scomp: lcfrs_composition | ordered_union_composition
+    dcp: sdcp_clause
 
     def __init__(self, lhs, rhs = (), scomp = None, dcp = None):
         if scomp is None:
@@ -120,7 +120,14 @@ class rule:
 
 
     @classmethod
-    def from_guided(cls, lhs: str, rhs: tuple[str, ...], dnode: str = None, dtrans: int = None, scomp: str|ordered_union_composition = None):
+    def from_guided(
+            cls,
+            lhs: str,
+            rhs: tuple[str, ...],
+            dnode: str | None = None,
+            dtrans: int | None = None,
+            scomp: str | lcfrs_composition | ordered_union_composition | None = None
+            ) -> "rule":
         dcp = sdcp_clause.binary_node(dnode, len(rhs), dtrans)
         if scomp is None and dtrans == 0:
             scomp = lcfrs_composition(range(len(rhs)+1))
@@ -129,7 +136,13 @@ class rule:
         return cls(lhs, rhs, dcp=dcp, scomp=scomp)
         
     @classmethod
-    def from_spine(cls, lhs: str, rhs: tuple[str, ...], spine: tuple[str|int|Tree]|str|int|Tree, scomp: str|ordered_union_composition = None):
+    def from_spine(
+            cls,
+            lhs: str,
+            rhs: tuple[str, ...],
+            spine: tuple[str|int|Tree] | str | int | Tree,
+            scomp: str | lcfrs_composition | ordered_union_composition | None = None
+            ) -> "rule":
         if not isinstance(spine, tuple):
             spine = (spine,)
         dcp = sdcp_clause.spine(spine)

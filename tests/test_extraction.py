@@ -2,7 +2,7 @@ from sdcp.grammar.extract import rule, extract, __extract_tree, singleton, sdcp_
 from sdcp.corpus import corpus_extractor
 from sdcp.autotree import AutoTree, Tree
 
-from sortedcontainers import SortedSet
+from sortedcontainers import SortedSet # type: ignore
 
 def test_singleton():
     tree = AutoTree("(ROOT 0)")
@@ -61,7 +61,7 @@ def test_corpus_extractor():
 
 def test_derivations():
     from sdcp.grammar.extract import __extract_tree
-    from discodop.tree import Tree
+    from discodop.tree import Tree # type: ignore
 
     def eval_derivation(deriv, p = None):
         lex, _, rul = deriv.label

@@ -1,18 +1,17 @@
 from typing import Iterable, Tuple
-from discodop.treebank import READERS, CorpusReader
-from discodop.treetransforms import binarize, collapseunary
-from discodop.tree import Tree
+from discodop.treebank import READERS, CorpusReader  # type: ignore
+from discodop.treetransforms import binarize, collapseunary  # type: ignore
+from discodop.tree import Tree  # type: ignore
 from collections import defaultdict
 from dataclasses import dataclass
 
-from .grammar.extract import extract, singleton
+from .grammar.extract import extract, singleton, rule
 from .grammar.extract_head import Extractor
 from .autotree import AutoTree
-from .headed_tree import HeadedTree
 
 
 class corpus_extractor:
-    def __init__(self, filename_or_iterator: str | Iterable[Tuple[Tree, Iterable[str]]], headrules: str = None, guide="head", cmode="lcfrs", ntmode="plain", **binparams):
+    def __init__(self, filename_or_iterator: str | Iterable[Tuple[Tree, Iterable[str]]], headrules: str | None = None, guide="head", cmode="lcfrs", ntmode="plain", **binparams):
         if isinstance(filename_or_iterator, str):
             filetype = filename_or_iterator.split(".")[-1]
             if filetype == "xml":
@@ -21,13 +20,13 @@ class corpus_extractor:
             self.trees = READERS[filetype](filename_or_iterator, encoding=encoding, punct="move", headrules=headrules)
         else:
             self.trees = filename_or_iterator
-        self.rules = defaultdict(lambda: len(self.rules))
-        self.sentences = []
-        self.goldtrees = []
-        self.goldrules = []
-        self.goldpos = []
-        self.goldderivs = []
-        self.idx = {}
+        self.rules: dict[rule, int] = defaultdict(lambda: len(self.rules))
+        self.sentences: list[tuple[str, ...]] = []
+        self.goldtrees: list[Tree] = []
+        self.goldrules: list[tuple[rule, ...]] = []
+        self.goldpos: list[tuple[str, ...]] = []
+        self.goldderivs: list[Tree] = []
+        self.idx: dict[int, int] = {}
         self._binparams = binparams
         # todo: merge headed and strict extraction and remove this
         if not headrules:
@@ -36,20 +35,21 @@ class corpus_extractor:
         self.cmode = cmode
         self.ntmode = ntmode
 
-    def read(self, lrange: range = None):
+    def read(self, lrange: range | None = None):
         if isinstance(self.trees, CorpusReader):
             start, stop = None, None
             if not lrange is None:
                 start, stop = lrange.start, lrange.stop
-            treeit = ((Tree.convert(item.tree), item.sent) for _, item in self.trees.itertrees(start, stop))
-            treeit = zip(lrange, treeit) if not lrange is None else enumerate(treeit)
+            trees_sents = ((Tree.convert(item.tree), item.sent) for _, item in self.trees.itertrees(start, stop))
+            treeit: Iterable[tuple[int, tuple[Tree, list[str]]]] \
+                = zip(lrange, trees_sents) if not lrange is None else enumerate(trees_sents)
         else:
             treeit = enumerate(self.trees)
         for i, (tree, sent) in treeit:
             if not isinstance(self.trees, CorpusReader) and not (lrange is None or i in lrange): continue
             self.idx[i] = len(self.goldtrees)
             if self.guide == "head":
-                ht = HeadedTree.convert(tree)
+                ht: AutoTree = AutoTree.convert(tree)
                 rules, deriv = Extractor(**self._binparams, composition=self.cmode, mark=self.ntmode)(ht)
                 rules = tuple(self.rules[gr] for gr in rules)
                 pos = tuple(p for _, p in sorted(ht.postags.items()))
@@ -60,10 +60,9 @@ class corpus_extractor:
                     rules = tuple(self.rules[gr] for gr in rules)
                     deriv = 0
                 else:
-                    bintree = binarize(
+                    bintree: AutoTree = AutoTree.convert(binarize(
                         collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True),
-                        **self._binparams)
-                    bintree = AutoTree.convert(bintree)
+                        **self._binparams))
                     rules, deriv = extract(bintree, ctype=self.cmode, ntype=self.ntmode)
                     rules = tuple(self.rules[gr] for gr in rules)
                     for node in deriv.subtrees():

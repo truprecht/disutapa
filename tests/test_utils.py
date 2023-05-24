@@ -1,6 +1,6 @@
 from sdcp.autotree import AutoTree
-from sdcp.headed_tree import HeadedTree
-from discodop.tree import Tree, HEAD
+from sdcp.autotree import AutoTree
+from discodop.tree import Tree, HEAD # type: ignore
 
 def test_tree():
     t = AutoTree("(WRB 0)")
@@ -23,7 +23,7 @@ def test_tree():
 
 
 def test_unary_singleton():
-    from discodop.treetransforms import collapseunary
+    from discodop.treetransforms import collapseunary # type: ignore
     
     t = AutoTree("(ROOT (S ($. 0)))")
     assert t == Tree("(ROOT (S 0))")
@@ -35,8 +35,8 @@ def test_unary_singleton():
     assert t == Tree("(ROOT+S+$. 0)")
 
 
-def test_headed_tree():
-    t = HeadedTree("(WRB 0)")
+def test_auto_tree():
+    t = AutoTree("(WRB 0)")
     assert t.label == "WRB"
     assert t.children == [0]
     assert t.postags == {}
@@ -46,7 +46,7 @@ def test_headed_tree():
 
     t = Tree("(S (WRB 0) (NN 1))")
     t[1].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     assert t.label == "S"
     assert t.children == [0, 1]
     assert t.postags == {0: "WRB", 1: "NN"}
@@ -59,7 +59,7 @@ def test_headed_tree():
     t[(0, 1)].type = HEAD
     t[(0, 0, 1)].type = HEAD
     t[(1, 1)].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     assert t.headidx == 0
     assert t.headterm == 3
     assert t[0].headidx == 1

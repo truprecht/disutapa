@@ -3,9 +3,9 @@ from sdcp.grammar.parser.activeparser import ActiveParser, grammar
 from sdcp.autotree import AutoTree, Tree
 
 from sdcp.grammar.extract_head import Extractor, SortedSet, ordered_union_composition, sdcp_clause
-from sdcp.headed_tree import HeadedTree, Tree, HEAD
+from sdcp.autotree import AutoTree, Tree, HEAD
 
-from sortedcontainers import SortedSet
+from sortedcontainers import SortedSet # type: ignore
 
 def test_extract():
     tree = AutoTree("(SBAR+S (VP (VP 0 (VP|<> 4 5)) 3) (NP 1 2))")
@@ -33,7 +33,7 @@ def test_nonbin_extraction():
     e = Extractor(horzmarkov=0, rightmostunary=True, composition="dcp")
     t = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4))")
     t[1].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     assert e(t)[0] == [
         rule("S|<>", ()),
         rule("ROOT", ("S|<>", "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=ordered_union_composition("102")),
@@ -45,7 +45,7 @@ def test_nonbin_extraction():
     t = Tree("(S (A 0) (B 1) (T (C 2) (D 3) (E 4)) (D 5) (E 6))")
     t[1].type = HEAD
     t[(2,1)].type = HEAD
-    t = HeadedTree.convert(t)
+    t = AutoTree.convert(t)
     assert e(t)[0] == [
         rule("S|<>", ()),
         rule("ROOT", ("S|<>", "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=ordered_union_composition("102")),
@@ -78,7 +78,7 @@ def test_pipeline():
     t[(0, 0, 1)].type = HEAD
     t[(1, 1)].type = HEAD
     e = Extractor(composition="dcp")
-    rules, _ = e(HeadedTree.convert(t))
+    rules, _ = e(AutoTree.convert(t))
     print(rules)
     parse = ActiveParser(grammar(rules))
     parse.init(*([(r, 0)] for r in range(6)))

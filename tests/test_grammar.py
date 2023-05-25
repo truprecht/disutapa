@@ -1,20 +1,21 @@
 from sdcp.grammar.sdcp import sdcp_clause, tree_constructor, rule, Tree, lcfrs_composition, ImmutableTree
 
+example_rules = [
+    rule("L-VP"),
+    rule("ROOT", ("VP", None, "NP"), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=lcfrs_composition("0120")),
+    rule("NP", dcp=sdcp_clause.binary_node("NP")),
+    rule("VP", ("VP", None), dcp=sdcp_clause.binary_node("VP", 1), scomp=lcfrs_composition("0,10")),
+    rule("VP", ("L-VP", None, "VP|<>"), dcp=sdcp_clause.binary_node("VP", 2), scomp=lcfrs_composition("0,12")),
+    rule("VP|<>"),
+]
+
 def test_str_rule():
-    rules = [
-        rule("L-VP", ()),
-        rule("SBAR+S", ("VP", "NP"), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=lcfrs_composition("1012")),
-        rule("NP", (), dcp=sdcp_clause.binary_node("NP")),
-        rule("VP", ("VP",), dcp=sdcp_clause.binary_node("VP", arity=1, transport_idx=None), scomp=lcfrs_composition("1,01")),
-        rule("VP", ("L-VP", "VP|<>"), dcp=sdcp_clause.binary_node("VP", arity=2), scomp=lcfrs_composition("1,02")),
-        rule("VP|<>", ()),
-    ]
-    assert [repr(r) for r in rules] ==  [
+    assert [repr(r) for r in example_rules] ==  [
         "rule('L-VP')",
-        "rule('SBAR+S', ('VP', 'NP'), lcfrs_composition('1012'), sdcp_clause('(SBAR+S 2 3)', args=(1, 0)))",
+        "rule('ROOT', ('VP', None, 'NP'), lcfrs_composition('0120'), sdcp_clause('(SBAR+S 2 3)', args=(1, 0)))",
         "rule('NP', dcp=sdcp_clause('(NP 0 1)'))",
-        "rule('VP', ('VP',), lcfrs_composition('1,01'), sdcp_clause('(VP 0 2)', args=(1,)))",
-        "rule('VP', ('L-VP', 'VP|<>'), lcfrs_composition('1,02'), sdcp_clause('(VP 2 3)', args=(1, 0)))",
+        "rule('VP', ('VP', None), lcfrs_composition('0,10'), sdcp_clause('(VP 0 2)', args=(1,)))",
+        "rule('VP', ('L-VP', None, 'VP|<>'), lcfrs_composition('0,12'), sdcp_clause('(VP 2 3)', args=(1, 0)))",
         "rule('VP|<>')",
     ]
 

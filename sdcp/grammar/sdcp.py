@@ -2,8 +2,9 @@ from dataclasses import dataclass
 from typing import Tuple, Iterable
 from itertools import chain, repeat
 from discodop.tree import Tree, ImmutableTree # type: ignore
+from sortedcontainers import SortedSet # type: ignore
 
-from .lcfrs import lcfrs_composition, ordered_union_composition
+from .lcfrs import lcfrs_composition, ordered_union_composition, NtOrLeaf
     
 
 @dataclass
@@ -104,17 +105,21 @@ class sdcp_clause:
 @dataclass(frozen=True, init=False)
 class rule:
     lhs: str
-    rhs: tuple[str, ...]
+    rhs: tuple[NtOrLeaf, ...]
     scomp: lcfrs_composition | ordered_union_composition
     dcp: sdcp_clause
 
-    def __init__(self, lhs, rhs = (), scomp = None, dcp = None):
+    def __init__(self, lhs, rhs: tuple[str|None, ...] = (None,), scomp = None, dcp = None):
+        irhs = tuple(
+            NtOrLeaf.nt(r) if not r is None else NtOrLeaf.leaf()
+            for r in rhs)
+        assert any(r.is_leaf() for r in irhs) and len(irhs) >= 1
         if scomp is None:
             scomp = lcfrs_composition.default(len(rhs))
         if dcp is None:
-            dcp = sdcp_clause.default(len(rhs))
+            dcp = sdcp_clause.default(len(rhs)-1)
         object.__setattr__(self, "lhs", lhs)
-        object.__setattr__(self, "rhs", tuple(rhs))
+        object.__setattr__(self, "rhs", irhs)
         object.__setattr__(self, "scomp", scomp)
         object.__setattr__(self, "dcp", dcp)
 
@@ -151,14 +156,25 @@ class rule:
         return cls(lhs, rhs, dcp=dcp, scomp=scomp)
 
 
+    # def normalize_order(self, lexical: int, child_spans: list[SortedSet]) -> "rule":
+    #     original_order: tuple[NtOrLeaf, ...] = (NtOrLeaf(lexical, is_leaf=True), *(NtOrLeaf(nt, is_leaf=False) for nt in self.rhs))
+    #     reordered_rhs = tuple(original_order[i] for i in self.order_and_fanout[:-1])
+    #     occs = sorted(range(len(original_order)), key=lambda x: next(i for i,v in enumerate(self.inner) if v ==x))
+    #     revoccs = {oldpos: newpos for newpos, oldpos in enumerate(occs)}
+    #     revoccs[255] = 255
+    #     comp = self.__class__(revoccs[v] for v in self.inner)
+    #     return comp, tuple(original_order[i] for i in occs)
+    #     return canon_composition, reordered_rhs
+
+
     def __repr__(self):
         args = [repr(self.lhs)]
-        if self.rhs:
-            args.append(repr(self.rhs))
+        if self.rhs != (NtOrLeaf.leaf(),):
+            args.append(repr(tuple(r.payload for r in self.rhs)))
         if self.scomp != lcfrs_composition.default(len(self.rhs)):
             kw = "scomp=" if len(args) < 2 else ""
             args.append(f"{repr(self.scomp)}")
-        if self.dcp != sdcp_clause.default(len(self.rhs)):
+        if self.dcp != sdcp_clause.default(len(self.rhs)-1):
             kw = "dcp=" if len(args) < 3 else ""
             args.append(f"{kw}{repr(self.dcp)}")
         return f"{self.__class__.__name__}({', '.join(args)})"

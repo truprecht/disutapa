@@ -34,7 +34,7 @@ class ActiveParser:
             for rid, weight in rules:
                 weight = weight - minweight
                 r: rule = self.grammar.rules[rid]
-                it = item(r.lhs, disco_span(), *r.scomp.reorder_rhs(r.rhs, i))
+                it = item(r.lhs, disco_span(), r.scomp, r.rhs, i)
                 self.queue.append(qelement(
                     it,
                     backtrace(rid, i, ()),
@@ -89,11 +89,10 @@ class ActiveParser:
                 # print("discarding item")
                 continue
             expanded.add(qi.item)
-            # print("expand item", qi.item, "#", len(self.items))
+            print("expand item", qi.item, "#", len(self.items))
 
             if isinstance(qi.item, PassiveItem):
                 backtrace_id = len(self.backtraces)
-                qi.bt.children = self.grammar.rules[qi.bt.rid].scomp.undo_reorder(qi.bt.children)
                 self.backtraces.append(qi.bt)
                 self.items.append(qi.item)
 
@@ -122,7 +121,7 @@ class ActiveParser:
                     newpos, newcomp = active.remaining_function.partial(active.leaves, qi.item.leaves)
                     if newpos is None: continue
                     register_item(qelement(
-                        item(active.lhs, newpos, newcomp, active.remaining[1:]),
+                        item(active.lhs, newpos, newcomp, active.remaining[1:], active.leaf),
                         backtrace(abt.rid, abt.leaf, abt.children+(backtrace_id,)),
                         qi.weight+_weight,
                     ))
@@ -135,7 +134,7 @@ class ActiveParser:
                 newpos, newfunc = qi.item.remaining_function.partial(qi.item.leaves, span)
                 if newpos is None: continue
                 register_item(qelement(
-                    item(qi.item.lhs, newpos, newfunc, qi.item.remaining[1:]),
+                    item(qi.item.lhs, newpos, newfunc, qi.item.remaining[1:], qi.item.leaf),
                     backtrace(qi.bt.rid, qi.bt.leaf, qi.bt.children+(pbt,)),
                     qi.weight+pweight
                 ))

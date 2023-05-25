@@ -7,12 +7,12 @@ from random import sample, randint, shuffle
 from sdcp.autotree import AutoTree, Tree, HEAD
 
 hrules = [
-    rule("arg(V)[L]", ()),
-    rule("arg(N)[L]", ()),
-    rule("arg(S)[L]", ("arg(N)[L]",), dcp=sdcp_clause.spine("(NP 1 0)")),
-    rule("ROOT", ("arg(V)[L]", "arg(S)[L]"), dcp=sdcp_clause.spine("(SBAR (S (VP 1 0) 2))"), scomp=lcfrs_composition("1201")),
-    rule("arg(V)[L]", ("arg(V)[L]", "arg(V)"), dcp=sdcp_clause.spine("(VP 1 0 2)"), scomp=lcfrs_composition("1,02")),
-    rule("arg(V)", ()),
+    rule("arg(V)[L]"),
+    rule("arg(N)[L]"),
+    rule("arg(S)[L]", ("arg(N)[L]", None,), dcp=sdcp_clause.spine("(NP 1 0)")),
+    rule("ROOT", ("arg(V)[L]", "arg(S)[L]", None), dcp=sdcp_clause.spine("(SBAR (S (VP 1 0) 2))"), scomp=lcfrs_composition("0120")),
+    rule("arg(V)[L]", ("arg(V)[L]", None, "arg(V)"), dcp=sdcp_clause.spine("(VP 1 0 2)"), scomp=lcfrs_composition("0,12")),
+    rule("arg(V)"),
 ]
 
 def test_active_parser():

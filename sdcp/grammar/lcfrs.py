@@ -85,26 +85,23 @@ class disco_span:
 
 @dataclass(frozen=True)
 class NtOrLeaf:
-    payload: str | int
-    is_leaf: bool
-
-    def get_leaf(self) -> int:
-        if not self.is_leaf:
-            raise ValueError()
-        return cast(int, self.payload)
+    payload: str | None
     
     def get_nt(self) -> str:
-        if self.is_leaf:
+        if self.payload is None:
             raise ValueError()
-        return cast(str, self.payload)
+        return self.payload
+    
+    def is_leaf(self) -> bool:
+        return self.payload is None
     
     @classmethod
     def nt(cls, n: str) -> "NtOrLeaf":
-        return cls(n, False)
+        return cls(n)
     
     @classmethod
-    def leaf(cls, i: int) -> "NtOrLeaf":
-        return cls(i, True)
+    def leaf(cls) -> "NtOrLeaf":
+        return cls(None)
 
 
 @dataclass(init=False, frozen=True)
@@ -121,16 +118,16 @@ class ordered_union_composition:
     def fanout(self):
         return self.order_and_fanout[-1]
 
-    def reorder_rhs(self, rhs: tuple[str, ...], leaf: int) -> tuple["ordered_union_composition", tuple[NtOrLeaf, ...]]:
-        original_order: tuple[NtOrLeaf, ...] = (NtOrLeaf(leaf, is_leaf=True), *(NtOrLeaf(nt, is_leaf=False) for nt in rhs))
-        canon_composition = self.__class__([], self.order_and_fanout[-1])
-        reordered_rhs = tuple(original_order[i] for i in self.order_and_fanout[:-1])
-        return canon_composition, reordered_rhs
+    # def reorder_rhs(self, rhs: tuple[str, ...], leaf: int) -> tuple["ordered_union_composition", tuple[NtOrLeaf, ...]]:
+    #     original_order: tuple[NtOrLeaf, ...] = (NtOrLeaf(leaf, is_leaf=True), *(NtOrLeaf(nt, is_leaf=False) for nt in rhs))
+    #     canon_composition = self.__class__([], self.order_and_fanout[-1])
+    #     reordered_rhs = tuple(original_order[i] for i in self.order_and_fanout[:-1])
+    #     return canon_composition, reordered_rhs
     
-    def undo_reorder(self, successors: tuple) -> Iterable[int]:
-        varpos = (v for v in self.order_and_fanout[:-1] if not v == 0)
-        indices = (i for i, _ in sorted(enumerate(varpos), key=lambda x: x[1]))
-        return (successors[i] for i in indices)
+    # def undo_reorder(self, successors: tuple) -> Iterable[int]:
+    #     varpos = (v for v in self.order_and_fanout[:-1] if not v == 0)
+    #     indices = (i for i, _ in sorted(enumerate(varpos), key=lambda x: x[1]))
+    #     return (successors[i] for i in indices)
 
     @classmethod
     def from_positions(cls, positions, successor_positions: list[SortedSet]):
@@ -175,24 +172,28 @@ class lcfrs_composition:
     
     @classmethod
     def default(cls, arity: int):
-        return cls(i for i in (1,0,*range(2,arity+1)) if i <= arity)
+        return cls(range(arity))
 
     @property
     def fanout(self):
         return sum(1 for c in self.inner if c == 255)+1
     
-    def reorder_rhs(self, rhs: tuple[str|int, ...], leaf: int) -> tuple["lcfrs_composition", tuple[NtOrLeaf, ...]]:
-        original_order: tuple[NtOrLeaf, ...] = (NtOrLeaf(leaf, is_leaf=True), *(NtOrLeaf(nt, is_leaf=False) for nt in rhs))
-        occs = sorted(range(len(original_order)), key=lambda x: next(i for i,v in enumerate(self.inner) if v ==x))
-        revoccs = {oldpos: newpos for newpos, oldpos in enumerate(occs)}
-        revoccs[255] = 255
-        comp = self.__class__(revoccs[v] for v in self.inner)
-        return comp, tuple(original_order[i] for i in occs)
+    # def reorder_rhs(self, rhs: tuple[str|int, ...], leaf: int) -> tuple["lcfrs_composition", tuple[NtOrLeaf, ...]]:
+    #     original_order: tuple[NtOrLeaf, ...] = (NtOrLeaf(leaf, is_leaf=True), *(NtOrLeaf(nt, is_leaf=False) for nt in rhs))
+    #     occs = sorted(range(len(original_order)), key=lambda x: next(i for i,v in enumerate(self.inner) if v ==x))
+    #     revoccs = {oldpos: newpos for newpos, oldpos in enumerate(occs)}
+    #     revoccs[255] = 255
+    #     comp = self.__class__(revoccs[v] for v in self.inner)
+    #     return comp, tuple(original_order[i] for i in occs)
     
     @classmethod
-    def from_positions(cls, positions: Iterable[int], successor_positions: list[SortedSet]):
+    def from_positions(cls,
+            positions: Iterable[int],
+            successor_positions: list[SortedSet],
+            ) -> tuple["lcfrs_composition", Iterable[int]]:
         last_position: int | None = None
         vars: list[int] = []
+        revorder: dict[int, int] = {}
         for p in positions:
             if not last_position is None and last_position+1 < p:
                 vars.append(255)
@@ -200,10 +201,11 @@ class lcfrs_composition:
             for i, sp in enumerate(successor_positions):
                 if p in sp:
                     var = i+1
+            var = revorder.setdefault(var, len(revorder))
             if not vars or vars[-1] != var:
                 vars.append(var)
             last_position = p
-        return cls(vars)
+        return cls(vars), revorder.keys()
         
     
     def partial(self, part: disco_span, x: disco_span) -> tuple[disco_span, "lcfrs_composition"] | tuple[None, None]:
@@ -255,7 +257,7 @@ class lcfrs_composition:
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({str(self)})"
     
-    def undo_reorder(self, successors):
-        occs = sorted(range(len(successors)), key=lambda x: next(i for i,v in enumerate(self.inner) if v==x+1))
-        revoccs = {oldpos: newpos for newpos, oldpos in enumerate(occs)}
-        return tuple(successors[revoccs[i]] for i in range(len(successors)))
+    # def undo_reorder(self, successors):
+    #     occs = sorted(range(len(successors)), key=lambda x: next(i for i,v in enumerate(self.inner) if v==x+1))
+    #     revoccs = {oldpos: newpos for newpos, oldpos in enumerate(occs)}
+    #     return tuple(successors[revoccs[i]] for i in range(len(successors)))

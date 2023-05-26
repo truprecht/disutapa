@@ -118,24 +118,17 @@ class ordered_union_composition:
     def fanout(self):
         return self.order_and_fanout[-1]
 
-    # def reorder_rhs(self, rhs: tuple[str, ...], leaf: int) -> tuple["ordered_union_composition", tuple[NtOrLeaf, ...]]:
-    #     original_order: tuple[NtOrLeaf, ...] = (NtOrLeaf(leaf, is_leaf=True), *(NtOrLeaf(nt, is_leaf=False) for nt in rhs))
-    #     canon_composition = self.__class__([], self.order_and_fanout[-1])
-    #     reordered_rhs = tuple(original_order[i] for i in self.order_and_fanout[:-1])
-    #     return canon_composition, reordered_rhs
-    
-    # def undo_reorder(self, successors: tuple) -> Iterable[int]:
-    #     varpos = (v for v in self.order_and_fanout[:-1] if not v == 0)
-    #     indices = (i for i, _ in sorted(enumerate(varpos), key=lambda x: x[1]))
-    #     return (successors[i] for i in indices)
-
     @classmethod
-    def from_positions(cls, positions, successor_positions: list[SortedSet]):
+    def from_positions(
+            cls,
+            positions,
+            successor_positions: list[SortedSet]
+            ) -> tuple["ordered_union_composition", Iterable[int]]:
         lex = next(p for p in positions if all((not p in spos) for spos in successor_positions))
         succs = {p: i+1 for i, p in enumerate(spos[0] for spos in successor_positions)}
         succs[lex] = 0
         order = (succs[p] for p in sorted(succs.keys()))
-        return cls(order, fanout(positions))
+        return cls(order, fanout(positions)), order
         
     def partial(self, x: disco_span, y: disco_span) -> tuple[disco_span | None, Union["ordered_union_composition", None]]:
         if not x:
@@ -168,6 +161,12 @@ class lcfrs_composition:
                 int(v) if isinstance(v, int) or "0" <= v <= "9" else 255
                 for v in vars)
             vars = bytes(vars)
+        # check ordered variables
+        seen = SortedSet()
+        for v in vars:
+            if v != 255 and not v in seen:
+                assert not seen or v > seen[-1], f"lcfrs composition {vars!r} is not ordered"
+                seen.add(v)
         self.__dict__["inner"] = vars
     
     @classmethod
@@ -177,14 +176,6 @@ class lcfrs_composition:
     @property
     def fanout(self):
         return sum(1 for c in self.inner if c == 255)+1
-    
-    # def reorder_rhs(self, rhs: tuple[str|int, ...], leaf: int) -> tuple["lcfrs_composition", tuple[NtOrLeaf, ...]]:
-    #     original_order: tuple[NtOrLeaf, ...] = (NtOrLeaf(leaf, is_leaf=True), *(NtOrLeaf(nt, is_leaf=False) for nt in rhs))
-    #     occs = sorted(range(len(original_order)), key=lambda x: next(i for i,v in enumerate(self.inner) if v ==x))
-    #     revoccs = {oldpos: newpos for newpos, oldpos in enumerate(occs)}
-    #     revoccs[255] = 255
-    #     comp = self.__class__(revoccs[v] for v in self.inner)
-    #     return comp, tuple(original_order[i] for i in occs)
     
     @classmethod
     def from_positions(cls,
@@ -256,8 +247,3 @@ class lcfrs_composition:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({str(self)})"
-    
-    # def undo_reorder(self, successors):
-    #     occs = sorted(range(len(successors)), key=lambda x: next(i for i,v in enumerate(self.inner) if v==x+1))
-    #     revoccs = {oldpos: newpos for newpos, oldpos in enumerate(occs)}
-    #     return tuple(successors[revoccs[i]] for i in range(len(successors)))

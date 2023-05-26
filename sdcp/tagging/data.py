@@ -1,21 +1,23 @@
-from datasets import Dataset, DatasetDict
-from flair.data import Sentence, Dictionary, Token
+from datasets import Dataset, DatasetDict  # type: ignore
+from flair.data import Sentence, Dictionary, Token  # type: ignore
 from collections import Counter
+from typing import cast
+
 from ..grammar.derivation import Derivation
 
 class SentenceWrapper(Sentence):
-    def __init__(self, dataobj: dict):
+    def __init__(self, dataobj: dict[str, list[int]]):
         super().__init__(dataobj["sentence"], use_tokenizer=False)
         self.__gold_label_ids = dataobj
-        self.__predicted_label_ids = {}
-        self.__cache = {}
+        self.__predicted_label_ids: dict[str, list[int]] = {}
+        self.__cache: dict[str, object] = {}
 
-    def get_derivation(self):
+    def get_derivation(self) -> Derivation:
         if not "derivation" in self.__cache:
             deriv = self.get_raw_labels("derivation")
             st = self.get_raw_labels("supertag")
             self.__cache["derivation"] = Derivation.from_str(deriv, st)
-        return self.__cache["derivation"]
+        return cast(Derivation, self.__cache["derivation"])
     
     def cache(self, key, value=None):
         if not value is None:
@@ -51,7 +53,7 @@ class DatasetWrapper:
         raise NotImplementedError()
 
     def build_dictionary(self, field: str, add_unk: bool = True, minfreq: int = 1):
-        count = Counter()
+        count: Counter = Counter()
         vocab = Dictionary(add_unk=add_unk)
         for token in self.labels(field):
             count[token] += 1

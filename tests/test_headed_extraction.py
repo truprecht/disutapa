@@ -39,13 +39,13 @@ def test_extract():
     t = AutoTree("(WRB 0)")
     clause = sdcp_clause.spine(Tree("WRB", [0]))
     assert e.extract_node(t, "ROOT") == Tree(
-        extraction_result(0, SortedSet([0]), rule("ROOT", (), dcp=clause)), [])
+        extraction_result(0, SortedSet([0]), rule("ROOT", dcp=clause)), [])
 
     t = Tree("(S (WRB 0) (NN 1))")
     t[1].type = HEAD
     t = AutoTree.convert(t)
-    r1 = rule("ROOT", ["S|<>"], dcp=sdcp_clause.spine(Tree("S", [1, 0])), scomp=lcfrs_composition("10"))
-    r2 = rule("S|<>", [], dcp=sdcp_clause.spine(0))
+    r1 = rule("ROOT", ["S|<>", None], dcp=sdcp_clause.spine(Tree("S", [1, 0])))
+    r2 = rule("S|<>", dcp=sdcp_clause.spine(0))
     assert e.extract_node(t, "ROOT") == Tree(
         extraction_result(1, SortedSet([0, 1]), r1), [Tree(
             extraction_result(0, SortedSet([0]), r2), [])])
@@ -54,8 +54,8 @@ def test_extract():
     t[1].type = HEAD
     t[(0,0)].type = HEAD
     t = AutoTree.convert(t)
-    r1 = rule("ROOT", ["S|<>"], dcp=sdcp_clause.spine("(S 1 0)"), scomp=lcfrs_composition("10"))
-    r2 = rule("S|<>", [], dcp=sdcp_clause.spine("(SBAR 0)"))
+    r1 = rule("ROOT", ["S|<>", None], dcp=sdcp_clause.spine("(S 1 0)"))
+    r2 = rule("S|<>", dcp=sdcp_clause.spine("(SBAR 0)"))
     assert e.extract_node(t, "ROOT") == Tree(
         extraction_result(1, SortedSet([0, 1]), r1), [Tree(
             extraction_result(0, SortedSet([0]), r2), [])])
@@ -69,28 +69,28 @@ def test_extract():
     t = AutoTree.convert(t)
     deriv = e.extract_node(t, "ROOT")
     assert deriv.label == extraction_result(3, SortedSet(range(6)),
-                                rule("ROOT", ["VP|<>", "S|<>"], dcp=sdcp_clause.spine("(SBAR (S (VP 1 0) 2))"), scomp=lcfrs_composition("1201")))
+                                rule("ROOT", ["VP|<>", "S|<>", None], dcp=sdcp_clause.spine("(SBAR (S (VP 1 0) 2))"), scomp=lcfrs_composition("0120")))
     assert deriv[0].label == extraction_result(4, SortedSet([0,4,5]),
-                                rule("VP|<>", ["VP+|<>", "VP+|<>"], dcp=sdcp_clause.spine("(VP 1 0 2)"), scomp=lcfrs_composition("1,02")))
+                                rule("VP|<>", ["VP+|<>", None, "VP+|<>"], dcp=sdcp_clause.spine("(VP 1 0 2)"), scomp=lcfrs_composition("0,12")))
     assert deriv[(0,0)].label == extraction_result(0, SortedSet([0]),
-                                rule("VP+|<>", [], dcp=sdcp_clause.spine(0)))
+                                rule("VP+|<>", dcp=sdcp_clause.spine(0)))
     assert deriv[(0,1)].label == extraction_result(5, SortedSet([5]),
-                                rule("VP+|<>", [], dcp=sdcp_clause.spine(0)))
+                                rule("VP+|<>", dcp=sdcp_clause.spine(0)))
     assert deriv[1].label == extraction_result(2, SortedSet([1, 2]),
-                                rule("S|<>", ["NP|<>"], dcp=sdcp_clause.spine("(NP 1 0)"), scomp=lcfrs_composition("10")))
-    assert deriv[(1,0)].label == extraction_result(1, SortedSet([1]), rule("NP|<>", [], dcp=sdcp_clause.spine(0)))
+                                rule("S|<>", ["NP|<>", None], dcp=sdcp_clause.spine("(NP 1 0)")))
+    assert deriv[(1,0)].label == extraction_result(1, SortedSet([1]), rule("NP|<>", dcp=sdcp_clause.spine(0)))
 
     e = Extractor(horzmarkov=0, rightmostunary=False, markrepeats=True)
     deriv = e.extract_node(t, "ROOT")
     assert deriv.label == extraction_result(3, SortedSet(range(6)),
-                                rule("ROOT", ["VP+", "NP"], dcp=sdcp_clause.spine("(SBAR (S (VP 1 0) 2))"), scomp=lcfrs_composition("1201")))
+                                rule("ROOT", ["VP+", "NP", None], dcp=sdcp_clause.spine("(SBAR (S (VP 1 0) 2))"), scomp=lcfrs_composition("0120")))
     assert deriv[0].label == extraction_result(4, SortedSet([0,4,5]),
-                                rule("VP+", ["ARG(VP)", "ARG(VP)"], dcp=sdcp_clause.spine("(VP 1 0 2)"), scomp=lcfrs_composition("1,02")))
-    assert deriv[(0,0)].label == extraction_result(0, SortedSet([0]), rule("ARG(VP)", [], dcp=sdcp_clause.spine(0)))
-    assert deriv[(0,1)].label == extraction_result(5, SortedSet([5]), rule("ARG(VP)", [], dcp=sdcp_clause.spine(0)))
-    assert deriv[1].label == extraction_result(2, SortedSet([1,2]), rule("NP", ["ARG(NP)"],
-                                dcp=sdcp_clause.spine("(NP 1 0)"), scomp=lcfrs_composition("10")))
-    assert deriv[(1,0)].label == extraction_result(1, SortedSet([1]), rule("ARG(NP)", [], dcp=sdcp_clause.spine(0)))
+                                rule("VP+", ["ARG(VP)", None, "ARG(VP)"], dcp=sdcp_clause.spine("(VP 1 0 2)"), scomp=lcfrs_composition("0,12")))
+    assert deriv[(0,0)].label == extraction_result(0, SortedSet([0]), rule("ARG(VP)", dcp=sdcp_clause.spine(0)))
+    assert deriv[(0,1)].label == extraction_result(5, SortedSet([5]), rule("ARG(VP)", dcp=sdcp_clause.spine(0)))
+    assert deriv[1].label == extraction_result(2, SortedSet([1,2]), rule("NP", ["ARG(NP)", None],
+                                dcp=sdcp_clause.spine("(NP 1 0)")))
+    assert deriv[(1,0)].label == extraction_result(1, SortedSet([1]), rule("ARG(NP)", dcp=sdcp_clause.spine(0)))
 
 def test_nonbin_extraction():
     e = Extractor(horzmarkov=0, rightmostunary=True)
@@ -98,11 +98,11 @@ def test_nonbin_extraction():
     t[1].type = HEAD
     t = AutoTree.convert(t)
     assert e(t)[0] == [
-        rule("S|<>", ()),
-        rule("ROOT", ("S|<>", "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=lcfrs_composition("102")),
-        rule("S|<>", ("S|<>",), scomp=lcfrs_composition("01"), dcp=sdcp_clause.default(1)),
-        rule("S|<>", ("S|<>",), scomp=lcfrs_composition("01"), dcp=sdcp_clause.default(1)),
-        rule("S|<>", ()),
+        rule("S|<>"),
+        rule("ROOT", ("S|<>", None, "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)")),
+        rule("S|<>", (None, "S|<>"), dcp=sdcp_clause.default(1)),
+        rule("S|<>", (None, "S|<>"), dcp=sdcp_clause.default(1)),
+        rule("S|<>"),
     ]
 
     t = Tree("(S (A 0) (B 1) (T (C 2) (D 3) (E 4)) (D 5) (E 6))")
@@ -110,13 +110,13 @@ def test_nonbin_extraction():
     t[(2,1)].type = HEAD
     t = AutoTree.convert(t)
     assert e(t)[0] == [
-        rule("S|<>", ()),
-        rule("ROOT", ("S|<>", "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=lcfrs_composition("102")),
-        rule("T|<>", ()),
-        rule("S|<>", ("T|<>", "T|<>", "S|<>",), dcp=sdcp_clause.spine("(T 1 0 2)", 3), scomp=lcfrs_composition("1023")),
-        rule("T|<>", ()),
-        rule("S|<>", ("S|<>",), scomp=lcfrs_composition("01"), dcp=sdcp_clause.default(1)),
-        rule("S|<>", ()),
+        rule("S|<>"),
+        rule("ROOT", ("S|<>", None, "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)")),
+        rule("T|<>"),
+        rule("S|<>", ("T|<>", None, "T|<>", "S|<>",), dcp=sdcp_clause.spine("(T 1 0 2)", 3)),
+        rule("T|<>"),
+        rule("S|<>", (None, "S|<>",), dcp=sdcp_clause.default(1)),
+        rule("S|<>"),
     ]
 
     t = Tree("(S (A 0) (B 1) (T (C 2) (D 3) (E 6)) (D 4) (E 5))")
@@ -124,13 +124,13 @@ def test_nonbin_extraction():
     t[(2,1)].type = HEAD
     t = AutoTree.convert(t)
     assert e(t)[0] == [
-        rule("S|<>", ()),
-        rule("ROOT", ("S|<>", "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=lcfrs_composition("102")),
-        rule("T|<>", ()),
-        rule("S|<>", ("T|<>", "T|<>", "S|<>"), dcp=sdcp_clause.spine("(T 1 0 2)", 3), scomp=lcfrs_composition("1032")),
-        rule("S|<>", ("S|<>",), scomp=lcfrs_composition("01"), dcp=sdcp_clause.default(1)),
-        rule("S|<>", ()),
-        rule("T|<>", ()),
+        rule("S|<>"),
+        rule("ROOT", ("S|<>", None, "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)")),
+        rule("T|<>"),
+        rule("S|<>", ("T|<>", None, "S|<>", "T|<>"), dcp=sdcp_clause.spine("(T 1 0 3)", 2)),
+        rule("S|<>", (None, "S|<>",), dcp=sdcp_clause.default(1)),
+        rule("S|<>"),
+        rule("T|<>"),
     ]
     
     e = Extractor(horzmarkov=0, rightmostunary=False)
@@ -139,13 +139,13 @@ def test_nonbin_extraction():
     t[(2,1)].type = HEAD
     t = AutoTree.convert(t)
     assert e(t)[0] == [
-        rule("ARG(S)", ()),
-        rule("ROOT", ("ARG(S)", "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=lcfrs_composition("102")),
-        rule("ARG(T)", ()),
-        rule("S|<>", ("ARG(T)", "ARG(T)", "S|<>"), dcp=sdcp_clause.spine("(T 1 0 2)", 3), scomp=lcfrs_composition("1032")),
-        rule("S|<>", ("ARG(S)",), scomp=lcfrs_composition("01"), dcp=sdcp_clause.default(1)),
-        rule("ARG(S)", ()),
-        rule("ARG(T)", ()),
+        rule("ARG(S)"),
+        rule("ROOT", ("ARG(S)", None, "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)")),
+        rule("ARG(T)"),
+        rule("S|<>", ("ARG(T)", None, "S|<>", "ARG(T)"), dcp=sdcp_clause.spine("(T 1 0 3)", 2)),
+        rule("S|<>", (None, "ARG(S)",), dcp=sdcp_clause.default(1)),
+        rule("ARG(S)"),
+        rule("ARG(T)"),
     ]
 
 def test_assembly():

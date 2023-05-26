@@ -5,8 +5,8 @@ from collections import namedtuple
 from typing import Any
 
 from ..autotree import AutoTree
-from .lcfrs import lcfrs_composition, ordered_union_composition
-from .sdcp import rule, sdcp_clause
+from .lcfrs import lcfrs_composition, ordered_union_composition, NtOrLeaf
+from .sdcp import rule, sdcp_clause, swap_vars
 
 
 def read_clusters(filename: str):
@@ -109,7 +109,7 @@ class Extractor:
         if not isinstance(tree, AutoTree):
             # TODO: use pos symbol?
             lhs = overridelhs if not overridelhs is None else f"ARG({parents[-1]})"
-            resultnode = extraction_result(tree, SortedSet([tree]), rule(lhs, ()))
+            resultnode = extraction_result(tree, SortedSet([tree]), rule(lhs))
             return Tree(resultnode, [])
         lex = tree.headterm
         children = []
@@ -120,34 +120,33 @@ class Extractor:
             rhs_nts.append(children[-1].label.rule.lhs)
         lhs = overridelhs if not overridelhs is None else \
                 self.nonterminals(parents + (self.nonterminals.get_label(tree),))
+        children.sort(key=lambda t: t.label.leaves[0])
         
         leaves = SortedSet([lex])
         for child in children:
             leaves |= child.label.leaves
-        lcfrs = self.ctype.from_positions(leaves, [c.label.leaves for c in children])
+        lcfrs, rhs_order = self.ctype.from_positions(leaves, [c.label.leaves for c in children])
         lhs += self.nonterminals.fo(lcfrs.fanout)
+        rhs = tuple((None, *rhs_nts)[o] for o in rhs_order)
 
-        r = rule(lhs, tuple(rhs_nts), dcp=sdcp_clause.spine(c), scomp=lcfrs)
+        r = rule(lhs, rhs, dcp=sdcp_clause.spine(c), scomp=lcfrs)
         # rule = rule.reorder((lex,) + tuple(c.label.leaves[0] for c in children))
         return Tree(extraction_result(lex, leaves, r), children)
 
 
     def _fuse_modrule(self, mod_deriv: Tree, successor_mods: Tree, all_leaves):
         toprule = mod_deriv.label.rule
-        botrule = successor_mods.label.rule
 
         children = [*mod_deriv.children, successor_mods]
-        lcfrs = self.ctype.from_positions(all_leaves, [c.label.leaves for c in children])
+        lcfrs, rhs_order = self.ctype.from_positions(all_leaves, [c.label.leaves for c in children])
+        oldrhs = (None, *(child.label.rule.lhs for child in children))
+        rhs = tuple(oldrhs[o] for o in rhs_order)
+        old_context = (*toprule.dcp.tree, len(toprule.rhs)+1)
+        reoder = dict((oldvar+1, i+2) for i, oldvar in enumerate(i for i in rhs_order if i > 0))
+        dcp = sdcp_clause(tuple(swap_vars(old_tree, reoder) for old_tree in old_context))
 
-        newrule = rule(
-            toprule.lhs,
-            toprule.rhs+(botrule.lhs,),
-            dcp=sdcp_clause(toprule.dcp.tree + (len(toprule.rhs)+2,)),
-            # dcp=sdcp_clause.spine(toprule.dcp, len(toprule.rhs)+1),
-            scomp=lcfrs
-        )
+        newrule = rule(toprule.lhs, rhs, dcp=dcp, scomp=lcfrs)
         positions = mod_deriv.label.leaves | successor_mods.label.leaves
-        # newrule = newrule.reorder((lex,) + tuple(c.label.leaves[0] for c in children))
         return Tree(
             extraction_result(mod_deriv.label.lex, positions, newrule), children)
  

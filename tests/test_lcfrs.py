@@ -27,13 +27,13 @@ def test_spans():
 
 
 def test_composition():
-    assert lcfrs_composition.default(0) == lcfrs_composition("0")
-    assert list(lcfrs_composition.default(0).inner) == [0]
-    assert str(lcfrs_composition.default(0)) == "'0'"
-    assert lcfrs_composition.default(1) == lcfrs_composition("10")
-    assert list(lcfrs_composition.default(1).inner) == [1,0]
-    assert lcfrs_composition.default(2) == lcfrs_composition("102")
-    assert list(lcfrs_composition.default(2).inner) == [1,0,2]
+    assert lcfrs_composition.default(1) == lcfrs_composition("0")
+    assert list(lcfrs_composition.default(1).inner) == [0]
+    assert str(lcfrs_composition.default(1)) == "'0'"
+    assert lcfrs_composition.default(2) == lcfrs_composition("01")
+    assert list(lcfrs_composition.default(2).inner) == [0,1]
+    assert lcfrs_composition.default(3) == lcfrs_composition("012")
+    assert list(lcfrs_composition.default(3).inner) == [0,1,2]
 
     c1 = lcfrs_composition("010")
     c2 = lcfrs_composition("0,1,2,3,4")
@@ -57,7 +57,7 @@ def test_composition():
 
     assert lcfrs_composition("010").partial(disco_span((0, 13), (15,16)), disco_span((14, 20))) == (None, None)
     assert lcfrs_composition("01").partial(disco_span((0, 13), (15,16)), disco_span((14, 20))) == (None, None)
-    assert lcfrs_composition("102").partial(disco_span((13, 14)),disco_span((0, 13), (15,16))) == (None, None)
+    assert lcfrs_composition("012").partial(disco_span((0, 13), (15,16)),disco_span((13, 14))) == (None, None)
 
     ps = list(range(6))
     ps0 = [0,4,5]
@@ -65,11 +65,11 @@ def test_composition():
     ps01 = [5]
     ps1 = [1,2]
 
-    assert lcfrs_composition.from_positions(ps, [ps0, ps1]) == lcfrs_composition("1201")
-    assert lcfrs_composition.from_positions(ps0, [ps00, ps01]) == lcfrs_composition("1,02")
-    assert lcfrs_composition.from_positions(ps00, []) == lcfrs_composition("0")
-    assert lcfrs_composition.from_positions(ps01, []) == lcfrs_composition("0")
-    assert lcfrs_composition.from_positions(ps1, [[1]]) == lcfrs_composition("10")
+    assert lcfrs_composition.from_positions(ps, [ps0, ps1])[0] == lcfrs_composition("0120")
+    assert lcfrs_composition.from_positions(ps0, [ps00, ps01])[0] == lcfrs_composition("0,12")
+    assert lcfrs_composition.from_positions(ps00, [])[0] == lcfrs_composition("0")
+    assert lcfrs_composition.from_positions(ps01, [])[0] == lcfrs_composition("0")
+    assert lcfrs_composition.from_positions(ps1, [[1]])[0] == lcfrs_composition("01")
 
 
 def test_union_composition():
@@ -82,14 +82,6 @@ def test_union_composition():
     assert c2.order_and_fanout == bytes((0,1,2,3,4,5))
     assert c3.order_and_fanout == bytes((0,1,2))
     assert c4.order_and_fanout == bytes((0,1,2,3,4,2))
-
-    c5 = ordered_union_composition('120', fanout=2)
-    assert c1.reorder_rhs(("1",), 0) == (ordered_union_composition([], 1), (NtOrLeaf.leaf(0), NtOrLeaf.nt("1"),))
-    assert c2.reorder_rhs((1,2,3,4), 12) == (ordered_union_composition([], 5), (NtOrLeaf.leaf(12), *(NtOrLeaf.nt(i) for i in (1,2,3,4))))
-    assert c5.reorder_rhs((1,2), 17) == (ordered_union_composition([], 2), (NtOrLeaf.nt(1), NtOrLeaf.nt(2), NtOrLeaf.leaf(17)))
-    assert tuple(c1.undo_reorder((1,))) == (1,)
-    assert tuple(c2.undo_reorder((1,2,3,4))) == (1,2,3,4)
-    assert tuple(c5.undo_reorder((1,2))) == (1,2)
 
     assert repr(c1) == "ordered_union_composition('01')" and eval(repr(c1)) == c1
     assert repr(c3) == "ordered_union_composition('01', fanout=2)" and eval(repr(c3)) == c3

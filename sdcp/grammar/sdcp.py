@@ -32,11 +32,17 @@ def _increase_vars(context: Tree|int) -> Tree|int:
         context[i] = _increase_vars(c)
     return context
 
+
+def swap_vars(context: ImmutableTree|int, old_to_new: dict[int, int]) -> ImmutableTree|int:
+    if not isinstance(context, Tree):
+        return context if context <= 1 else old_to_new[context]
+    return ImmutableTree(context.label, [swap_vars(c, old_to_new) for c in context])
+
+
 @dataclass(frozen=True, init=False)
 class sdcp_clause:
     tree: tuple[ImmutableTree|int, ...]
     arguments: tuple[None|int, ...]
-    # arity: int
 
     def __init__(self, context: tuple[ImmutableTree, ...], args: tuple[int|None, ...] | None = None):
         if not isinstance(context, tuple):

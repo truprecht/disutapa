@@ -89,7 +89,7 @@ class ActiveParser:
                 # print("discarding item")
                 continue
             expanded.add(qi.item)
-            print("expand item", qi.item, "#", len(self.items))
+            # print("expand item", qi.item, "#", len(self.items))
 
             if isinstance(qi.item, PassiveItem):
                 backtrace_id = len(self.backtraces)
@@ -118,24 +118,24 @@ class ActiveParser:
                 
                 for active, abt, _weight in self.actives.get(qi.item.lhs, []):
                     if not active.is_compatible(qi.item.leaves): continue
-                    newpos, newcomp = active.remaining_function.partial(active.leaves, qi.item.leaves)
+                    newpos, newcomp = active.remaining_function.partial(qi.item.leaves, active.leaves)
                     if newpos is None: continue
                     register_item(qelement(
-                        item(active.lhs, newpos, newcomp, active.remaining[1:], active.leaf),
-                        backtrace(abt.rid, abt.leaf, abt.children+(backtrace_id,)),
+                        item(active.lhs, newpos, newcomp, active.remaining[:-1], active.leaf),
+                        backtrace(abt.rid, abt.leaf, (backtrace_id, *abt.children)),
                         qi.weight+_weight,
                     ))
                 continue
 
             assert isinstance(qi.item, ActiveItem)
-            self.actives.setdefault(qi.item.remaining[0].get_nt(), []).append((qi.item, qi.bt, qi.weight))
-            for (span, pbt, pweight) in self.from_lhs.get(qi.item.remaining[0].get_nt(), []):
+            self.actives.setdefault(qi.item.remaining[-1].get_nt(), []).append((qi.item, qi.bt, qi.weight))
+            for (span, pbt, pweight) in self.from_lhs.get(qi.item.remaining[-1].get_nt(), []):
                 if not qi.item.is_compatible(span): continue
-                newpos, newfunc = qi.item.remaining_function.partial(qi.item.leaves, span)
+                newpos, newfunc = qi.item.remaining_function.partial(span, qi.item.leaves)
                 if newpos is None: continue
                 register_item(qelement(
-                    item(qi.item.lhs, newpos, newfunc, qi.item.remaining[1:], qi.item.leaf),
-                    backtrace(qi.bt.rid, qi.bt.leaf, qi.bt.children+(pbt,)),
+                    item(qi.item.lhs, newpos, newfunc, qi.item.remaining[:-1], qi.item.leaf),
+                    backtrace(qi.bt.rid, qi.bt.leaf, (pbt, *qi.bt.children)),
                     qi.weight+pweight
                 ))
 

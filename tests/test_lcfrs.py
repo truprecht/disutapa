@@ -39,6 +39,7 @@ def test_composition():
     c2 = lcfrs_composition("0,1,2,3,4")
     c3 = lcfrs_composition("01,0")
     c4 = lcfrs_composition('01023,4')
+    c5 = lcfrs_composition('01,232')
 
     assert c1.inner == bytes((0,1,0))
     assert c2.inner == bytes((0,255,1,255,2,255,3,255,4))
@@ -49,11 +50,10 @@ def test_composition():
 
     sp1 = disco_span((1,2), (3,4))
     sp2 = disco_span((2,3))
-    sp4 = disco_span((2,3), (4,8))
-    sp5 = disco_span((1,2), (3,6))
 
     assert c1.partial(sp1, sp2) == (disco_span((1,4)), lcfrs_composition('0'))
-    assert c4.partial(sp1, sp2) == (disco_span((1,4)), lcfrs_composition('012,3'))
+    assert c4.partial(sp1, sp2) == (None, None)
+    assert c5.partial(sp1, sp2) == (disco_span((1,4)), lcfrs_composition('01,2'))
 
     assert lcfrs_composition("010").partial(disco_span((0, 13), (15,16)), disco_span((14, 20))) == (None, None)
     assert lcfrs_composition("01").partial(disco_span((0, 13), (15,16)), disco_span((14, 20))) == (None, None)
@@ -81,8 +81,6 @@ def test_union_composition():
 
     sp1 = disco_span((1,2), (3,4))
     sp2 = disco_span((2,3))
-    sp4 = disco_span((2,3), (4,8))
-    sp5 = disco_span((1,2), (3,6))
 
     assert c1.partial(sp1, sp2) == (disco_span((1,4)), ordered_union_composition())
     assert c3.partial(sp1, sp2) == (disco_span((1,4)), ordered_union_composition(fanout=2))

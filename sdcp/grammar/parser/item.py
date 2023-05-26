@@ -35,8 +35,7 @@ class ActiveItem:
         return (other.leaves, len(self.remaining)) > (self.leaves, len(other.remaining))
     
     def is_compatible(self, span: disco_span) -> bool:
-        # print(self.leaves, span, self.remaining, self.leaves < span and all(span < n.get_leaf() for n in self.remaining if n.is_leaf))
-        return self.leaves < span and (self.leaf is None or span < self.leaf)
+        return (not self.leaves or self.leaves > span) and (self.leaf is None or span > self.leaf)
 
 
 @dataclass(eq=False, order=False)
@@ -62,14 +61,12 @@ def item(
         remaining_rhs: tuple[NtOrLeaf, ...],
         leaf: int | None
         ) -> ActiveItem | PassiveItem:
-    if remaining_rhs and remaining_rhs[0].is_leaf():
-        nleaves, nfunction = remaining_function.partial(leaves, disco_span.singleton(leaf))
-        # if nleaves is None or nfunction is None:
-        #     # should not happen, because the spans are checked beforehand
-        #     raise ValueError("tried to construct item with spans", leaves, "and leaf", remaining_rhs[0].get_leaf())
-        leaves, remaining_function = nleaves, nfunction
-        remaining_rhs = remaining_rhs[1:]
+    if remaining_rhs and remaining_rhs[-1].is_leaf():
+        leaves, remaining_function = remaining_function.partial(disco_span.singleton(leaf), leaves)
+        remaining_rhs = remaining_rhs[:-1]
         leaf = None
     if not remaining_rhs:
+        if len(leaves) != remaining_function.fanout:
+            leaves = None
         return PassiveItem(lhs, leaves)
     return ActiveItem(lhs, leaves, remaining_function, remaining_rhs, leaf)

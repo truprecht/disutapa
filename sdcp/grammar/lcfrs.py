@@ -75,12 +75,19 @@ class disco_span:
     def __contains__(self, position: int) -> bool:
         return any(l <= position < r for l,r in self)
     
-    def __lt__(self, other: Union[int, tuple[int, int], "disco_span"]) -> bool:
+    # def __lt__(self, other: Union[int, tuple[int, int], "disco_span"]) -> bool:
+    #     if isinstance(other, int):
+    #         return self.spans[0][0] < other and not other in self
+    #     if isinstance(other, tuple):
+    #         return self.spans[0][0] < other[0]
+    #     return self.spans < other.spans
+
+    def __gt__(self, other: Union[int, tuple[int, int], "disco_span"]) -> bool:
         if isinstance(other, int):
-            return self.spans[0][0] < other and not other in self
+            return self.spans[0][0] > other and not other in self
         if isinstance(other, tuple):
-            return self.spans[0][0] < other[0]
-        return self.spans < other.spans
+            return self.spans[0][0] > other[0]
+        return self.spans > other.spans
 
 
 @dataclass(frozen=True)
@@ -122,11 +129,11 @@ class ordered_union_composition:
         return cls(fanout(positions)), order
         
     def partial(self, x: disco_span, y: disco_span) -> tuple[disco_span | None, Union["ordered_union_composition", None]]:
-        if not x:
-            return y, self
-        if len(x) >= self.fanout and x[self.fanout-1][1] < y[0][0]:
-            return None, None
-        if x < y and not (spans := x.exclusive_union(y)) is None:
+        if not y:
+            return x, self
+        # if len(x) >= self.fanout and x[self.fanout-1][1] < y[0][0]:
+        #     return None, None
+        if not (spans := x.exclusive_union(y)) is None:
             return spans, self
         return None, None
 
@@ -134,6 +141,7 @@ class ordered_union_composition:
 @dataclass(init=False, frozen=True)
 class lcfrs_composition:
     inner: bytes
+    arity: int
 
     def __init__(self, vars: Iterable[int | str] | bytes):
         if not isinstance(vars, bytes):
@@ -148,6 +156,7 @@ class lcfrs_composition:
                 assert not seen or v > seen[-1], f"lcfrs composition {vars!r} is not ordered"
                 seen.add(v)
         self.__dict__["inner"] = vars
+        self.__dict__["arity"] = seen[-1]
     
     @classmethod
     def default(cls, arity: int):
@@ -177,27 +186,28 @@ class lcfrs_composition:
                 vars.append(var)
             last_position = p
         return cls(vars), revorder.keys()
-        
     
-    def partial(self, part: disco_span, x: disco_span) -> tuple[disco_span, "lcfrs_composition"] | tuple[None, None]:
-        if not part:
+
+    def partial(self, x: disco_span, accumulator: disco_span) -> tuple[disco_span, "lcfrs_composition"] | tuple[None, None]:
+        if not accumulator:
             return x, self
-        xs = [iter(part), iter(x)]
-        fs = [len(part), len(x)]
+        xs = [iter(x), iter(accumulator)]
+        fs = [len(x), len(accumulator)]
         total: list[tuple[int, int]] = []
         current_l, current_r = None, None
         remainder = []
         for var in chain(self.inner, (255,)):
-            if var > 1:
+            if not var in (self.arity, self.arity-1):
                 if not current_l is None:
                     total.append((current_l, current_r))
                     current_r = current_l = None
-                remainder.append(var-1 if var < 255 else 255)
+                remainder.append(var)
                 continue
             
-            if not remainder or remainder[-1] != 0:
-                remainder.append(0)
+            if not remainder or remainder[-1] != self.arity-1:
+                remainder.append(self.arity-1)
 
+            var -= self.arity-1
             if fs[var] == 0: return None, None
             fs[var] -= 1
             if current_l is None:

@@ -45,9 +45,9 @@ def main(config: Namespace):
         prediction = with_pos(prediction, [idtopos[i] for i in sample.get_raw_labels("pos")])
         evaluator.add(i, ParentedTree(sample.get_raw_labels("tree")), list(sample.get_raw_labels("sentence")),
                 ParentedTree.convert(prediction), list(sample.get_raw_labels("sentence")))
-        if str(fix_rotation(prediction)[1]) != sample.get_raw_labels("tree"):
+        if (t:=str(fix_rotation(prediction)[1])) != sample.get_raw_labels("tree"):
             print(sample.get_raw_labels("tree"))
-            print(prediction)
+            print(t)
     print(evaluator.summary())
     print(evaluator.breakdowns())
 

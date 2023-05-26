@@ -142,8 +142,8 @@ class Extractor:
         oldrhs = (None, *(child.label.rule.lhs for child in children))
         rhs = tuple(oldrhs[o] for o in rhs_order)
         old_context = (*toprule.dcp.tree, len(toprule.rhs)+1)
-        reoder = dict((oldvar+1, i+2) for i, oldvar in enumerate(i for i in rhs_order if i > 0))
-        dcp = sdcp_clause(tuple(swap_vars(old_tree, reoder) for old_tree in old_context))
+        reorder = dict((oldvar+1, i+2) for i, oldvar in enumerate(i for i in rhs_order if i > 0))
+        dcp = sdcp_clause(tuple(swap_vars(old_tree, reorder) for old_tree in old_context))
 
         newrule = rule(toprule.lhs, rhs, dcp=dcp, scomp=lcfrs)
         positions = mod_deriv.label.leaves | successor_mods.label.leaves

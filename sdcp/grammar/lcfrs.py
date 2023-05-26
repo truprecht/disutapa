@@ -104,19 +104,10 @@ class NtOrLeaf:
         return cls(None)
 
 
-@dataclass(init=False, frozen=True)
+@dataclass(frozen=True)
 class ordered_union_composition:
     # implement ordered union of leaves without explicit composition function
-    order_and_fanout: bytes
-
-    def __init__(self, order: Iterable[int] | str, fanout: int = 1):
-        if isinstance(order, str):
-            order = map(int, order)
-        self.__dict__["order_and_fanout"] = bytes(chain(order, (fanout,)))
-
-    @property
-    def fanout(self):
-        return self.order_and_fanout[-1]
+    fanout: int = 1
 
     @classmethod
     def from_positions(
@@ -127,8 +118,8 @@ class ordered_union_composition:
         lex = next(p for p in positions if all((not p in spos) for spos in successor_positions))
         succs = {p: i+1 for i, p in enumerate(spos[0] for spos in successor_positions)}
         succs[lex] = 0
-        order = (succs[p] for p in sorted(succs.keys()))
-        return cls(order, fanout(positions)), order
+        order = [succs[p] for p in sorted(succs.keys())]
+        return cls(fanout(positions)), order
         
     def partial(self, x: disco_span, y: disco_span) -> tuple[disco_span | None, Union["ordered_union_composition", None]]:
         if not x:
@@ -138,17 +129,6 @@ class ordered_union_composition:
         if x < y and not (spans := x.exclusive_union(y)) is None:
             return spans, self
         return None, None
-    
-    def __str__(self) -> str:
-        suffix = "" if self.order_and_fanout[-1] == 1 else f", fanout={self.order_and_fanout[-1]}"
-        if len(self.order_and_fanout) <= 10:
-            orderstr = "'" + "".join(map(str, self.order_and_fanout[:-1])) + "'"
-        else:
-            orderstr = str(tuple(self.order_and_fanout[:-1]))
-        return orderstr + suffix
-    
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({str(self)})"
 
 
 @dataclass(init=False, frozen=True)

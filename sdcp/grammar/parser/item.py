@@ -66,7 +66,5 @@ def item(
         remaining_rhs = remaining_rhs[:-1]
         leaf = None
     if not remaining_rhs:
-        if len(leaves) != remaining_function.fanout:
-            leaves = None
-        return PassiveItem(lhs, leaves)
+        return PassiveItem(lhs, remaining_function.finalize(leaves) if remaining_function else None)
     return ActiveItem(lhs, leaves, remaining_function, remaining_rhs, leaf)

@@ -74,13 +74,6 @@ class disco_span:
     
     def __contains__(self, position: int) -> bool:
         return any(l <= position < r for l,r in self)
-    
-    # def __lt__(self, other: Union[int, tuple[int, int], "disco_span"]) -> bool:
-    #     if isinstance(other, int):
-    #         return self.spans[0][0] < other and not other in self
-    #     if isinstance(other, tuple):
-    #         return self.spans[0][0] < other[0]
-    #     return self.spans < other.spans
 
     def __gt__(self, other: Union[int, tuple[int, int], "disco_span"]) -> bool:
         if isinstance(other, int):
@@ -131,11 +124,12 @@ class ordered_union_composition:
     def partial(self, x: disco_span, y: disco_span) -> tuple[disco_span | None, Union["ordered_union_composition", None]]:
         if not y:
             return x, self
-        # if len(x) >= self.fanout and x[self.fanout-1][1] < y[0][0]:
-        #     return None, None
         if not (spans := x.exclusive_union(y)) is None:
             return spans, self
         return None, None
+
+    def finalize(self, span: disco_span):
+        return span if len(span) == self.fanout else None
 
 
 @dataclass(init=False, frozen=True)
@@ -237,3 +231,6 @@ class lcfrs_composition:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({str(self)})"
+    
+    def finalize(self, span: disco_span) -> disco_span:
+        return span

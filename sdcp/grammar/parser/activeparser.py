@@ -86,10 +86,8 @@ class ActiveParser:
             flush_items()
             qi: qelement = heappop(self.queue)
             if qi.item in expanded:
-                # print("discarding item")
                 continue
             expanded.add(qi.item)
-            # print("expand item", qi.item, "#", len(self.items))
 
             if isinstance(qi.item, PassiveItem):
                 backtrace_id = len(self.backtraces)

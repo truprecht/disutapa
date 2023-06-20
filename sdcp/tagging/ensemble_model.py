@@ -1,7 +1,7 @@
 import torch
 import flair
 from tqdm import tqdm
-from math import ceil
+from math import ceil, log
 
 CPU = torch.device("cpu")
 
@@ -90,6 +90,7 @@ class EnsembleModel(flair.nn.Model):
         self.__evalparam__ = evalparam
         self.__ktags__ = ktags
         self.__fix_tagging__ = False
+        self.supertag_weight_range = log(.1)
         self.to(flair.device)
 
     def set_eval_param(self, ktags: int, evalparam: dict):
@@ -120,64 +121,86 @@ class EnsembleModel(flair.nn.Model):
         return input
 
 
-    def _parsing_loss(self, batch: list[SentenceWrapper], embeddings: torch.Tensor, feats: torch.Tensor):
-        loss = torch.tensor(0.0, device=flair.device)
-        npreds = 0
-        if self.__fix_tagging__:
-            feats = feats.detach()
-            embeddings = embeddings.detach()
+    # def _parsing_loss(self, batch: list[SentenceWrapper], embeddings: torch.Tensor, feats: torch.Tensor):
+    #     loss = torch.tensor(0.0, device=flair.device)
+    #     npreds = 0
+    #     if self.__fix_tagging__:
+    #         feats = feats.detach()
+    #         embeddings = embeddings.detach()
 
-        for i, sent in enumerate(batch):
-            embeds = embeddings[:len(sent), i]
-            self.scoring.init_embeddings(embeds)
-            deriv = sent.get_derivation()
-            loss += self.scoring.forward_loss(deriv)
-            npreds += deriv.inner_nodes
+    #     for i, sent in enumerate(batch):
+    #         embeds = embeddings[:len(sent), i]
+    #         self.scoring.init_embeddings(embeds)
+    #         deriv = sent.get_derivation()
+    #         loss += self.scoring.forward_loss(deriv)
+    #         npreds += deriv.inner_nodes
 
-            brassitems = None
-            if not (cache := sent.cache("brassitems")) is None:
-                brassitems, backtraces = cache
-            elif self.abort_brass <= 1:
-                parser = ActiveParser(self.__grammar__)
-                parser.set_scoring(self.scoring)
-                topweights, toptags = feats[:len(sent), i].topk(self.ktags, dim=-1)
-                topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
-                predicted_tags = [
-                    [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
-                    for ktags, kweights in zip(toptags, topweights)]
-                parser.init(*predicted_tags)
-                parser.add_nongold_filter(deriv, self.abort_brass)
-                parser.fill_chart()
-                brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
-                backtraces = parser.backtraces
-            if brassitems:
-                loss += self.scoring.norule_loss(brassitems, backtraces)
-                npreds += len(brassitems)
+    #         brassitems = None
+    #         if not (cache := sent.cache("brassitems")) is None:
+    #             brassitems, backtraces = cache
+    #         elif self.abort_brass <= 1:
+    #             parser = ActiveParser(self.__grammar__)
+    #             parser.set_scoring(self.scoring)
+    #             weights, indices = feats[:len(sent), i].sort(descending=True)
+    #             weights = -torch.nn.functional.log_softmax(weights, dim=-1)
+    #             start = torch.zeros(len(sent))
+    #             end = torch.zeros(len(sent))
+                
+    #             parser.init(len(sent))
+    #             while parser.rootid is None:
+    #                 for i in range(len(sent)):
+    #                     end[i] = next(
+    #                         j for j in range(start[i]+1, len(self.__grammar__.rules))
+    #                         if weights[j] > weights[start[i]] - self.supertag_weight_range)
+    #                 tags = [
+    #                     [(indices[tag]-1, weights[tag]) for tag in range(s,e) if indices[tag] != 0]
+    #                     for s,e in zip(start,end)]
+                    
+    #                 parser.add_rules(*tags)
+    #                 parser.add_nongold_filter(deriv, self.abort_brass)
+    #                 parser.fill_chart()
 
-        return loss, npreds
+    #             brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
+    #             backtraces = parser.backtraces
+    #         if brassitems:
+    #             loss += self.scoring.norule_loss(brassitems, backtraces)
+    #             npreds += len(brassitems)
+
+    #     return loss, npreds
 
 
-    def cache_scoring_items(self, batch: list[SentenceWrapper]):
-        if self.abort_brass > 1:
-            return
-        with torch.no_grad():
-            embeds = self._batch_to_embeddings(batch)
-            scores = dict(self.forward(embeds))
-            parser = ActiveParser(self.__grammar__)
-            parser.set_scoring(self.scoring)
-            topweights, toptags = scores["supertag"].topk(self.ktags, dim=-1)
-            topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
-            for i, sentence in enumerate(batch):
-                self.scoring.init_embeddings(embeds[:, i])
-                predicted_tags = [
-                    [(tag.item()-1, weight.item()) for tag, weight in zip(ktags, kweights) if tag != 0]
-                    for ktags, kweights in zip(toptags[:len(sentence), i], topweights[:len(sentence), i])]
-                parser.init(*predicted_tags)
-                maxweight = sum(scores["supertag"][j, i, s] for j, s in enumerate(sentence.get_raw_labels("supertag")))
-                parser.set_gold_item_filter(sentence.get_derivation(), nongold_stopping_prob=self.abort_brass, early_stopping=maxweight)
-                parser.fill_chart()
-                brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
-                sentence.cache("brassitems", (brassitems, parser.backtraces))
+    # def cache_scoring_items(self, batch: list[SentenceWrapper]):
+    #     if self.abort_brass > 1:
+    #         return
+    #     with torch.no_grad():
+    #         embeds = self._batch_to_embeddings(batch)
+    #         scores = dict(self.forward(embeds))
+    #         parser = ActiveParser(self.__grammar__)
+    #         parser.set_scoring(self.scoring)
+    #         for i, sentence in enumerate(batch):
+    #             self.scoring.init_embeddings(embeds[:, i])
+
+    #             weights, indices = scores["supertag"][:len(sentence), i].sort(descending=True)
+    #             weights = -torch.nn.functional.log_softmax(weights, dim=-1)
+    #             start = torch.zeros(len(sentence))
+    #             end = torch.zeros(len(sentence))
+    #             parser.init(len(sentence))
+    #             maxweight = sum(scores["supertag"][j, i, s] for j, s in enumerate(sentence.get_raw_labels("supertag")))
+    #             parser.set_gold_item_filter(sentence.get_derivation(), nongold_stopping_prob=self.abort_brass, early_stopping=maxweight)
+    #             while parser.rootid is None:
+    #                 for i in range(len(sentence)):
+    #                     end[i] = next(
+    #                         j for j in range(start[i]+1, len(self.__grammar__.rules))
+    #                         if weights[j] > weights[start[i]] - self.supertag_weight_range)
+    #                 tags = [
+    #                     [(indices[tag]-1, weights[tag]) for tag in range(s,e) if indices[tag] != 0]
+    #                     for s,e in zip(start,end)]
+                    
+    #                 parser.add_rules(*tags)
+    #                 parser.fill_chart()
+
+    #             brassitems = [(parser.items[j], parser.backtraces[j]) for j in parser.brassitems if parser.backtraces[j].children]
+    #             sentence.cache("brassitems", (brassitems, parser.backtraces))
 
 
     def _tagging_loss(self, feats, batch: list[SentenceWrapper], batch_first: bool = False, check_bounds: bool = False):
@@ -256,34 +279,31 @@ class EnsembleModel(flair.nn.Model):
         get_label_name = lambda x: f"{label_name}-{x}"
 
         with torch.no_grad():
-            parser = ActiveParser(self.__grammar__)
+            parser = ParserAdapter(self.__grammar__, total_limit=self.ktags)
             parser.set_scoring(self.scoring)
             embeds = self._batch_to_embeddings(batch, batch_first=True)
             scores = dict(self.forward(embeds))
-            topweights, toptags = scores["supertag"].topk(self.ktags, dim=-1)
+            topweights, toptags = scores["supertag"].topk(parser.total_limit, dim=-1, sorted=True)
             topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
             postags = scores["pos"].argmax(dim=-1)
             totalbacktraces = 0
             totalqueuelen = 0
 
-            for sentence, sembed, senttags, sentweights, postag in zip(batch, embeds, toptags, topweights, postags):
+            for sentence, sembed, sentweights, senttags, postag in zip(batch, embeds, topweights, toptags, postags):
                 # store tags in tokens
-                sentence.store_raw_prediction("supertag-k", senttags[:len(sentence)])
-                sentence.store_raw_prediction("supertag", senttags.gather(1, sentweights.argmin(dim=1, keepdim=True)).squeeze()[:len(sentence)])
+                sentence.store_raw_prediction("supertag-k", senttags[:len(sentence), :self.ktags])
+                sentence.store_raw_prediction("supertag", senttags[:len(sentence), 0])
                 sentence.store_raw_prediction("pos", postag[:len(sentence)])
 
                 # parse sentence and store parse tree in sentence
-                predicted_tags = [
-                    [(tag-1, weight) for tag, weight in zip(ktags, kweights) if tag != 0]
-                    for ktags, kweights in zip(senttags[:len(sentence)], sentweights)]
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
-
-                self.scoring.init_embeddings(sembed[:len(sentence)])
-                parser.init(*predicted_tags)
+                parser.init(len(sentence), sentweights, senttags-1)
+                print("init  with", len(sentence), "result", parser.parser.len)
                 parser.fill_chart()
+                
                 sentence.set_label(label_name, str(with_pos(parser.get_best()[0], pos)))
-                totalbacktraces += len(parser.backtraces)
-                totalqueuelen += len(parser.queue)
+                totalbacktraces += len(parser.parser.backtraces)
+                totalqueuelen += len(parser.parser.queue)
 
             store_embeddings(batch, storage_mode=embedding_storage_mode)
             if return_loss:
@@ -445,3 +465,40 @@ def float_or_zero(s):
         return f if f == f else 0.0 # return 0 if f is NaN
     except:
         return 0.0
+
+
+class ParserAdapter:
+    def __init__(self, grammar, step: float = 2, total_limit = 10):
+        self.parser = ActiveParser(grammar)
+        self.step = step
+        self.total_limit = total_limit
+
+    def init(self, length, weights, tags):
+        self.parser.init(length)
+        self.weights = weights[:self.parser.len]
+        self.tags = tags[:self.parser.len]
+
+    def fill_chart(self):
+        start = torch.zeros(self.parser.len, dtype=int)
+        end = torch.zeros(self.parser.len, dtype=int)
+        threshs = self.weights[:, 0].clone().detach().unsqueeze(1)
+        iteration = 1
+        while self.parser.rootid is None:
+            threshs += self.step
+            end = (self.weights < threshs).sum(dim=1)
+            tags = [
+                [(self.tags[pos, tag], self.weights[pos, tag]) for tag in range(s,e) if tag >= 0]
+                for pos, (s,e) in enumerate(zip(start,end))]
+            
+            self.parser.add_rules(*tags)
+            self.parser.fill_chart()
+            start = end
+            if all(s == self.total_limit for s in start):
+                break
+            iteration += 1
+
+    def get_best(self):
+        return self.parser.get_best()
+    
+    def set_scoring(self, *args):
+        self.parser.set_scoring(*args)

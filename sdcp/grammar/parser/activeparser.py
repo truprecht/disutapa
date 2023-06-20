@@ -24,11 +24,22 @@ class ActiveParser:
             raise ValueError("this parser does not support second order scores at the moment")
 
 
-    def init(self, *rules_per_position: Iterable[tuple[int, float]]):
-        self.len = len(rules_per_position)
+    def init(self, sentlen):
+        self.len = sentlen
         self.rootid: int | None = None
         self.queue: list[qelement] = []
         self.actives: dict[str, list[tuple[ActiveItem, backtrace, float]]] = {}
+        self.filtering = False
+        self.stop_early: float | bool = True
+
+        self.expanded: set[ActiveItem|PassiveItem] = set()
+        self.from_lhs: dict[str, list[tuple[disco_span, int, float]]] = defaultdict(list)
+        self.backtraces: list[backtrace] = []  
+        self.items: list[PassiveItem] = []
+
+
+    def add_rules(self, *rules_per_position: Iterable[tuple[int, float]]):
+        assert not self.queue
         for i, rules in enumerate(rules_per_position):
             minweight = min(w for _, w in (rules or [(0,0.0)]))
             for rid, weight in rules:
@@ -41,8 +52,6 @@ class ActiveParser:
                     weight
                 ))
         heapify(self.queue)
-        self.filtering = False
-        self.stop_early: float | bool = True
 
     
     def set_gold_item_filter(self, gold_tree: Derivation, nongold_stopping_prob: float = 0.9, early_stopping: float | bool = True):
@@ -58,11 +67,6 @@ class ActiveParser:
 
 
     def fill_chart(self) -> None:
-        expanded: set[ActiveItem|PassiveItem] = set()
-        self.from_lhs: dict[str, list[tuple[disco_span, int, float]]] = defaultdict(list)
-        self.backtraces: list[backtrace] = []  
-        self.items: list[PassiveItem] = []
-
         self.new_item_batch: list[PassiveItem] = []
         self.new_item_batch_minweight: float | None = None
         def register_item(qele: qelement):
@@ -85,9 +89,9 @@ class ActiveParser:
         while self.queue or self.new_item_batch:
             flush_items()
             qi: qelement = heappop(self.queue)
-            if qi.item in expanded:
+            if qi.item in self.expanded:
                 continue
-            expanded.add(qi.item)
+            self.expanded.add(qi.item)
 
             if isinstance(qi.item, PassiveItem):
                 backtrace_id = len(self.backtraces)

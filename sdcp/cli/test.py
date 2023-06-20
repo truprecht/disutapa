@@ -5,6 +5,7 @@ from sdcp.grammar.lcfrs import lcfrs_composition, ordered_union_composition
 from sdcp.autotree import AutoTree, with_pos, fix_rotation
 from sdcp.tagging.parsing_scorer import CombinatorialParsingScorer, DummyScorer
 from sdcp.tagging.data import DatasetWrapper
+from sdcp.tagging.ensemble_model import ParserAdapter
 from discodop.eval import Evaluator, readparam
 from discodop.tree import ParentedTree, ImmutableTree
 from tqdm import tqdm
@@ -13,20 +14,24 @@ from datasets import DatasetDict
 from random import sample, shuffle, random, seed
 from math import exp, log
 
-def rule_vector(total: int, k: int, hot: int):
-    vec = sample(range(total), k-1)
-    vec.append(hot)
-    shuffle(vec)
-    weights = [exp(((total-abs(hot-rid))/total)*random()) for rid in vec]
-    denom = sum(weights)
-    return [(rid, -log(w/denom)) for rid, w in zip(vec, weights)]
+import torch
+
+
+def guess_weights(total, hot):
+    weights = torch.stack([
+        torch.arange(total, dtype=float)-i
+        for i in hot])
+    weights = (-weights.abs() + total)
+    weights *= torch.randn(weights.shape) * .02 + 1
+    return weights
 
 
 def main(config: Namespace):
     seed(config.seed)
     evaluator = Evaluator(readparam(config.param))
     data = DatasetWrapper(DatasetDict.load_from_disk(config.corpus)["dev"])
-    p = ActiveParser(grammar([eval(str_hr) for str_hr in data.labels()]))
+    p = ParserAdapter(grammar([eval(str_hr) for str_hr in data.labels()]), total_limit=config.weighted)
+    nrules = len(p.parser.grammar.rules)
     idtopos = data.labels("pos")
     snd_order_weights = CombinatorialParsingScorer(data, prior=config.snd_order_prior, separated=config.snd_order_separate) \
         if config.snd_order else DummyScorer()
@@ -35,11 +40,13 @@ def main(config: Namespace):
     datalen = len(data)
     data = enumerate(data)
     for i, sample in tqdm(data, total=datalen):
-        p.init(
-            *(rule_vector(len(p.grammar.rules), config.weighted, i) for i in sample.get_raw_labels("supertag")),
-        )
         if not config.range is None and not i in range(*config.range):
             continue
+
+        weights, indices = guess_weights(nrules, sample.get_raw_labels("supertag")).topk(config.weighted, sorted=True)
+        weights = -weights.log_softmax(dim=-1)
+
+        p.init(len(sample), weights, indices)
         p.fill_chart()
         prediction = p.get_best()[0]
         prediction = with_pos(prediction, [idtopos[i] for i in sample.get_raw_labels("pos")])

@@ -27,6 +27,7 @@ class ModelParameters:
     scoring_options: list[str] = field(default_factory=list)
     abort_nongold_prob: float = 0.9
     ktags: int = 1
+    step: float = 2.0
     dropout: float = 0.1
     evalparam: Optional[dict] = None
 
@@ -54,7 +55,7 @@ class EnsembleModel(flair.nn.Model):
             for embedding in parameters.embedding
         ]
         parsing_scorer = ScoringBuilder(parameters.scoring, corpus, *parameters.scoring_options)
-        return cls(embeddings, tag_dicts, grammar, parsing_scorer, parameters.dropout, parameters.ktags, parameters.evalparam, parameters.abort_nongold_prob)
+        return cls(embeddings, tag_dicts, grammar, parsing_scorer, parameters)
 
     def set_scoring(self, scoring_str, corpus, option_strs, abort_brass: float = 0.9):
         self.scoring_builder = ScoringBuilder(scoring_str, corpus, *option_strs)
@@ -67,7 +68,7 @@ class EnsembleModel(flair.nn.Model):
             if "fine_tune" in e.__dict__:
                 e.fine_tune = False
 
-    def __init__(self, embeddings, dictionaries, grammar, parsing_scorer, dropout: float = 0.1, ktags: int = 1, evalparam: dict = None, abort_brass: float = 2):
+    def __init__(self, embeddings, dictionaries, grammar, parsing_scorer, config: ModelParameters):
         super().__init__()
         self.embedding_builder = embeddings
         self.embedding = flair.embeddings.StackedEmbeddings([
@@ -76,10 +77,9 @@ class EnsembleModel(flair.nn.Model):
         inputlen = self.embedding.embedding_length
         self.scoring_builder = parsing_scorer
         self.scoring = self.scoring_builder.produce(inputlen)
-        self.abort_brass = abort_brass
+        self.config = config
 
-        self.dropoutprob = dropout
-        self.dropout = torch.nn.Dropout(dropout)
+        self.dropout = torch.nn.Dropout(self.config.dropout)
         self.dictionaries = dictionaries
         self.scores = torch.nn.ModuleDict({
             field: torch.nn.Linear(self.embedding.embedding_length, len(dict))
@@ -87,23 +87,20 @@ class EnsembleModel(flair.nn.Model):
         })
 
         self.__grammar__ = grammar
-        self.__evalparam__ = evalparam
-        self.__ktags__ = ktags
         self.__fix_tagging__ = False
-        self.supertag_weight_range = log(.1)
         self.to(flair.device)
 
     def set_eval_param(self, ktags: int, evalparam: dict):
-        self.__evalparam__ = evalparam
-        self.__ktags__ = ktags
+        self.config.evalparam = evalparam
+        self.config.ktags = ktags
 
     @property
     def evalparam(self):
-        return self.__evalparam__
+        return self.config.evalparam
 
     @property
     def ktags(self):
-        return self.__ktags__
+        return self.config.ktags
 
     def label_type(self):
         return "supertag"
@@ -279,7 +276,7 @@ class EnsembleModel(flair.nn.Model):
         get_label_name = lambda x: f"{label_name}-{x}"
 
         with torch.no_grad():
-            parser = ParserAdapter(self.__grammar__, total_limit=self.ktags)
+            parser = ParserAdapter(self.__grammar__, step=self.config.step, total_limit=self.config.ktags)
             parser.set_scoring(self.scoring)
             embeds = self._batch_to_embeddings(batch, batch_first=True)
             scores = dict(self.forward(embeds))
@@ -350,7 +347,7 @@ class EnsembleModel(flair.nn.Model):
         from timeit import default_timer
         from collections import Counter
 
-        if self.__evalparam__ is None:
+        if self.evalparam is None:
             raise Exception("Need to specify evaluator parameter file before evaluating")
         if only_disc == "both":
             evaluators = {
@@ -437,12 +434,10 @@ class EnsembleModel(flair.nn.Model):
         return {
             "state_dict": self.state_dict(),
             "embedding_builder": self.embedding_builder,
-            "dropout": self.dropoutprob,
             "tags": self.dictionaries,
-            "ktags": self.ktags,
-            "evalparam": self.evalparam,
             "grammar": (self.__grammar__.rules, self.__grammar__.root),
-            "scoring_builder": self.scoring_builder
+            "scoring_builder": self.scoring_builder,
+            "config": self.config
         }
 
     @classmethod
@@ -452,9 +447,7 @@ class EnsembleModel(flair.nn.Model):
             state["tags"],
             grammar(*state["grammar"]),
             state["scoring_builder"],
-            dropout = state["dropout"],
-            ktags = state["ktags"],
-            evalparam = state["evalparam"]
+            state["config"]
         )
         model.load_state_dict(state["state_dict"])
         return model

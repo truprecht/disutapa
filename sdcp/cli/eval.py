@@ -15,8 +15,8 @@ def main(config):
     corpus = CorpusWrapper(config.corpus)
     corpus = corpus.dev if config.dev else corpus.test
     model = EnsembleModel.load(config.model)
-    if config.ktags:
-        model.__ktags__ = config.ktags
+    for field in (f for f in ("ktags", "step") if not config.__dict__[f] is None):
+        model.set_config(field, config.__dict__[field])
     results = model.evaluate(corpus, progressbar=True)
     print(results.log_header)
     print(results.log_line)
@@ -29,4 +29,5 @@ def subcommand(sub: ArgumentParser):
     sub.add_argument("--device", type=torch.device, default=None)
     sub.add_argument("--dev", action="store_true", default=False)
     sub.add_argument("--ktags", type=int, default=None)
+    sub.add_argument("--step", type=float, default=None)
     sub.set_defaults(func=lambda args: main(args))

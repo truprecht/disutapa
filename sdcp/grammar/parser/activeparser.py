@@ -164,5 +164,4 @@ class ActiveParser:
             if self.rootid is None:
                 return None, None
         bt: backtrace = self.backtraces[item]
-        w: float = self.weight[item]
         return Tree((bt.rid, bt.leaf), [self.get_best_derivation(i) for i in bt.children])

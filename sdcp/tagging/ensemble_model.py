@@ -1,7 +1,7 @@
 import torch
 import flair
 from tqdm import tqdm
-from math import ceil, log
+from typing import Any
 
 CPU = torch.device("cpu")
 
@@ -37,6 +37,7 @@ class ModelParameters:
         else:
             options = eval(f"dict({','.join(self.embedding_options)})")
             self.embedding = [PretrainedBuilder(self.embedding, **options)]
+        
         if self.evalparam is None:
             self.evalparam = readparam("../disco-dop/proper.prm")
 
@@ -90,17 +91,9 @@ class EnsembleModel(flair.nn.Model):
         self.__fix_tagging__ = False
         self.to(flair.device)
 
-    def set_eval_param(self, ktags: int, evalparam: dict):
-        self.config.evalparam = evalparam
-        self.config.ktags = ktags
-
-    @property
-    def evalparam(self):
-        return self.config.evalparam
-
-    @property
-    def ktags(self):
-        return self.config.ktags
+    def set_config(self, field: str, value: Any):
+        assert field in ("ktags", "step", "evalparam")
+        self.config.__dict__[field] = value
 
     def label_type(self):
         return "supertag"
@@ -288,15 +281,23 @@ class EnsembleModel(flair.nn.Model):
 
             for sentence, sembed, sentweights, senttags, postag in zip(batch, embeds, topweights, toptags, postags):
                 # store tags in tokens
-                sentence.store_raw_prediction("supertag-k", senttags[:len(sentence), :self.ktags])
+                sentence.store_raw_prediction("supertag-k", senttags[:len(sentence), :self.config.ktags])
                 sentence.store_raw_prediction("supertag", senttags[:len(sentence), 0])
                 sentence.store_raw_prediction("pos", postag[:len(sentence)])
 
                 # parse sentence and store parse tree in sentence
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
                 parser.init(len(sentence), sentweights, senttags-1)
-                print("init  with", len(sentence), "result", parser.parser.len)
                 parser.fill_chart()
+
+                # todo: move into evaluate
+                chosen_tag_stats = []
+                if not parser.parser.rootid is None:
+                    for lexi, rulei in sorted((t.label[1], t.label[0]) for t in parser.parser.get_best_derivation().subtrees()):
+                        idx = next(i for i, ri in enumerate(senttags[lexi]) if ri-1 == rulei)
+                        weightdiff = sentweights[lexi, idx] - sentweights[lexi, 0]
+                        chosen_tag_stats.append((idx, weightdiff))
+                sentence.store_raw_prediction("chosen-supertag", chosen_tag_stats)
                 
                 sentence.set_label(label_name, str(with_pos(parser.get_best()[0], pos)))
                 totalbacktraces += len(parser.parser.backtraces)
@@ -347,17 +348,17 @@ class EnsembleModel(flair.nn.Model):
         from timeit import default_timer
         from collections import Counter
 
-        if self.evalparam is None:
+        if self.config.evalparam is None:
             raise Exception("Need to specify evaluator parameter file before evaluating")
         if only_disc == "both":
             evaluators = {
-                "F1-all":  Evaluator({ **self.evalparam, "DISC_ONLY": False }),
-                "F1-disc": Evaluator({ **self.evalparam, "DISC_ONLY": True  })}
+                "F1-all":  Evaluator({ **self.config.evalparam, "DISC_ONLY": False }),
+                "F1-disc": Evaluator({ **self.config.evalparam, "DISC_ONLY": True  })}
         else:
-            mode = self.evalparam["DISC_ONLY"] if only_disc == "param" else (only_disc=="true")
+            mode = self.config.evalparam["DISC_ONLY"] if only_disc == "param" else (only_disc=="true")
             strmode = "F1-disc" if mode else "F1-all"
             evaluators = {
-                strmode: Evaluator({ **self.evalparam, "DISC_ONLY": mode })}
+                strmode: Evaluator({ **self.config.evalparam, "DISC_ONLY": mode })}
         
         data_loader = DataLoader(dataset, batch_size=mini_batch_size, num_workers=num_workers)
         iterator = data_loader if not progressbar else tqdm(data_loader)
@@ -369,7 +370,8 @@ class EnsembleModel(flair.nn.Model):
 
         trees = []
         supertags = []
-        postags = [] 
+        postags = []
+        chosen_supertags = []
         for batch in iterator:
             loss = self.predict(
                 batch,
@@ -394,6 +396,11 @@ class EnsembleModel(flair.nn.Model):
                 (sentence.get_raw_labels("pos"), sentence.get_raw_prediction("pos"))
                 for sentence in batch
             )
+            chosen_supertags.extend(
+                idxwdiff
+                for sentence in batch
+                for idxwdiff in sentence.get_raw_prediction("chosen-supertag")
+            )
         end_time = default_timer()
         if return_loss:
             eval_loss /= n_predictions
@@ -412,13 +419,28 @@ class EnsembleModel(flair.nn.Model):
             for strmode, evaluator in evaluators.items()}
         scores["supertag"] = 0
         scores["pos"] = 0
+        
+        scores["chose-first"] = 0
+        if chosen_supertags:
+            choices = sorted(idx for idx, _ in chosen_supertags if not idx == 0)
+            wdiffs = sorted(wdiff for idx, wdiff in chosen_supertags if not idx == 0)
+            scores["median-choice"] = choices[len(choices)//2]
+            scores["worst-choice"] = choices[-1]
+            scores["90-choice"] = choices[int(len(choices)*0.9)]
+            scores["median-wdiff"] = wdiffs[len(choices)//2]
+            scores["worst-wdiff"] = wdiffs[-1]
+            scores["90-wdiff"] = wdiffs[int(len(choices)*0.9)]
+
         for (gold, pred) in supertags:
             scores["supertag"] += sum(torch.tensor(gold)+1 == pred.to(CPU))
         for (gold, pred) in postags:
             scores["pos"] += sum(torch.tensor(gold)+1 == pred.to(CPU))
+        for (sidx, wdiff) in chosen_supertags:
+            scores["chose-first"] += sidx == 0
         scores["coverage"] = 1-(noparses/i)
         scores["time"] = end_time - start_time
         predictions = sum(len(s) for s, _ in supertags)
+        scores["chose-first"] /= predictions
         scores["supertag"] = scores["supertag"].item() / predictions
         scores["pos"] = scores["pos"].item() / predictions
 
@@ -487,8 +509,10 @@ class ParserAdapter:
             self.parser.fill_chart()
             start = end
             if all(s == self.total_limit for s in start):
+                print("abort after", iteration, "iterations")
                 break
             iteration += 1
+        print("done after", iteration, "iterations")
 
     def get_best(self):
         return self.parser.get_best()

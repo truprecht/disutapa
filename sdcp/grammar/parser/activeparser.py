@@ -1,7 +1,7 @@
 from collections import defaultdict
 from heapq import heapify, heappush, heappop
 from random import random
-from typing import Iterable, cast
+from typing import Iterable
 
 
 from ..extract_head import Tree
@@ -117,10 +117,12 @@ class ActiveParser:
                 if qi.item.lhs == self.grammar.root and qi.item.leaves == disco_span((0, self.len)):
                     if self.rootid is None:
                         self.rootid = backtrace_id
-                    if self.stop_early is True:
-                        return
-                # if a root item was already found and the current weight is more than a threshold, then exit
-                if not self.rootid is None and qi.weight > self.stop_early:
+                # continue as long as there are items with same weight
+                if not self.rootid is None and self.stop_early is True \
+                        and abs(qi.weight - self.itemweights[self.rootid]) > 1e-5:
+                    return
+                #  if a root item was already found and the current weight is more than a threshold, then exit
+                if not self.rootid is None and isinstance(self.stop_early, float) and qi.weight > self.stop_early:
                     return
 
                 qi.bt = backtrace_id

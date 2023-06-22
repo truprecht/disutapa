@@ -2,6 +2,7 @@ import torch
 import flair
 from tqdm import tqdm
 from typing import Any
+from itertools import islice
 
 CPU = torch.device("cpu")
 
@@ -10,7 +11,8 @@ from sdcp.grammar.sdcp import grammar
 from sdcp.grammar.parser.activeparser import ActiveParser
 from sdcp.autotree import AutoTree, with_pos
 
-from discodop.eval import readparam
+from discodop.eval import readparam, TreePairResult
+from discodop.tree import ParentedTree
 
 from .data import DatasetWrapper, SentenceWrapper
 from .embeddings import TokenEmbeddingBuilder, EmbeddingPresets, PretrainedBuilder
@@ -242,7 +244,8 @@ class EnsembleModel(flair.nn.Model):
             return_loss: bool = False,
             embedding_storage_mode: str = "none",
             supertag_storage_mode: str = "both",
-            othertag_storage_mode: bool = True):
+            othertag_storage_mode: bool = True,
+            store_kbest: int = None):
         """ Predicts pos tags and supertags for the given sentences and parses
             them.
             :param label_name: the predicted parse trees are stored in each
@@ -291,13 +294,19 @@ class EnsembleModel(flair.nn.Model):
                 parser.fill_chart()
 
                 # todo: move into evaluate
-                chosen_tag_stats = []
-                if not parser.parser.rootid is None:
-                    for lexi, rulei in sorted((t.label[1], t.label[0]) for t in parser.parser.get_best_derivation().subtrees()):
-                        idx = next(i for i, ri in enumerate(senttags[lexi]) if ri-1 == rulei)
-                        weightdiff = sentweights[lexi, idx] - sentweights[lexi, 0]
-                        chosen_tag_stats.append((idx, weightdiff))
-                sentence.store_raw_prediction("chosen-supertag", chosen_tag_stats)
+                # chosen_tag_stats = []
+                # if not parser.parser.rootid is None:
+                #     for lexi, rulei in sorted((t.label[1], t.label[0]) for t in parser.parser.get_best_derivation().subtrees()):
+                #         idx = next(i for i, ri in enumerate(senttags[lexi]) if ri-1 == rulei)
+                #         weightdiff = sentweights[lexi, idx] - sentweights[lexi, 0]
+                #         chosen_tag_stats.append((idx, weightdiff))
+                # sentence.store_raw_prediction("chosen-supertag", chosen_tag_stats)
+
+                if not store_kbest is None:
+                    derivs = islice(parser.get_best_iter(), store_kbest)
+                    derivs = [str(with_pos(d[0], pos)) for d in derivs]
+                    sentence.store_raw_prediction("kbest-trees", derivs)
+                    print(derivs)
                 
                 sentence.set_label(label_name, str(with_pos(parser.get_best()[0], pos)))
                 totalbacktraces += len(parser.parser.backtraces)
@@ -323,7 +332,9 @@ class EnsembleModel(flair.nn.Model):
             gold_label_dictionary = None,
             return_loss: bool = True,
             exclude_labels = [],
-            progressbar: bool = False) -> Tuple[flair.training_utils.Result, float]:
+            progressbar: bool = False,
+            kbest_oracle: int = None
+        ) -> Tuple[flair.training_utils.Result, float]:
         """ Predicts supertags, pos tags and parse trees, and reports the
             predictions scores for a set of sentences.
             :param sentences: a ``DataSet`` of sentences. For each sentence
@@ -343,10 +354,8 @@ class EnsembleModel(flair.nn.Model):
                 is the f1-score (for all constituents, if only_disc == "both").
         """
         from flair.datasets import DataLoader
-        from discodop.tree import ParentedTree, Tree
         from discodop.eval import Evaluator
         from timeit import default_timer
-        from collections import Counter
 
         if self.config.evalparam is None:
             raise Exception("Need to specify evaluator parameter file before evaluating")
@@ -372,6 +381,7 @@ class EnsembleModel(flair.nn.Model):
         supertags = []
         postags = []
         chosen_supertags = []
+        oracle_trees = []
         for batch in iterator:
             loss = self.predict(
                 batch,
@@ -379,7 +389,8 @@ class EnsembleModel(flair.nn.Model):
                 supertag_storage_mode=accuracy,
                 othertag_storage_mode=othertag_accuracy,
                 label_name='predicted',
-                return_loss=return_loss
+                return_loss=return_loss,
+                store_kbest=kbest_oracle
             )
             if return_loss:
                 eval_loss += loss[0]
@@ -396,11 +407,21 @@ class EnsembleModel(flair.nn.Model):
                 (sentence.get_raw_labels("pos"), sentence.get_raw_prediction("pos"))
                 for sentence in batch
             )
-            chosen_supertags.extend(
-                idxwdiff
-                for sentence in batch
-                for idxwdiff in sentence.get_raw_prediction("chosen-supertag")
-            )
+            # chosen_supertags.extend(
+            #     idxwdiff
+            #     for sentence in batch
+            #     for idxwdiff in sentence.get_raw_prediction("chosen-supertag")
+            # )
+            if kbest_oracle:
+                oracle_trees.extend(
+                    (len(sentence),
+                        *oracle_tree(
+                            sentence.get_raw_prediction("kbest-trees"),
+                            sentence.get_labels("predicted")[0].value,
+                            len(sentence),
+                            params=self.config.evalparam),
+                        sentence.get_labels("predicted")[0].value)
+                    for sentence in batch)
         end_time = default_timer()
         if return_loss:
             eval_loss /= n_predictions
@@ -420,16 +441,36 @@ class EnsembleModel(flair.nn.Model):
         scores["supertag"] = 0
         scores["pos"] = 0
         
-        scores["chose-first"] = 0
-        if chosen_supertags:
-            choices = sorted(idx for idx, _ in chosen_supertags if not idx == 0)
-            wdiffs = sorted(wdiff for idx, wdiff in chosen_supertags if not idx == 0)
-            scores["median-choice"] = choices[len(choices)//2]
-            scores["worst-choice"] = choices[-1]
-            scores["90-choice"] = choices[int(len(choices)*0.9)]
-            scores["median-wdiff"] = wdiffs[len(choices)//2]
-            scores["worst-wdiff"] = wdiffs[-1]
-            scores["90-wdiff"] = wdiffs[int(len(choices)*0.9)]
+        # scores["chose-first"] = 0
+        # # scores["median-choice"] = 0
+        # # scores["worst-choice"] = 0
+        # scores["90-choice"] = 0
+        # scores["median-wdiff"] = 0
+        # scores["worst-wdiff"] = 0
+        # scores["90-wdiff"] = 0
+        # if chosen_supertags:
+        #     choices = sorted(idx for idx, _ in chosen_supertags if not idx == 0)
+        #     wdiffs = sorted(wdiff for idx, wdiff in chosen_supertags if not idx == 0)
+        #     scores["median-choice"] = choices[len(choices)//2]
+        #     scores["worst-choice"] = choices[-1]
+        #     scores["90-choice"] = choices[int(len(choices)*0.9)]
+        #     scores["median-wdiff"] = wdiffs[len(choices)//2]
+        #     scores["worst-wdiff"] = wdiffs[-1]
+        #     scores["90-wdiff"] = wdiffs[int(len(choices)*0.9)]
+
+        if kbest_oracle:
+            ev = Evaluator(self.config.evalparam)
+            indices = []
+            for i, (sl, otidx, ot, gt) in enumerate(oracle_trees):
+                sent = [str(i) for i in range(sl)]
+                ev.add(i, ParentedTree(gt), list(sent), ParentedTree(ot), sent)
+                if otidx > 0:
+                    indices.append(otidx)
+            scores["oracle-f1"] = float_or_zero(ev.acc.scores()["lf"])
+            indices.sort()
+            scores["num-kbest"] = len(indices)
+            scores["median-kbest"] = indices[len(indices)//2] if indices else 0
+            scores["90-kbest"] = indices[int(len(indices)*0.9)] if indices else 0
 
         for (gold, pred) in supertags:
             scores["supertag"] += sum(torch.tensor(gold)+1 == pred.to(CPU))
@@ -440,7 +481,7 @@ class EnsembleModel(flair.nn.Model):
         scores["coverage"] = 1-(noparses/i)
         scores["time"] = end_time - start_time
         predictions = sum(len(s) for s, _ in supertags)
-        scores["chose-first"] /= predictions
+        # scores["chose-first"] /= predictions
         scores["supertag"] = scores["supertag"].item() / predictions
         scores["pos"] = scores["pos"].item() / predictions
 
@@ -521,3 +562,14 @@ class ParserAdapter:
     
     def set_scoring(self, *args):
         self.parser.set_scoring(*args)
+
+def oracle_tree(kbestlist, gold, length, params):
+    besttree, bestscore, bestindex = None, None, None
+    sent = [str(i) for i in range(length)]
+    for i, candidate in enumerate(kbestlist):
+        scores = TreePairResult(0, ParentedTree(gold), list(sent), ParentedTree(candidate), sent, params)
+        if bestscore is None or scores["LF"] > bestscore:
+            besttree = candidate
+            bestscore = scores.scores()["LF"]
+            bestindex = i
+    return bestindex, besttree

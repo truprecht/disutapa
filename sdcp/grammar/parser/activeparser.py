@@ -10,6 +10,7 @@ from ...tagging.parsing_scorer import DummyScorer
 from ..derivation import Derivation
 from ..lcfrs import disco_span
 from .item import qelement, PassiveItem, ActiveItem, backtrace, item
+from .kbestchart import KbestChart
 
 
 class ActiveParser:
@@ -32,10 +33,13 @@ class ActiveParser:
         self.filtering = False
         self.stop_early: float | bool = True
 
-        self.expanded: set[ActiveItem|PassiveItem] = set()
+        self.expanded: dict[ActiveItem|PassiveItem, int] = dict()
         self.from_lhs: dict[str, list[tuple[disco_span, int, float]]] = defaultdict(list)
-        self.backtraces: list[backtrace] = []  
+        self.backtraces: list[list[backtrace]] = []  
         self.items: list[PassiveItem] = []
+        
+        self.ruleweights = dict()
+        self.itemweights = list()
 
 
     def add_rules(self, *rules_per_position: Iterable[tuple[int, float]]):
@@ -51,6 +55,7 @@ class ActiveParser:
                     backtrace(rid, i, ()),
                     weight
                 ))
+                self.ruleweights[(rid, i)] = weight
         heapify(self.queue)
 
     
@@ -90,13 +95,16 @@ class ActiveParser:
             flush_items()
             qi: qelement = heappop(self.queue)
             if qi.item in self.expanded:
+                if isinstance(qi.item, PassiveItem):
+                    self.backtraces[self.expanded[qi.item]].append(qi.bt)
                 continue
-            self.expanded.add(qi.item)
+            self.expanded[qi.item] = len(self.backtraces)
 
             if isinstance(qi.item, PassiveItem):
                 backtrace_id = len(self.backtraces)
-                self.backtraces.append(qi.bt)
+                self.backtraces.append([qi.bt])
                 self.items.append(qi.item)
+                self.itemweights.append(qi.weight)
 
                 # check if a gold item filter was added and if the item is gold or brass
                 # if it is brass, then probabilistically ignore it
@@ -141,21 +149,30 @@ class ActiveParser:
                     qi.weight+pweight
                 ))
 
+    def get_best_iter(self):
+        if self.rootid is None:
+            yield [Tree("NOPARSE", list(range(self.len)))]
+            return
+      
+        self.kbestchart = KbestChart(
+            self.backtraces,
+            self.ruleweights,
+            self.grammar.rules,
+            self.itemweights,
+            self.rootid
+        )
 
-    def get_best(self, item = None, pushed: int = None):
-        if item is None:
-            item = self.rootid
-            if self.rootid is None:
-                return [Tree("NOPARSE", list(range(self.len)))]
-        bt: backtrace = self.backtraces[item]
-        fn, push = self.grammar.rules[bt.rid].dcp(bt.leaf, pushed)
-        return fn(*(self.get_best(c, p) for c, p in zip(bt.children, push)))
+        for t in iter(self.kbestchart):
+            yield t
+    
+    def get_best(self):
+        return next(self.get_best_iter())
 
     # todo: merge with function below
     def get_best_deriv(self, item = None):
         if item is None:
             item = self.rootid
-        bt: backtrace = self.backtraces[item]
+        bt: backtrace = self.backtraces[item][0]
         return Tree((bt.leaf, self.grammar.rules[bt.rid]), (self.get_best_deriv(c) for c in bt.children))
 
     def get_best_derivation(self, item=None):
@@ -163,5 +180,5 @@ class ActiveParser:
             item = self.rootid
             if self.rootid is None:
                 return None, None
-        bt: backtrace = self.backtraces[item]
+        bt: backtrace = self.backtraces[item][0]
         return Tree((bt.rid, bt.leaf), [self.get_best_derivation(i) for i in bt.children])

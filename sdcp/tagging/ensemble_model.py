@@ -509,13 +509,15 @@ class ParserAdapter:
             self.parser.fill_chart()
             start = end
             if all(s == self.total_limit for s in start):
-                print("abort after", iteration, "iterations")
                 break
             iteration += 1
-        print("done after", iteration, "iterations")
+        # print("stopping after", iteration, "iterations:", "success" if not self.parser.rootid is None else "failure")
 
     def get_best(self):
         return self.parser.get_best()
+    
+    def get_best_iter(self):
+        return self.parser.get_best_iter()
     
     def set_scoring(self, *args):
         self.parser.set_scoring(*args)

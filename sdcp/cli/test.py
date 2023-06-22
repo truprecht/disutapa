@@ -17,12 +17,15 @@ from math import exp, log
 import torch
 
 
-def guess_weights(total, hot):
-    weights = torch.stack([
-        torch.arange(total, dtype=float)-i
-        for i in hot])
-    weights = (-weights.abs() + total)
-    weights *= torch.randn(weights.shape) * .02 + 1
+def guess_weights(total, hot, k):
+    weights = torch.zeros((len(hot), total), dtype=float)
+    for i, h in enumerate(hot):
+        start = max(0, h-k//2) if h+k < total else total-k
+        end = start + k
+        ws = (torch.arange(start, end)-h).abs()
+        ws = (total-ws).pow(2)
+        ws = (torch.randn(k) * .5 + 1).abs()
+        weights[i, start:end] = ws
     return weights
 
 
@@ -43,7 +46,7 @@ def main(config: Namespace):
         if not config.range is None and not i in range(*config.range):
             continue
 
-        weights, indices = guess_weights(nrules, sample.get_raw_labels("supertag")).topk(config.weighted, sorted=True)
+        weights, indices = guess_weights(nrules, sample.get_raw_labels("supertag"), config.weighted).topk(config.weighted, sorted=True)
         weights = -weights.log_softmax(dim=-1)
 
         p.init(len(sample), weights, indices)
@@ -52,9 +55,19 @@ def main(config: Namespace):
         prediction = with_pos(prediction, [idtopos[i] for i in sample.get_raw_labels("pos")])
         evaluator.add(i, ParentedTree(sample.get_raw_labels("tree")), list(sample.get_raw_labels("sentence")),
                 ParentedTree.convert(prediction), list(sample.get_raw_labels("sentence")))
-        if (t:=str(fix_rotation(prediction)[1])) != sample.get_raw_labels("tree"):
+
+        if str(fix_rotation(prediction)[1]) != sample.get_raw_labels("tree"):
+            print("best tree is not gold")
+            trees = 0
+            for i, prediction in zip(range(config.k), p.get_best_iter()):
+                trees += 1
+                prediction = with_pos(prediction[0], [idtopos[i] for i in sample.get_raw_labels("pos")])
+                print(str(fix_rotation(prediction)[1]))
+                if str(fix_rotation(prediction)[1]) == sample.get_raw_labels("tree") and i > 0:
+                    print("found match among k best at", i)
             print(sample.get_raw_labels("tree"))
-            print(t)
+            if trees < config.k:
+                print("found only", trees, "instances")
     print(evaluator.summary())
     print(evaluator.breakdowns())
 
@@ -63,6 +76,7 @@ def subcommand(sub: ArgumentParser):
     sub.add_argument("corpus", help="file containing gold tags", type=str)
     sub.add_argument("--param", help="evalb parameter file for score calculation", type=str, required=False, default="../disco-dop/proper.prm")
     sub.add_argument("--weighted", type=int, default=1)
+    sub.add_argument("--k", type=int, default=1)
     sub.add_argument("--range", type=int, nargs=2, default=None)
     sub.add_argument("--seed", type=int, default=None)
     sub.add_argument("--snd-order", action="store_true", default=False)

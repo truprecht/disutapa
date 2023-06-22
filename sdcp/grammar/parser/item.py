@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import cast
 from ..lcfrs import disco_span, lcfrs_composition, NtOrLeaf, ordered_union_composition
 
-@dataclass
+@dataclass(frozen=True)
 class backtrace:
     rid: int
     leaf: int

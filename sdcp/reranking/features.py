@@ -103,7 +103,7 @@ class FeatureExtractor:
 
 
     def extract(self, tree: Tree|int) -> FeatureVector:
-        sparsevec = defaultdict(lambda: 0)
+        sparsevec = Counter()
 
         # counted objects features
         for featname in ("rules", "parent_rules", "bigrams", "parent_bigrams", "rightbranch"):

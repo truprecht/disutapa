@@ -12,11 +12,12 @@ from sdcp.grammar.parser.activeparser import ActiveParser
 from sdcp.autotree import AutoTree, with_pos
 
 from discodop.eval import readparam, TreePairResult
-from discodop.tree import ParentedTree
+from discodop.tree import ParentedTree, Tree
 
 from .data import DatasetWrapper, SentenceWrapper
 from .embeddings import TokenEmbeddingBuilder, EmbeddingPresets, PretrainedBuilder
 from .parsing_scorer import ScoringBuilder
+from ..reranking.classifier import TreeRanker
 
 
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ class ModelParameters:
     scoring_options: list[str] = field(default_factory=list)
     abort_nongold_prob: float = 0.9
     ktags: int = 1
+    ktrees: int = 1
     step: float = 2.0
     dropout: float = 0.1
     evalparam: Optional[dict] = None
@@ -58,7 +60,7 @@ class EnsembleModel(flair.nn.Model):
             for embedding in parameters.embedding
         ]
         parsing_scorer = ScoringBuilder(parameters.scoring, corpus, *parameters.scoring_options)
-        return cls(embeddings, tag_dicts, grammar, parsing_scorer, parameters)
+        return cls(embeddings, tag_dicts, grammar, parsing_scorer, None, parameters)
 
     def set_scoring(self, scoring_str, corpus, option_strs, abort_brass: float = 0.9):
         self.scoring_builder = ScoringBuilder(scoring_str, corpus, *option_strs)
@@ -71,7 +73,7 @@ class EnsembleModel(flair.nn.Model):
             if "fine_tune" in e.__dict__:
                 e.fine_tune = False
 
-    def __init__(self, embeddings, dictionaries, grammar, parsing_scorer, config: ModelParameters):
+    def __init__(self, embeddings, dictionaries, grammar, parsing_scorer, reranking, config: ModelParameters):
         super().__init__()
         self.embedding_builder = embeddings
         self.embedding = flair.embeddings.StackedEmbeddings([
@@ -89,12 +91,14 @@ class EnsembleModel(flair.nn.Model):
             for field, dict in self.dictionaries.items()
         })
 
+        self.reranking = reranking
+
         self.__grammar__ = grammar
         self.__fix_tagging__ = False
         self.to(flair.device)
 
     def set_config(self, field: str, value: Any):
-        assert field in ("ktags", "step", "evalparam")
+        assert field in ("ktags", "ktrees", "step", "evalparam")
         self.config.__dict__[field] = value
 
     def label_type(self):
@@ -302,13 +306,17 @@ class EnsembleModel(flair.nn.Model):
                 #         chosen_tag_stats.append((idx, weightdiff))
                 # sentence.store_raw_prediction("chosen-supertag", chosen_tag_stats)
 
-                if not store_kbest is None:
+                if not store_kbest is None or not self.reranking is None:
                     derivs = islice(parser.get_best_iter(), store_kbest)
-                    derivs = [str(with_pos(d[0], pos)) for d in derivs]
+                    derivs = [(with_pos(d[0], pos), w) for d, w in derivs]
                     sentence.store_raw_prediction("kbest-trees", derivs)
-                    print(derivs)
+
+                if not self.reranking is None:
+                    _, tree = self.reranking.select(derivs)
+                else:
+                    tree = with_pos(parser.get_best()[0], pos)
                 
-                sentence.set_label(label_name, str(with_pos(parser.get_best()[0], pos)))
+                sentence.set_label(label_name, str(tree))
                 totalbacktraces += len(parser.parser.backtraces)
                 totalqueuelen += len(parser.parser.queue)
 
@@ -417,10 +425,10 @@ class EnsembleModel(flair.nn.Model):
                     (len(sentence),
                         *oracle_tree(
                             sentence.get_raw_prediction("kbest-trees"),
-                            sentence.get_labels("predicted")[0].value,
+                            sentence.get_raw_labels("tree"),
                             len(sentence),
                             params=self.config.evalparam),
-                        sentence.get_labels("predicted")[0].value)
+                        sentence.get_raw_labels("tree"))
                     for sentence in batch)
         end_time = default_timer()
         if return_loss:
@@ -463,7 +471,7 @@ class EnsembleModel(flair.nn.Model):
             indices = []
             for i, (sl, otidx, ot, gt) in enumerate(oracle_trees):
                 sent = [str(i) for i in range(sl)]
-                ev.add(i, ParentedTree(gt), list(sent), ParentedTree(ot), sent)
+                ev.add(i, ParentedTree(gt), list(sent), ParentedTree.convert(ot), sent)
                 if otidx > 0:
                     indices.append(otidx)
             scores["oracle-f1"] = float_or_zero(ev.acc.scores()["lf"])
@@ -500,7 +508,8 @@ class EnsembleModel(flair.nn.Model):
             "tags": self.dictionaries,
             "grammar": (self.__grammar__.rules, self.__grammar__.root),
             "scoring_builder": self.scoring_builder,
-            "config": self.config
+            "config": self.config,
+            "reranking": self.reranking
         }
 
     @classmethod
@@ -510,10 +519,29 @@ class EnsembleModel(flair.nn.Model):
             state["tags"],
             grammar(*state["grammar"]),
             state["scoring_builder"],
-            state["config"]
+            state.get("reranking"),
+            state["config"],
         )
         model.load_state_dict(state["state_dict"])
         return model
+
+    def add_reranker(self, ranker: TreeRanker, training_set, batch_size: int = 16, num_workers: int = 1):
+        from flair.datasets import DataLoader
+        self.reranking = None
+        data_loader = DataLoader(training_set, batch_size=batch_size, num_workers=num_workers)
+        for batch in data_loader:
+            self.predict(
+                batch,
+                label_name='predicted',
+                store_kbest=self.config.ktrees
+            )
+            for sentence in batch:
+                ranker.add_tree(
+                    Tree(sentence.get_raw_labels("tree")),
+                    sentence.get_raw_prediction("kbest-trees")
+                )
+        self.reranking = ranker
+        self.reranking.fit()
 
 def float_or_zero(s):
     try:
@@ -563,13 +591,21 @@ class ParserAdapter:
     def set_scoring(self, *args):
         self.parser.set_scoring(*args)
 
+
+
 def oracle_tree(kbestlist, gold, length, params):
     besttree, bestscore, bestindex = None, None, None
+    firstscore = None
     sent = [str(i) for i in range(length)]
-    for i, candidate in enumerate(kbestlist):
-        scores = TreePairResult(0, ParentedTree(gold), list(sent), ParentedTree(candidate), sent, params)
-        if bestscore is None or scores["LF"] > bestscore:
+    for i, (candidate, w) in enumerate(kbestlist):
+        scores = TreePairResult(0, ParentedTree(gold), list(sent), ParentedTree.convert(candidate), sent, params)
+        lf1 = scores.scores()["LF"]
+        if bestscore is None or lf1 > bestscore:
             besttree = candidate
-            bestscore = scores.scores()["LF"]
+            bestscore = lf1
             bestindex = i
+        if firstscore is None:
+            firstscore = lf1
+    if bestindex > 0:
+        print("found better tree at index", bestindex, "with diff:", bestscore, firstscore)
     return bestindex, besttree

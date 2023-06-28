@@ -153,7 +153,7 @@ class ActiveParser:
 
     def get_best_iter(self):
         if self.rootid is None:
-            yield [Tree("NOPARSE", list(range(self.len)))]
+            yield [Tree("NOPARSE", list(range(self.len)))], 0.0
             return
       
         self.kbestchart = KbestChart(
@@ -168,7 +168,7 @@ class ActiveParser:
             yield t
     
     def get_best(self):
-        return next(self.get_best_iter())
+        return next(self.get_best_iter())[0]
 
     # todo: merge with function below
     def get_best_deriv(self, item = None):

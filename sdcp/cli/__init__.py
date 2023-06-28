@@ -1,4 +1,4 @@
-from . import eval_scoring, add_scoring, extract, test, train, eval
+from . import eval_scoring, add_scoring, extract, test, train, eval, add_reranker
 from argparse import ArgumentParser
 
 def main():
@@ -17,5 +17,7 @@ def main():
         subcommands.add_parser(name="add-scoring", description="Add a scoring module to the parser"))
     eval.subcommand(
         subcommands.add_parser(name="eval", description="Evaluate a trained classifier"))
+    add_reranker.subcommand(
+        subcommands.add_parser(name="reranker", description="Train a reranking model and add it to a parser"))
     parsed_args = args.parse_args()
     parsed_args.func(parsed_args)

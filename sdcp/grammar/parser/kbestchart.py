@@ -81,16 +81,16 @@ class KbestChart:
         return weight
 
 
-    def kthbest(self, item: int, k: int, pushed: int = None) -> list[Tree]:
+    def kthbest(self, item: int, k: int, pushed: int = None) -> tuple[list[Tree], float]:
         assert item in self.kchart and len(self.kchart[item]) > k
         he = self.kchart[item][k]
         bt: backtrace = he.bt
         fn, push = self.rules[bt.rid].dcp(bt.leaf, pushed)
         successors = (
-            self.kthbest(c, cidx, pushed=p)
+            self.kthbest(c, cidx, pushed=p)[0]
             for c, cidx, p in zip(bt.children, he.successor_ks, push)
         )
-        return fn(*successors)
+        return fn(*successors), he.weight
 
 
     def __iter__(self):

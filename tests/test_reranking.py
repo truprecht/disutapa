@@ -1,5 +1,5 @@
 from discodop.tree import ImmutableTree, ParentedTree, Tree
-from sdcp.reranking.classifier import FeatureExtractor, TreeRanker
+from sdcp.reranking.classifier import FeatureExtractor, TreeRanker, max_margin_loss, perceptron_loss
 
 def test_extraction():
     tree = Tree("(S (S (A 0) (B 1)) (S (A 2) (C 3) (S (D 4))))")
@@ -57,12 +57,12 @@ def test_ranker():
     for gold, silvers in zip(goldtrees, silvertrees):
         ranker.add_tree(gold, silvers)
     
-    ranker.fit_perceptron(20)
+    ranker.fit(20, devset=list(zip(goldindices, silvertrees)))
     for gold, goldidx, silvers in zip(goldtrees, goldindices, silvertrees):
         i, tree = ranker.select(silvers)
         assert i == goldidx, f"chose tree {tree} instead of {gold}"
 
-    ranker.fit_max_margin(20)
+    ranker.fit(20, max_margin_loss, weight_decay=1e-1, devset=list(zip(goldindices, silvertrees)))
     for gold, goldidx, silvers in zip(goldtrees, goldindices, silvertrees):
         i, tree = ranker.select(silvers)
         assert i == goldidx, f"chose tree {tree} instead of {gold}"

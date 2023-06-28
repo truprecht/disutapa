@@ -426,7 +426,6 @@ class EnsembleModel(flair.nn.Model):
                         *oracle_tree(
                             sentence.get_raw_prediction("kbest-trees"),
                             sentence.get_raw_labels("tree"),
-                            len(sentence),
                             params=self.config.evalparam),
                         sentence.get_raw_labels("tree"))
                     for sentence in batch)
@@ -525,24 +524,38 @@ class EnsembleModel(flair.nn.Model):
         model.load_state_dict(state["state_dict"])
         return model
 
-    def add_reranker(self, ranker: TreeRanker, training_set: DatasetWrapper, epochs: int, batch_size: int = 16, num_workers: int = 1):
+    def add_reranker(self, ranker: TreeRanker, training_set: DatasetWrapper, epochs: int, batch_size: int = 16, num_workers: int = 1, dev_set: DatasetWrapper = None):
         from flair.datasets import DataLoader
         self.reranking = None
-        data_loader = DataLoader(training_set, batch_size=batch_size, num_workers=num_workers)
-        iterator = tqdm(data_loader, desc="parsing sentences in preparation for training")
-        for batch in iterator:
-            self.predict(
-                batch,
-                label_name='predicted',
-                store_kbest=self.config.ktrees
-            )
-            for sentence in batch:
-                ranker.add_tree(
-                    Tree(sentence.get_raw_labels("tree")),
-                    sentence.get_raw_prediction("kbest-trees")
+        devset = []
+        for portion, dataset in [(n,d) for (n, d) in (("train", training_set), ("dev", dev_set)) if not d is None]:
+            iterator = tqdm(
+                DataLoader(dataset, batch_size=batch_size, num_workers=num_workers),
+                desc=f"parsing sentences ({portion}) in preparation for training")
+            for batch in iterator:
+                self.predict(
+                    batch,
+                    label_name='predicted',
+                    store_kbest=self.config.ktrees
                 )
+                for sentence in batch:
+                    if portion == "train":
+                        ranker.add_tree(
+                            Tree(sentence.get_raw_labels("tree")),
+                            sentence.get_raw_prediction("kbest-trees")
+                        )
+                    elif len(sentence.get_raw_prediction("kbest-trees")) > 1:
+                        oracleidx, _ = oracle_tree(
+                            sentence.get_raw_prediction("kbest-trees"),
+                            sentence.get_raw_labels("tree"),
+                            self.config.evalparam
+                        )
+                        devset.append((
+                            oracleidx,
+                            sentence.get_raw_prediction("kbest-trees")
+                        ))
         self.reranking = ranker
-        self.reranking.fit_max_margin(epochs)
+        self.reranking.fit(epochs, devset=devset)
 
 def float_or_zero(s):
     try:
@@ -581,7 +594,6 @@ class ParserAdapter:
             if all(s == self.total_limit for s in start):
                 break
             iteration += 1
-        # print("stopping after", iteration, "iterations:", "success" if not self.parser.rootid is None else "failure")
 
     def get_best(self):
         return self.parser.get_best()
@@ -593,20 +605,16 @@ class ParserAdapter:
         self.parser.set_scoring(*args)
 
 
-
-def oracle_tree(kbestlist, gold, length, params):
+# TODO: move into TreeRanker
+def oracle_tree(kbestlist, gold, params):
     besttree, bestscore, bestindex = None, None, None
-    firstscore = None
-    sent = [str(i) for i in range(length)]
+    gold = ParentedTree(gold)
+    sent = [str(i) for i in range(len(gold.leaves()))]
     for i, (candidate, w) in enumerate(kbestlist):
-        scores = TreePairResult(0, ParentedTree(gold), list(sent), ParentedTree.convert(candidate), sent, params)
+        scores = TreePairResult(0, ParentedTree.convert(gold), list(sent), ParentedTree.convert(candidate), list(sent), params)
         lf1 = scores.scores()["LF"]
         if bestscore is None or lf1 > bestscore:
             besttree = candidate
             bestscore = lf1
             bestindex = i
-        if firstscore is None:
-            firstscore = lf1
-    if bestindex > 0:
-        print("found better tree at index", bestindex, "with diff:", bestscore, firstscore)
     return bestindex, besttree

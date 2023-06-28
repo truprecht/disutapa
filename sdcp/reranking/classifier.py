@@ -1,10 +1,23 @@
 from discodop.tree import Tree, ParentedTree
-from discodop.eval import TreePairResult, readparam
+from discodop.eval import TreePairResult, readparam, Evaluator
 import torch
 from typing import Iterable
 from tqdm import tqdm
 
 from .features import FeatureExtractor
+
+
+def perceptron_loss(scores, goldidx):
+    prediction = scores.argmax()
+    if prediction == goldidx:
+        return torch.tensor(0.0, requires_grad=True)
+    return scores[prediction]-scores[goldidx]
+
+
+def max_margin_loss(scores, goldidx):
+    nongoldscores = torch.cat((scores[:goldidx], scores[goldidx+1:]))
+    return torch.nn.functional.relu(nongoldscores-scores[goldidx]+1).sum()
+
 
 class TreeRanker:
     def __init__(self, min_feature_count: int = 5, evalparam: dict | None = None):
@@ -29,26 +42,14 @@ class TreeRanker:
         self.kbest_trees.append(kts)
         self.oracle_trees.append(best)
 
-        
-    def fit_perceptron(self, epochs: int = 100):
+
+    def fit(self, epochs: int = 100, loss = perceptron_loss, lr: float = 1.0, weight_decay: float = 0.0, devset = None):
         self.features.truncate(self.featoccs)
         self.features.objects["parsing_score"] = {"": 0}
         self.features.counts[("parsing_score", 0)] = self.featoccs+1
 
-        # weights = torch.zeros(len(self.features))
-        # for epoch in range(epochs):
-        #     iterator = tqdm(zip(self.oracle_trees, self.kbest_trees), total=len(self.oracle_trees), desc=f"training reranking in epoch {epoch}")
-        #     for goldidx, trees in iterator:
-        #         mat = torch.stack([
-        #             torch.tensor(t.tup(self.features))
-        #             for t in trees
-        #         ])
-        #         bestidx = (mat @ weights).argmax()
-        #         if bestidx != goldidx:
-        #             weights += mat[goldidx] - mat[bestidx]
-        # self.weights = weights
-        weights = torch.zeros(len(self.features), requires_grad=True)
-        optim = torch.optim.SGD((weights,), 0.1, weight_decay=1e-2)
+        self.weights = torch.zeros(len(self.features), requires_grad=True)
+        optim = torch.optim.SGD((self.weights,), lr, weight_decay=weight_decay)
         for epoch in range(epochs):
             iterator = tqdm(zip(self.oracle_trees, self.kbest_trees), total=len(self.oracle_trees), desc=f"training reranking in epoch {epoch}")
             for goldidx, trees in iterator:
@@ -57,36 +58,29 @@ class TreeRanker:
                     torch.tensor(t.tup(self.features))
                     for t in trees
                 ])
-                scores = (mat @ weights)
-                bestidx = scores.argmax()
-                if bestidx != goldidx:
-                    loss = scores[bestidx]-scores[goldidx]
-                    loss.backward()
-                    optim.step()
-        self.weights = weights
-
-
-    def fit_max_margin(self, epochs: int = 100):
-        self.features.truncate(self.featoccs)
-        self.features.objects["parsing_score"] = {"": 0}
-        self.features.counts[("parsing_score", 0)] = self.featoccs+1
-
-        weights = torch.zeros(len(self.features), requires_grad=True)
-        optim = torch.optim.SGD((weights,), 0.1, weight_decay=1e-2)
-        for epoch in range(epochs):
-            iterator = tqdm(zip(self.oracle_trees, self.kbest_trees), total=len(self.oracle_trees), desc=f"training reranking in epoch {epoch}")
-            for goldidx, trees in iterator:
-                optim.zero_grad()
-                mat = torch.stack([
-                    torch.tensor(t.tup(self.features))
-                    for t in trees
-                ])
-                scores = (mat @ weights)
-                loss = torch.nn.functional.relu(scores-scores[goldidx]+1).sum()
-                loss.backward()
+                l = loss(mat @ self.weights, goldidx)
+                l.backward()
                 optim.step()
-        self.weights = weights
+            if not devset is None:
+                self.evaluate(devset)
 
+
+    def evaluate(self, devset):
+        evaluator = Evaluator(self.evalparam)
+        correct, overshot, early = 0, 0, 0
+        for (goldidx, kbest) in devset:
+            bestidx, best = self.select(kbest)
+            gold, _ = kbest[goldidx]
+            sent = [str(i) for i in range(len(kbest[0][0].leaves()))]
+            evaluator.add(0, ParentedTree.convert(gold), list(sent), ParentedTree.convert(best), sent)
+            if bestidx > goldidx:
+                overshot += 1
+            elif goldidx > bestidx:
+                early += 1
+            else:
+                correct += 1
+        print("monitoring dev set, f-score:", evaluator.acc.scores()["lf"])
+        print("correct:", correct, "overshot:", overshot, "too early:", early)
 
 
     def select(self, kbest: Iterable[tuple[Tree, float]]) -> tuple[int, Tree]:
@@ -94,5 +88,6 @@ class TreeRanker:
             torch.tensor(self.features.extract(tree).add("parsing_score", weight).tup(self.features))
             for tree, weight in kbest
         ])
-        idx = (mat @ self.weights).argmax()
+        scores = (mat @ self.weights)
+        idx = scores.argmax()
         return idx, kbest[idx][0]

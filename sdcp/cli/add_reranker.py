@@ -20,7 +20,7 @@ def main(config):
     model.set_config("ktrees", config.ktrees)
 
     ranker = TreeRanker(config.min_feature_occurrence)
-    model.add_reranker(ranker, corpus.train, config.epochs)
+    model.add_reranker(ranker, corpus.train, config.epochs, dev_set=corpus.dev)
     results = model.evaluate(corpus.dev, progressbar=True, kbest_oracle=config.ktrees)
     model.save(config.model + ".reranked")
     print(results.log_header)

@@ -525,7 +525,7 @@ class EnsembleModel(flair.nn.Model):
         model.load_state_dict(state["state_dict"])
         return model
 
-    def add_reranker(self, ranker: TreeRanker, training_set, batch_size: int = 16, num_workers: int = 1):
+    def add_reranker(self, ranker: TreeRanker, training_set: DatasetWrapper, epochs: int, batch_size: int = 16, num_workers: int = 1):
         from flair.datasets import DataLoader
         self.reranking = None
         data_loader = DataLoader(training_set, batch_size=batch_size, num_workers=num_workers)
@@ -542,7 +542,7 @@ class EnsembleModel(flair.nn.Model):
                     sentence.get_raw_prediction("kbest-trees")
                 )
         self.reranking = ranker
-        self.reranking.fit()
+        self.reranking.fit_max_margin(epochs)
 
 def float_or_zero(s):
     try:

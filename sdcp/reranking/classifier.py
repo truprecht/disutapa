@@ -30,23 +30,63 @@ class TreeRanker:
         self.oracle_trees.append(best)
 
         
-    def fit(self, epochs: int = 100):
+    def fit_perceptron(self, epochs: int = 100):
         self.features.truncate(self.featoccs)
         self.features.objects["parsing_score"] = {"": 0}
         self.features.counts[("parsing_score", 0)] = self.featoccs+1
 
-        weights = torch.zeros(len(self.features))
+        # weights = torch.zeros(len(self.features))
+        # for epoch in range(epochs):
+        #     iterator = tqdm(zip(self.oracle_trees, self.kbest_trees), total=len(self.oracle_trees), desc=f"training reranking in epoch {epoch}")
+        #     for goldidx, trees in iterator:
+        #         mat = torch.stack([
+        #             torch.tensor(t.tup(self.features))
+        #             for t in trees
+        #         ])
+        #         bestidx = (mat @ weights).argmax()
+        #         if bestidx != goldidx:
+        #             weights += mat[goldidx] - mat[bestidx]
+        # self.weights = weights
+        weights = torch.zeros(len(self.features), requires_grad=True)
+        optim = torch.optim.SGD((weights,), 0.1, weight_decay=1e-2)
         for epoch in range(epochs):
             iterator = tqdm(zip(self.oracle_trees, self.kbest_trees), total=len(self.oracle_trees), desc=f"training reranking in epoch {epoch}")
             for goldidx, trees in iterator:
+                optim.zero_grad()
                 mat = torch.stack([
                     torch.tensor(t.tup(self.features))
                     for t in trees
                 ])
-                bestidx = (mat @ weights).argmax()
+                scores = (mat @ weights)
+                bestidx = scores.argmax()
                 if bestidx != goldidx:
-                    weights += mat[goldidx] - mat[bestidx]
+                    loss = scores[bestidx]-scores[goldidx]
+                    loss.backward()
+                    optim.step()
         self.weights = weights
+
+
+    def fit_max_margin(self, epochs: int = 100):
+        self.features.truncate(self.featoccs)
+        self.features.objects["parsing_score"] = {"": 0}
+        self.features.counts[("parsing_score", 0)] = self.featoccs+1
+
+        weights = torch.zeros(len(self.features), requires_grad=True)
+        optim = torch.optim.SGD((weights,), 0.1, weight_decay=1e-2)
+        for epoch in range(epochs):
+            iterator = tqdm(zip(self.oracle_trees, self.kbest_trees), total=len(self.oracle_trees), desc=f"training reranking in epoch {epoch}")
+            for goldidx, trees in iterator:
+                optim.zero_grad()
+                mat = torch.stack([
+                    torch.tensor(t.tup(self.features))
+                    for t in trees
+                ])
+                scores = (mat @ weights)
+                loss = torch.nn.functional.relu(scores-scores[goldidx]+1).sum()
+                loss.backward()
+                optim.step()
+        self.weights = weights
+
 
 
     def select(self, kbest: Iterable[tuple[Tree, float]]) -> tuple[int, Tree]:

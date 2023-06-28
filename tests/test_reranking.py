@@ -21,7 +21,7 @@ def test_extraction():
     assert  vec.features == features
 
     extractor.truncate(mincount=2)
-    assert vec.tup(extractor) == (1,4,5)
+    assert vec.tup(extractor) == (2,4,5)
 
 
 def test_ranker():
@@ -56,8 +56,13 @@ def test_ranker():
     ranker = TreeRanker(min_feature_count=5)
     for gold, silvers in zip(goldtrees, silvertrees):
         ranker.add_tree(gold, silvers)
-    ranker.fit(20)
+    
+    ranker.fit_perceptron(20)
+    for gold, goldidx, silvers in zip(goldtrees, goldindices, silvertrees):
+        i, tree = ranker.select(silvers)
+        assert i == goldidx, f"chose tree {tree} instead of {gold}"
 
+    ranker.fit_max_margin(20)
     for gold, goldidx, silvers in zip(goldtrees, goldindices, silvertrees):
         i, tree = ranker.select(silvers)
         assert i == goldidx, f"chose tree {tree} instead of {gold}"

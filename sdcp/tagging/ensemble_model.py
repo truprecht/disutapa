@@ -539,12 +539,17 @@ class EnsembleModel(flair.nn.Model):
                     store_kbest=self.config.ktrees
                 )
                 for sentence in batch:
+                    # skip sentences with 1 tree, as there is nothing trained with the
+                    # two implemented losses
+                    # TODO: reranking by rejection should still use them for training
+                    if len(sentence.get_raw_prediction("kbest-trees")) <= 1:
+                        continue
                     if portion == "train":
                         ranker.add_tree(
                             Tree(sentence.get_raw_labels("tree")),
                             sentence.get_raw_prediction("kbest-trees")
                         )
-                    elif len(sentence.get_raw_prediction("kbest-trees")) > 1:
+                    else:
                         oracleidx, _ = oracle_tree(
                             sentence.get_raw_prediction("kbest-trees"),
                             sentence.get_raw_labels("tree"),

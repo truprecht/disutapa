@@ -34,7 +34,8 @@ class TreeRanker:
         kts = list()
         best, bestscore = None, None
         for sidx, (silver, weight) in enumerate(kbest):
-            kts.append(self.features.extract(silver).add("parsing_score", weight))
+            #kts.append(self.features.extract(silver).add("parsing_score", weight))
+            kts.append(self.features.extract(silver))
             evaluator = TreePairResult(0, ParentedTree.convert(gold), list(sent), ParentedTree.convert(silver), sent, self.evalparam)
             score = evaluator.scores()["LF"]
             if bestscore is None or bestscore < score:
@@ -45,17 +46,17 @@ class TreeRanker:
 
     def fit(self, epochs: int = 100, loss = perceptron_loss, lr: float = 1.0, weight_decay: float = 0.0, devset = None):
         self.features.truncate(self.featoccs)
-        self.features.objects["parsing_score"] = {"": 0}
-        self.features.counts[("parsing_score", 0)] = self.featoccs+1
+        #self.features.objects["parsing_score"] = {"": 0}
+        #self.features.counts[("parsing_score", 0)] = self.featoccs+1
 
-        self.weights = torch.zeros(len(self.features), requires_grad=True)
+        self.weights = torch.zeros(len(self.features), requires_grad=True, dtype=float)
         optim = torch.optim.SGD((self.weights,), lr, weight_decay=weight_decay)
         for epoch in range(epochs):
             iterator = tqdm(zip(self.oracle_trees, self.kbest_trees), total=len(self.oracle_trees), desc=f"training reranking in epoch {epoch}")
             for goldidx, trees in iterator:
                 optim.zero_grad()
                 mat = torch.stack([
-                    torch.tensor(t.tup(self.features))
+                    torch.tensor(t.tup(self.features), dtype=float)
                     for t in trees
                 ])
                 l = loss(mat @ self.weights, goldidx)
@@ -85,7 +86,8 @@ class TreeRanker:
 
     def select(self, kbest: Iterable[tuple[Tree, float]]) -> tuple[int, Tree]:
         mat = torch.stack([
-            torch.tensor(self.features.extract(tree).add("parsing_score", weight).tup(self.features))
+            # torch.tensor(self.features.extract(tree).add("parsing_score", weight).tup(self.features))
+            torch.tensor(self.features.extract(tree).tup(self.features), dtype=float)
             for tree, weight in kbest
         ])
         scores = (mat @ self.weights)

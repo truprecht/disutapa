@@ -529,7 +529,8 @@ class EnsembleModel(flair.nn.Model):
         from flair.datasets import DataLoader
         self.reranking = None
         data_loader = DataLoader(training_set, batch_size=batch_size, num_workers=num_workers)
-        for batch in data_loader:
+        iterator = tqdm(data_loader, desc="parsing sentences in preparation for training")
+        for batch in iterator:
             self.predict(
                 batch,
                 label_name='predicted',

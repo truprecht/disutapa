@@ -2,6 +2,7 @@ from discodop.tree import Tree, ParentedTree
 from discodop.eval import TreePairResult, readparam
 import torch
 from typing import Iterable
+from tqdm import tqdm
 
 from .features import FeatureExtractor
 
@@ -36,7 +37,8 @@ class TreeRanker:
 
         weights = torch.zeros(len(self.features))
         for epoch in range(epochs):
-            for goldidx, trees in zip(self.oracle_trees, self.kbest_trees):
+            iterator = tqdm(zip(self.oracle_trees, self.kbest_trees), total=len(self.oracle_trees), desc=f"training reranking in epoch {epoch}")
+            for goldidx, trees in iterator:
                 mat = torch.stack([
                     torch.tensor(t.tup(self.features))
                     for t in trees

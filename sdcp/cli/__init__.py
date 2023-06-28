@@ -18,6 +18,6 @@ def main():
     eval.subcommand(
         subcommands.add_parser(name="eval", description="Evaluate a trained classifier"))
     add_reranker.subcommand(
-        subcommands.add_parser(name="reranker", description="Train a reranking model and add it to a parser"))
+        subcommands.add_parser(name="reranking", description="Train a reranking model and add it to a parser"))
     parsed_args = args.parse_args()
     parsed_args.func(parsed_args)

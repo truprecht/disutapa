@@ -17,7 +17,7 @@ from discodop.tree import ParentedTree, Tree
 from .data import DatasetWrapper, SentenceWrapper
 from .embeddings import TokenEmbeddingBuilder, EmbeddingPresets, PretrainedBuilder
 from .parsing_scorer import ScoringBuilder
-from ..reranking.classifier import TreeRanker
+from ..reranking.classifier import TreeRanker, softmax_loss
 
 
 from dataclasses import dataclass, field
@@ -560,7 +560,7 @@ class EnsembleModel(flair.nn.Model):
                             sentence.get_raw_prediction("kbest-trees")
                         ))
         self.reranking = ranker
-        self.reranking.fit(epochs, devset=devset)
+        self.reranking.fit(epochs, devset=devset, loss=softmax_loss)
 
 def float_or_zero(s):
     try:

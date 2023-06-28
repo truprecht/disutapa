@@ -3,6 +3,7 @@ from discodop.eval import TreePairResult, readparam, Evaluator
 import torch
 from typing import Iterable
 from tqdm import tqdm
+from math import log
 
 from .features import FeatureExtractor
 
@@ -17,6 +18,11 @@ def perceptron_loss(scores, goldidx):
 def max_margin_loss(scores, goldidx):
     nongoldscores = torch.cat((scores[:goldidx], scores[goldidx+1:]))
     return torch.nn.functional.relu(nongoldscores-scores[goldidx]+1).sum()
+
+
+def softmax_loss(scores, goldidx):
+    print(scores)
+    return torch.nn.functional.cross_entropy(scores, torch.tensor(goldidx))
 
 
 class TreeRanker:
@@ -34,8 +40,8 @@ class TreeRanker:
         kts = list()
         best, bestscore = None, None
         for sidx, (silver, weight) in enumerate(kbest):
-            #kts.append(self.features.extract(silver).add("parsing_score", weight))
-            kts.append(self.features.extract(silver))
+            kts.append(self.features.extract(silver).add("parsing_score", log(sidx+1)))
+            # kts.append(self.features.extract(silver))
             evaluator = TreePairResult(0, ParentedTree.convert(gold), list(sent), ParentedTree.convert(silver), sent, self.evalparam)
             score = evaluator.scores()["LF"]
             if bestscore is None or bestscore < score:
@@ -46,8 +52,8 @@ class TreeRanker:
 
     def fit(self, epochs: int = 100, loss = perceptron_loss, lr: float = 1.0, weight_decay: float = 0.0, devset = None):
         self.features.truncate(self.featoccs)
-        #self.features.objects["parsing_score"] = {"": 0}
-        #self.features.counts[("parsing_score", 0)] = self.featoccs+1
+        self.features.objects["parsing_score"] = {"": 0}
+        self.features.counts[("parsing_score", 0)] = self.featoccs+1
 
         self.weights = torch.zeros(len(self.features), requires_grad=True, dtype=float)
         optim = torch.optim.SGD((self.weights,), lr, weight_decay=weight_decay)
@@ -86,9 +92,9 @@ class TreeRanker:
 
     def select(self, kbest: Iterable[tuple[Tree, float]]) -> tuple[int, Tree]:
         mat = torch.stack([
-            # torch.tensor(self.features.extract(tree).add("parsing_score", weight).tup(self.features))
-            torch.tensor(self.features.extract(tree).tup(self.features), dtype=float)
-            for tree, weight in kbest
+            torch.tensor(self.features.extract(tree).add("parsing_score", log(sidx+1)).tup(self.features), dtype=float)
+            # torch.tensor(self.features.extract(tree).tup(self.features), dtype=float)
+            for sidx, (tree, weight) in enumerate(kbest)
         ])
         scores = (mat @ self.weights)
         idx = scores.argmax()

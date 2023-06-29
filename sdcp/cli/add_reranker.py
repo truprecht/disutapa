@@ -34,6 +34,6 @@ def subcommand(sub: ArgumentParser):
     sub.add_argument("--device", type=torch.device, default=None)
     sub.add_argument("--ktags", type=int)
     sub.add_argument("--ktrees", type=int, default=50)
-    sub.add_argument("--epochs", type=int, default=20)
-    sub.add_argument("--min_feature_occurrence", type=int, default=5)
+    sub.add_argument("--epochs", type=int, default=5)
+    sub.add_argument("--min_feature_occurrence", type=int, default=1)
     sub.set_defaults(func=lambda args: main(args))

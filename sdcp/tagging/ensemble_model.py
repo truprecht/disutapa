@@ -560,7 +560,7 @@ class EnsembleModel(flair.nn.Model):
                             sentence.get_raw_prediction("kbest-trees")
                         ))
         self.reranking = ranker
-        self.reranking.fit(epochs, devset=devset, loss=softmax_loss)
+        self.reranking.fit(epochs, devset=devset)
 
 def float_or_zero(s):
     try:

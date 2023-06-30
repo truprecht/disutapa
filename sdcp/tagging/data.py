@@ -1,7 +1,8 @@
 from datasets import Dataset, DatasetDict  # type: ignore
 from flair.data import Sentence, Dictionary, Token  # type: ignore
 from collections import Counter
-from typing import cast
+from typing import cast, Iterable
+from math import ceil
 
 from ..grammar.derivation import Derivation
 
@@ -34,6 +35,13 @@ class SentenceWrapper(Sentence):
         return self.__predicted_label_ids[field]
 
 
+def negative_slices(r: slice, total: int) -> Iterable[slice]:
+    if r.start != 0:
+        yield slice(0, r.start)
+    if r.stop != total:
+        yield slice(r.stop, total)
+
+
 class DatasetWrapper:
     def __init__(self, dataset: Dataset):
         self.dataset = dataset
@@ -43,7 +51,7 @@ class DatasetWrapper:
         return self.sentences[idx]
 
     def __len__(self):
-        return len(self.dataset)
+        return len(self.sentences)
 
     def labels(self, field: str = "supertag"):
         if field in ("supertag", "pos"):
@@ -60,6 +68,28 @@ class DatasetWrapper:
             if count[token] == minfreq:
                 vocab.add_item(token)
         return vocab
+    
+    def get_fold_corpora(self, amount: int) -> Iterable["_FoldCorpus"]:
+        per_fold = ceil(len(self)/amount)
+        start = 0
+        for _ in range(amount):
+            devend = min(len(self), start+per_fold)
+            devrange = slice(start, devend)
+            yield _FoldCorpus(
+                DatasetRange(self, *negative_slices(devrange, len(self))),
+                DatasetRange(self, devrange)
+            )
+            start = devend
+
+
+class DatasetRange(DatasetWrapper):
+    def __init__(self, parent: DatasetWrapper, *sentenceranges):
+        self.dataset = parent.dataset
+        self.sentences = [
+            s
+            for r in sentenceranges
+            for s in parent.sentences[r]
+        ]
 
 
 class CorpusWrapper:
@@ -68,3 +98,10 @@ class CorpusWrapper:
         self.train = DatasetWrapper(corpus["train"])
         self.dev = DatasetWrapper(corpus["dev"])
         self.test = DatasetWrapper(corpus["test"])
+
+
+class _FoldCorpus:
+    def __init__(self, train, dev):
+        self.train = train
+        self.dev = dev
+        self.test = None

@@ -1,13 +1,9 @@
 from argparse import ArgumentParser
-from dataclasses import dataclass, fields, MISSING, field
-from tqdm import tqdm
-from math import ceil
 
 import flair
 import torch
 
-from sdcp.grammar.sdcp import grammar, sdcp_clause, rule
-from sdcp.tagging.ensemble_model import ModelParameters, EnsembleModel
+from sdcp.tagging.ensemble_model import EnsembleModel
 from sdcp.tagging.data import CorpusWrapper
 from sdcp.reranking.classifier import TreeRanker
 

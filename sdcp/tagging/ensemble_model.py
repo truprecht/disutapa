@@ -17,7 +17,7 @@ from discodop.tree import ParentedTree, Tree
 from .data import DatasetWrapper, SentenceWrapper
 from .embeddings import TokenEmbeddingBuilder, EmbeddingPresets, PretrainedBuilder
 from .parsing_scorer import ScoringBuilder
-from ..reranking.classifier import TreeRanker, softmax_loss
+from ..reranking.classifier import TreeRanker
 
 
 from dataclasses import dataclass, field
@@ -524,43 +524,38 @@ class EnsembleModel(flair.nn.Model):
         model.load_state_dict(state["state_dict"])
         return model
 
-    def add_reranker(self, ranker: TreeRanker, training_set: DatasetWrapper, epochs: int, batch_size: int = 16, num_workers: int = 1, dev_set: DatasetWrapper = None):
-        from flair.datasets import DataLoader
-        self.reranking = None
-        devset = []
-        for portion, dataset in [(n,d) for (n, d) in (("train", training_set), ("dev", dev_set)) if not d is None]:
-            iterator = tqdm(
-                DataLoader(dataset, batch_size=batch_size, num_workers=num_workers),
-                desc=f"parsing sentences ({portion}) in preparation for training")
-            for batch in iterator:
-                self.predict(
-                    batch,
-                    label_name='predicted',
-                    store_kbest=self.config.ktrees
-                )
-                for sentence in batch:
-                    # skip sentences with 1 tree, as there is nothing trained with the
-                    # two implemented losses
-                    # TODO: reranking by rejection should still use them for training
-                    if len(sentence.get_raw_prediction("kbest-trees")) <= 1:
-                        continue
-                    if portion == "train":
-                        ranker.add_tree(
-                            Tree(sentence.get_raw_labels("tree")),
-                            sentence.get_raw_prediction("kbest-trees")
-                        )
-                    else:
-                        oracleidx, _ = oracle_tree(
-                            sentence.get_raw_prediction("kbest-trees"),
-                            sentence.get_raw_labels("tree"),
-                            self.config.evalparam
-                        )
-                        devset.append((
-                            oracleidx,
-                            sentence.get_raw_prediction("kbest-trees")
-                        ))
-        self.reranking = ranker
-        self.reranking.fit(epochs, devset=devset)
+    # def add_reranker(self, ranker: TreeRanker, training_set: DatasetWrapper, epochs: int, batch_size: int = 16, num_workers: int = 1, dev_set: DatasetWrapper = None):
+    #     from flair.datasets import DataLoader
+    #     self.reranking = None
+    #     devset = []
+    #     for portion, dataset in [(n,d) for (n, d) in (("train", training_set), ("dev", dev_set)) if not d is None]:
+    #         iterator = tqdm(
+    #             DataLoader(dataset, batch_size=batch_size, num_workers=num_workers),
+    #             desc=f"parsing sentences ({portion}) in preparation for training")
+    #         for batch in iterator:
+    #             self.predict(
+    #                 batch,
+    #                 label_name='predicted',
+    #                 store_kbest=self.config.ktrees
+    #             )
+    #             for sentence in batch:
+    #                 if portion == "train":
+    #                     ranker.add_tree(
+    #                         Tree(sentence.get_raw_labels("tree")),
+    #                         sentence.get_raw_prediction("kbest-trees")
+    #                     )
+    #                 else:
+    #                     oracleidx, _ = oracle_tree(
+    #                         sentence.get_raw_prediction("kbest-trees"),
+    #                         sentence.get_raw_labels("tree"),
+    #                         self.config.evalparam
+    #                     )
+    #                     devset.append((
+    #                         oracleidx,
+    #                         sentence.get_raw_prediction("kbest-trees")
+    #                     ))
+    #     self.reranking = ranker
+    #     self.reranking.fit(epochs, devset=devset)
 
 def float_or_zero(s):
     try:

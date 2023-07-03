@@ -18,12 +18,15 @@ from pickle import dump, load
 
 def get_trained_model(outdir, corpus, config):
     if exists(outdir + "/final-model.pt"):
-        return EnsembleModel.load(outdir + "/final-model.pt")
+        model = EnsembleModel.load(outdir + "/final-model.pt")
+        for field in (f for f in ("ktags", "ktrees", "step") if not config.__dict__[f] is None):
+            model.set_config(field, config.__dict__[field])
+        return model
 
     model = EnsembleModel.from_corpus(
         corpus.train,
         grammar([eval(t) for t in corpus.train.labels()]),
-        ModelParameters(embedding=config.embedding, embedding_options=config.embedding_options, ktags=config.ktags, dropout=config.dropout, scoring=config.scoring, scoring_options=config.scoring_options)
+        config
     )
     trainer = flair.trainers.ModelTrainer(model, corpus)
     trainer.train(
@@ -45,12 +48,14 @@ def get_dev_set(config, corpus):
     if config.dev_model is None:
         return None
     devlist_with_multiple_trees  = []
-    model = EnsembleModel.load(config.dev_model)
+    model: EnsembleModel = EnsembleModel.load(config.dev_model)
     iterator = tqdm(
         flair.datasets.DataLoader(corpus.dev, batch_size=config.batch, num_workers=1),
         desc=f"parsing sentences in preparation for dev")
     for batch in iterator:
-        model.predict(batch, store_kbest=config.ktrees)
+        for field in (f for f in ("ktags", "ktrees", "step") if not config.__dict__[f] is None):
+            model.set_config(field, config.__dict__[field])
+        model.predict(batch)
         for sentence in batch:
             if len(sentence.get_raw_prediction("kbest-trees")) <= 1:
                 continue
@@ -78,7 +83,7 @@ def main(config: TrainingParameter):
                 flair.datasets.DataLoader(corpus.dev, batch_size=config.batch, num_workers=1),
                 desc=f"parsing sentences ({i}) in preparation for training")
             for batch in iterator:
-                model.predict(batch, store_kbest=config.ktrees)
+                model.predict(batch)
                 for sentence in batch:
                     ranker.add_tree(
                         Tree(sentence.get_raw_labels("tree")),

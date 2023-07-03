@@ -20,7 +20,8 @@ from .parsing_scorer import ScoringBuilder
 from ..reranking.classifier import TreeRanker
 
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
+from argparse import Namespace
 
 @dataclass
 class ModelParameters:
@@ -45,16 +46,24 @@ class ModelParameters:
         if self.evalparam is None:
             self.evalparam = readparam("../disco-dop/proper.prm")
 
+    @classmethod
+    def from_namespace(cls, config: Namespace) -> "ModelParameters":
+        kwargs = {
+            class_field.name: config.__dict__[class_field.name]
+            for class_field in fields(cls)
+        }
+        return cls(**kwargs)
+
 
 class EnsembleModel(flair.nn.Model):
     @classmethod
-    def from_corpus(cls, corpus: DatasetWrapper, grammar: grammar, parameters: ModelParameters):
+    def from_corpus(cls, corpus: DatasetWrapper, grammar: grammar, parameters: Namespace):
         """ Construct an instance of the model using
             * supertags and pos tags from `grammar`, and
             * word embeddings (as specified in `parameters`) from `corpus`.
         """
         tag_dicts = { k: corpus.build_dictionary(k) for k in ("supertag", "pos") }
-
+        parameters = ModelParameters.from_namespace(parameters)
         embeddings = [
             embedding.build_vocab(corpus)
             for embedding in parameters.embedding
@@ -306,8 +315,8 @@ class EnsembleModel(flair.nn.Model):
                 #         chosen_tag_stats.append((idx, weightdiff))
                 # sentence.store_raw_prediction("chosen-supertag", chosen_tag_stats)
 
-                if not store_kbest is None or not self.reranking is None:
-                    derivs = islice(parser.get_best_iter(), store_kbest)
+                if self.config.ktrees > 1:
+                    derivs = islice(parser.get_best_iter(), self.config.ktrees)
                     derivs = [(with_pos(d[0], pos), w) for d, w in derivs]
                     sentence.store_raw_prediction("kbest-trees", derivs)
 
@@ -341,7 +350,7 @@ class EnsembleModel(flair.nn.Model):
             return_loss: bool = True,
             exclude_labels = [],
             progressbar: bool = False,
-            kbest_oracle: int = None
+            oracle_scores: bool = False
         ) -> Tuple[flair.training_utils.Result, float]:
         """ Predicts supertags, pos tags and parse trees, and reports the
             predictions scores for a set of sentences.
@@ -398,7 +407,6 @@ class EnsembleModel(flair.nn.Model):
                 othertag_storage_mode=othertag_accuracy,
                 label_name='predicted',
                 return_loss=return_loss,
-                store_kbest=kbest_oracle
             )
             if return_loss:
                 eval_loss += loss[0]
@@ -420,7 +428,7 @@ class EnsembleModel(flair.nn.Model):
             #     for sentence in batch
             #     for idxwdiff in sentence.get_raw_prediction("chosen-supertag")
             # )
-            if kbest_oracle:
+            if oracle_scores:
                 oracle_trees.extend(
                     (len(sentence),
                         *oracle_tree(
@@ -465,7 +473,7 @@ class EnsembleModel(flair.nn.Model):
         #     scores["worst-wdiff"] = wdiffs[-1]
         #     scores["90-wdiff"] = wdiffs[int(len(choices)*0.9)]
 
-        if kbest_oracle:
+        if oracle_scores:
             ev = Evaluator(self.config.evalparam)
             indices = []
             for i, (sl, otidx, ot, gt) in enumerate(oracle_trees):

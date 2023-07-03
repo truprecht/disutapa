@@ -60,7 +60,7 @@ class EnsembleModel(flair.nn.Model):
             for embedding in parameters.embedding
         ]
         parsing_scorer = ScoringBuilder(parameters.scoring, corpus, *parameters.scoring_options)
-        return cls(embeddings, tag_dicts, grammar, parsing_scorer, None, parameters)
+        return cls(embeddings, tag_dicts, grammar, parsing_scorer, parameters)
 
     def set_scoring(self, scoring_str, corpus, option_strs, abort_brass: float = 0.9):
         self.scoring_builder = ScoringBuilder(scoring_str, corpus, *option_strs)
@@ -73,7 +73,7 @@ class EnsembleModel(flair.nn.Model):
             if "fine_tune" in e.__dict__:
                 e.fine_tune = False
 
-    def __init__(self, embeddings, dictionaries, grammar, parsing_scorer, reranking, config: ModelParameters):
+    def __init__(self, embeddings, dictionaries, grammar, parsing_scorer, config: ModelParameters):
         super().__init__()
         self.embedding_builder = embeddings
         self.embedding = flair.embeddings.StackedEmbeddings([
@@ -91,7 +91,7 @@ class EnsembleModel(flair.nn.Model):
             for field, dict in self.dictionaries.items()
         })
 
-        self.reranking = reranking
+        self.reranking: TreeRanker = None
 
         self.__grammar__ = grammar
         self.__fix_tagging__ = False
@@ -508,7 +508,6 @@ class EnsembleModel(flair.nn.Model):
             "grammar": (self.__grammar__.rules, self.__grammar__.root),
             "scoring_builder": self.scoring_builder,
             "config": self.config,
-            "reranking": self.reranking
         }
 
     @classmethod
@@ -518,44 +517,11 @@ class EnsembleModel(flair.nn.Model):
             state["tags"],
             grammar(*state["grammar"]),
             state["scoring_builder"],
-            state.get("reranking"),
             state["config"],
         )
         model.load_state_dict(state["state_dict"])
         return model
 
-    # def add_reranker(self, ranker: TreeRanker, training_set: DatasetWrapper, epochs: int, batch_size: int = 16, num_workers: int = 1, dev_set: DatasetWrapper = None):
-    #     from flair.datasets import DataLoader
-    #     self.reranking = None
-    #     devset = []
-    #     for portion, dataset in [(n,d) for (n, d) in (("train", training_set), ("dev", dev_set)) if not d is None]:
-    #         iterator = tqdm(
-    #             DataLoader(dataset, batch_size=batch_size, num_workers=num_workers),
-    #             desc=f"parsing sentences ({portion}) in preparation for training")
-    #         for batch in iterator:
-    #             self.predict(
-    #                 batch,
-    #                 label_name='predicted',
-    #                 store_kbest=self.config.ktrees
-    #             )
-    #             for sentence in batch:
-    #                 if portion == "train":
-    #                     ranker.add_tree(
-    #                         Tree(sentence.get_raw_labels("tree")),
-    #                         sentence.get_raw_prediction("kbest-trees")
-    #                     )
-    #                 else:
-    #                     oracleidx, _ = oracle_tree(
-    #                         sentence.get_raw_prediction("kbest-trees"),
-    #                         sentence.get_raw_labels("tree"),
-    #                         self.config.evalparam
-    #                     )
-    #                     devset.append((
-    #                         oracleidx,
-    #                         sentence.get_raw_prediction("kbest-trees")
-    #                     ))
-    #     self.reranking = ranker
-    #     self.reranking.fit(epochs, devset=devset)
 
 def float_or_zero(s):
     try:

@@ -71,6 +71,37 @@ def parent_bigrams(tree: Tree|int):
         queue.extend((child, root) for child in node)
 
 
+def ranks(tree: Tree):
+    for node in tree.subtrees(lambda n: len(n) > 1 or isinstance(n[0], Tree)):
+        root = node.label
+        yield (root, len(node.children))
+
+
+def wordedges(tree: Tree|int, sent: list[str]):
+    for node in tree.subtrees(lambda n: len(n) > 1 or isinstance(n[0], Tree)):
+        root = node.label
+        before, after = min(tree.leaves())-1, max(tree.leaves())+1
+        before = sent[before] if before >= 0 else "BOS"
+        after = sent[after] if after < len(sent) else "EOS"
+        yield (root, len(node.leaves()), before, after)
+
+
+def branching_direction(tree: Tree):
+    for node in tree.subtrees(lambda n: len(n) > 1 or isinstance(n[0], Tree)):
+        root = node.label
+        is_leaf_node: list[bool] = [len(c.leaves()) == 1 for c in node]
+
+        if all(is_leaf_node[:-1]) and not is_leaf_node[-1]:
+            yield (root, "RightBranching")
+        elif all(is_leaf_node[1:]) and not is_leaf_node[0]:
+            yield (root, "LeftBranching")
+        elif (branching_child_nodes := sum(int(b) for b in is_leaf_node)) == 1:
+            yield (root, "CenterBranching")
+        else:
+            yield (root, "Multibranching", branching_child_nodes)
+      
+
+
 @dataclass
 class FeatureVector:
     # store features as sparse map during extraction

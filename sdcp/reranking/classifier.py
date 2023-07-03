@@ -75,22 +75,34 @@ class TreeRanker:
 
 
     def evaluate(self, devset: Iterable[tuple[list[tuple[Tree, float]], Tree]] = None):
-        evaluator = Evaluator(self.evalparam)
+        evaluator_with_reranking = Evaluator(self.evalparam)
+        evaluator_without_reranking = Evaluator(self.evalparam)
         correct, overshot, early = 0, 0, 0
-        for (kbest, goldtree) in devset:
+        correct_first, incorrect_first = 0, 0
+        improvements = []
+        for i, (kbest, goldtree) in enumerate(devset):
             prediction_idx, preciction_tree = self.select(kbest)
             oracle_idx, _ = self.__class__.oracle(goldtree, kbest, self.evalparam)
             
             sent = [str(i) for i in range(len(kbest[0][0].leaves()))]
-            evaluator.add(0, ParentedTree.convert(goldtree), list(sent), ParentedTree.convert(preciction_tree), sent)
-            if prediction_idx > oracle_idx:
-                overshot += 1
-            elif oracle_idx > prediction_idx:
-                early += 1
-            else:
-                correct += 1
-        print("monitoring dev set, f-score:", evaluator.acc.scores()["lf"])
+            result_with_reranking = evaluator_with_reranking.add(i, ParentedTree.convert(goldtree), list(sent), ParentedTree.convert(preciction_tree), sent)
+            result_without_reranking = evaluator_without_reranking.add(i, ParentedTree.convert(goldtree), list(sent), ParentedTree.convert(kbest[0]), sent)
+            
+            overshot += int(prediction_idx > oracle_idx)
+            early += int(oracle_idx > prediction_idx)
+            correct += int(oracle_idx == prediction_idx)
+            correct_first += int(prediction_idx == oracle_idx == 0)
+            incorrect_first += int(prediction_idx == 0 and oracle_idx > 0)
+            score_difference = result_with_reranking.scores()["LF"] - result_without_reranking.scores()["LF"]
+            if score_difference > 0:
+                improvements.append(score_difference)
+
+        improvements.sort()
+
+        print("monitoring dev set, f-score:", evaluator_with_reranking.acc.scores()["lf"], "instead of", evaluator_without_reranking.acc.scores()["lf"])
         print("correct:", correct, "overshot:", overshot, "too early:", early)
+        print("chose first:", correct_first + incorrect_first, f"({correct_first} correct/{incorrect_first} incorrect)")
+        print("fscore improved in", len(improvements), "cases, in median by", improvements[int(len(improvements)/2)] if improvements else 0.0, "and mean", sum(improvements)/len(improvements) if improvements else 0.0)
 
 
     def select(self, kbest: Iterable[tuple[Tree, float]]) -> tuple[int, Tree]:

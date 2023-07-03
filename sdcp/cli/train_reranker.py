@@ -26,10 +26,7 @@ def get_trained_model(outdir, corpus, config):
         ModelParameters(embedding=config.embedding, embedding_options=config.embedding_options, ktags=config.ktags, dropout=config.dropout, scoring=config.scoring, scoring_options=config.scoring_options)
     )
     trainer = flair.trainers.ModelTrainer(model, corpus)
-    train = trainer.fine_tune if any(em.fine_tune() for em in model.embedding_builder) else \
-                trainer.train
-    
-    train(
+    trainer.train(
         outdir,
         learning_rate=config.lr,
         mini_batch_size=config.batch,
@@ -47,7 +44,7 @@ def get_trained_model(outdir, corpus, config):
 def get_dev_set(config, corpus):
     if config.dev_model is None:
         return None
-    devlist = []
+    devlist_with_multiple_trees  = []
     model = EnsembleModel.load(config.dev_model)
     iterator = tqdm(
         flair.datasets.DataLoader(corpus.dev, batch_size=config.batch, num_workers=1),
@@ -55,11 +52,13 @@ def get_dev_set(config, corpus):
     for batch in iterator:
         model.predict(batch, store_kbest=config.ktrees)
         for sentence in batch:
-            devlist.append((
+            if len(sentence.get_raw_prediction("kbest-trees")) <= 1:
+                continue
+            devlist_with_multiple_trees.append((
                 sentence.get_raw_prediction("kbest-trees"),
                 Tree(sentence.get_raw_labels("tree"))
             ))
-    return devlist
+    return devlist_with_multiple_trees
 
 
 def main(config: TrainingParameter):
@@ -91,6 +90,8 @@ def main(config: TrainingParameter):
 
     ranker.fit(devset=get_dev_set(config, corpus))
     dump(ranker, open(rankerfile, "wb"))
+
+
 
 
 def subcommand(sub: ArgumentParser):

@@ -50,14 +50,13 @@ class TreeRanker:
 
 
     def fit(self, epochs: int = 10, devset: Iterable[tuple[list[tuple[Tree, float]], Tree]] = None):
+        self.features.truncate(self.featoccs)
         self.weights = torch.zeros(len(self.features), dtype=float)
-
+        
         if not self.oracle_trees:
             print("there are no trees for training")
             return
         
-        self.features.truncate(self.featoccs)
-
         for epoch in range(epochs):
             iterator = tqdm(zip(self.oracle_trees, self.kbest_trees), total=len(self.oracle_trees), desc=f"training reranking in epoch {epoch}")
             accuracies = 0

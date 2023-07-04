@@ -113,7 +113,7 @@ def subcommand(sub: ArgumentParser):
             default = list()
         sub.add_argument(name, type=ftype, default=default, nargs=nargs)
     sub.add_argument("--device", type=torch.device, default=None)
-    sub.add_argument("--min_feature_occurrence", type=int, default=1)
+    sub.add_argument("--min_feature_occurrence", type=int, default=5)
     sub.add_argument("--folds", type=int, default=10)
     sub.add_argument("--dev_model", type=str)
     sub.set_defaults(func=lambda args: main(args))

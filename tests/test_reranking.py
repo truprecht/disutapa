@@ -8,21 +8,25 @@ def test_extraction():
 
     vec = extractor.extract(tree)
 
-    assert set(extractor.objects.keys()) == {"rules", "parent_rules", "bigrams", "parent_bigrams", "rightbranch"}
+    assert set(extractor.objects.keys()) == {"rules", "parent_rules", "bigrams", "parent_bigrams", "rightbranch", "ranks", "branching_direction"}
     assert set(extractor.objects["rules"]) == {("S", "S", "S"), ("S", "A", "B"), ("S", "A", "C", "S"), ("S", "D")}
     assert set(extractor.objects["parent_rules"]) == {("TOP", "S", "S", "S"), ("S", "S", "A", "B"), ("S", "S", "A", "C", "S"), ("S", "S", "D")}
     assert set(extractor.objects["bigrams"]) == {("S", "S", "END"), ("S", "S", "S"), ("S", "A", "B"), ("S", "B", "END"), ("S", "A", "C"), ("S", "C", "S"), ("S", "S", "END"), ("S", "D", "END")}
     assert set(extractor.objects["parent_bigrams"]) == {("TOP", "S", "S", "END"), ("TOP", "S", "S", "S"), ("S", "S", "A", "B"), ("S", "S", "B", "END"), ("S", "S", "A", "C"), ("S", "S", "C", "S"), ("S", "S", "S", "END"), ("S", "S", "D", "END")}
+    assert set(extractor.objects["ranks"]) == { ("S", 2), ("S", 3), ("S", 1) }
+    assert set(extractor.objects["branching_direction"]) == { ("S", "Multi", 2), ("S", "Right"), ("S", "None") }
 
     features = { (k, i): 1 for k in extractor.objects for i in range(len(extractor.objects[k])) }
     features[("bigrams", extractor.objects["bigrams"][("S", "S", "END")])] = 2
+    features[("ranks", extractor.objects["ranks"][("S", 2)])] = 2
+    features[("branching_direction", extractor.objects["branching_direction"][("S", "None")])] = 2
     features[("rightbranch", 0)] = 4
     features[("rightbranch", 1)] = 5
 
     assert  vec.features == features
 
     extractor.truncate(mincount=2)
-    assert vec.tup(extractor) == (2,4,5)
+    assert vec.tup(extractor) == (2,4,5,2,2)
 
 
 def test_ranker():
@@ -58,7 +62,7 @@ def test_ranker():
     for gold, silvers in zip(goldtrees, silvertrees):
         ranker.add_tree(gold, silvers)
     
-    ranker.fit(20, devset=list(zip(goldindices, silvertrees)))
+    ranker.fit(20, devset=list(zip(silvertrees, goldtrees)))
     for gold, goldidx, silvers in zip(goldtrees, goldindices, silvertrees):
         i, tree = ranker.select(silvers)
         assert i == goldidx, f"chose tree {tree} instead of {gold}"

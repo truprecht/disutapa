@@ -86,14 +86,24 @@ class TreeRanker:
             
             sent = [str(i) for i in range(len(kbest[0][0].leaves()))]
             result_with_reranking = evaluator_with_reranking.add(i, ParentedTree.convert(goldtree), list(sent), ParentedTree.convert(preciction_tree), sent)
-            result_without_reranking = evaluator_without_reranking.add(i, ParentedTree.convert(goldtree), list(sent), ParentedTree.convert(kbest[0]), sent)
+            result_without_reranking = evaluator_without_reranking.add(i, ParentedTree.convert(goldtree), list(sent), ParentedTree.convert(kbest[0][0]), sent)
             
             overshot += int(prediction_idx > oracle_idx)
             early += int(oracle_idx > prediction_idx)
             correct += int(oracle_idx == prediction_idx)
             correct_first += int(prediction_idx == oracle_idx == 0)
             incorrect_first += int(prediction_idx == 0 and oracle_idx > 0)
-            score_difference = result_with_reranking.scores()["LF"] - result_without_reranking.scores()["LF"]
+
+            # catch errors caused by zero divisions
+            try:
+                score_with_reranking = float(result_with_reranking.scores()["LF"])
+            except:
+                score_with_reranking = 0.0
+            try:
+                score_without_reranking = float(result_without_reranking.scores()["LF"])
+            except:
+                score_without_reranking = 0.0
+            score_difference = score_with_reranking - score_without_reranking
             if score_difference > 0:
                 improvements.append(score_difference)
 

@@ -89,16 +89,19 @@ def wordedges(tree: Tree|int, sent: list[str]):
 def branching_direction(tree: Tree):
     for node in tree.subtrees(lambda n: len(n) > 1 or isinstance(n[0], Tree)):
         root = node.label
-        is_leaf_node: list[bool] = [len(c.leaves()) == 1 for c in node]
+        is_leaf_node: list[bool] = [len(c) == 1 and not isinstance(c[0], Tree) for c in node]
+        num_branches = sum(int(not b) for b in is_leaf_node)
 
-        if all(is_leaf_node[:-1]) and not is_leaf_node[-1]:
-            yield (root, "RightBranching")
-        elif all(is_leaf_node[1:]) and not is_leaf_node[0]:
-            yield (root, "LeftBranching")
-        elif (branching_child_nodes := sum(int(b) for b in is_leaf_node)) == 1:
-            yield (root, "CenterBranching")
+        if num_branches == 1 and not is_leaf_node[-1]:
+            yield (root, "Right")
+        elif num_branches == 1 and not is_leaf_node[0]:
+            yield (root, "Left")
+        elif num_branches == 1:
+            yield (root, "Center")
+        elif num_branches > 1:
+            yield (root, "Multi", num_branches)
         else:
-            yield (root, "Multibranching", branching_child_nodes)
+            yield (root, "None")
       
 
 
@@ -137,7 +140,7 @@ class FeatureExtractor:
         sparsevec = Counter()
 
         # counted objects features
-        for featname in ("rules", "parent_rules", "bigrams", "parent_bigrams", "rightbranch"):
+        for featname in ("rules", "parent_rules", "bigrams", "parent_bigrams", "rightbranch", "branching_direction", "ranks"):
             if self.fixed and not featname in self.objects:
                 continue
             feature_iterator = globals()[featname](tree)

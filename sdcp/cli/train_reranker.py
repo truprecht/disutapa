@@ -9,7 +9,7 @@ from sdcp.grammar.sdcp import grammar, sdcp_clause, rule
 from sdcp.grammar.lcfrs import lcfrs_composition, ordered_union_composition
 from sdcp.tagging.ensemble_model import ModelParameters, EnsembleModel
 from sdcp.tagging.data import CorpusWrapper
-from sdcp.reranking.classifier import TreeRanker, Tree
+from sdcp.reranking.pairwise import PairwiseTreeRanker, Tree
 
 from .train import ModelParameters, TrainingParameter
 from os.path import exists
@@ -76,7 +76,7 @@ def main(config: TrainingParameter):
     corpus = CorpusWrapper(config.corpus)
 
     if not exists(vectorfile):
-        ranker = TreeRanker(config.min_feature_occurrence)
+        ranker = PairwiseTreeRanker(config.min_feature_occurrence)
         for i, subcorpus in enumerate(corpus.train.get_fold_corpora(config.folds)):
             model = get_trained_model(config.output_dir + f"/fold-{i}", subcorpus, config)
             iterator = tqdm(
@@ -93,7 +93,7 @@ def main(config: TrainingParameter):
     else:
         ranker = load(open(vectorfile, "rb"))
 
-    ranker.fit(devset=get_dev_set(config, corpus))
+    ranker.fit(epochs=10, swap_trees_prob=config.random_action, devset=get_dev_set(config, corpus))
     dump(ranker, open(rankerfile, "wb"))
 
 
@@ -114,6 +114,7 @@ def subcommand(sub: ArgumentParser):
         sub.add_argument(name, type=ftype, default=default, nargs=nargs)
     sub.add_argument("--device", type=torch.device, default=None)
     sub.add_argument("--min_feature_occurrence", type=int, default=5)
+    sub.add_argument("--random_action", type=float, default=0.2)
     sub.add_argument("--folds", type=int, default=10)
     sub.add_argument("--dev_model", type=str)
     sub.set_defaults(func=lambda args: main(args))

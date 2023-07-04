@@ -8,12 +8,12 @@ from tqdm import tqdm
 from .features import FeatureExtractor
 
 
-
-def perceptron_loss(scores, goldidx):
-    prediction = scores.argmax()
-    if prediction == goldidx:
-        return torch.tensor(0.0, requires_grad=True)
-    return scores[prediction]-scores[goldidx]
+def get_float(f: str) -> float:
+    try:
+        return float(f)
+    except:
+        return 0.0
+    
 
 
 class TreeRanker:
@@ -34,7 +34,7 @@ class TreeRanker:
         best, bestscore = None, None
         for sidx, (silver, weight) in enumerate(kbest):
             evaluator = TreePairResult(0, ParentedTree.convert(gold), list(sent), ParentedTree.convert(silver), sent, evalparam)
-            score = evaluator.scores()["LF"]
+            score = get_float(evaluator.scores()["LF"])
             if bestscore is None or bestscore < score:
                 best, bestscore = sidx, score
         return best, kbest[best]
@@ -94,14 +94,8 @@ class TreeRanker:
             incorrect_first += int(prediction_idx == 0 and oracle_idx > 0)
 
             # catch errors caused by zero divisions
-            try:
-                score_with_reranking = float(result_with_reranking.scores()["LF"])
-            except:
-                score_with_reranking = 0.0
-            try:
-                score_without_reranking = float(result_without_reranking.scores()["LF"])
-            except:
-                score_without_reranking = 0.0
+            score_with_reranking = get_float(result_with_reranking.scores()["LF"])
+            score_without_reranking = get_float(result_without_reranking.scores()["LF"])
             score_difference = score_with_reranking - score_without_reranking
             if score_difference > 0:
                 improvements.append(score_difference)

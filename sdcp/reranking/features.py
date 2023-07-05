@@ -171,6 +171,11 @@ class FeatureExtractor:
             if v >= mincount
         }
         self.fixed = True
+        self.backward = [
+            (fname, fidx)
+            for fname, fobjects in self.objects.items()
+            for fidx in fobjects.keys()
+        ]
 
     
     def __len__(self):

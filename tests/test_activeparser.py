@@ -17,7 +17,8 @@ hrules = [
 
 def test_active_parser():
     parse = ActiveParser(grammar(hrules, "ROOT"))
-    parse.init(*([(rid, 0)] for rid in range(6)))
+    parse.init(6)
+    parse.add_rules(*([(rid, 0)] for rid in range(6)))
     parse.fill_chart()
     assert parse.get_best() == [Tree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")]
 
@@ -30,7 +31,8 @@ def rule_weight_vector(totallen: int, hot: int):
 
 def test_weighted_active_parser():
     parse = ActiveParser(grammar(hrules, "ROOT"))
-    parse.init(*(rule_weight_vector(6, position) for position in range(6)))
+    parse.init(6)
+    parse.add_rules(*(rule_weight_vector(6, position) for position in range(6)))
     parse.fill_chart()
     assert parse.get_best()[0] == Tree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
 
@@ -44,7 +46,8 @@ def test_pipeline():
     rules, _ = Extractor()(AutoTree.convert(t))
     print(rules)
     parse = ActiveParser(grammar(rules))
-    parse.init(*([(r, 0)] for r in range(6)))
+    parse.init(6)
+    parse.add_rules(*([(r, 0)] for r in range(6)))
     parse.fill_chart()
     assert parse.get_best()[0] == Tree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
 
@@ -56,7 +59,8 @@ def test_sample():
     
     parse = ActiveParser(grammar(list(c.rules)))
     for rs, gold, pos in zip(c.goldrules, c.goldtrees, c.goldpos):
-        parse.init(*([(r, 0)] for r in rs))
+        parse.init(len(rs))
+        parse.add_rules(*([(r, 0)] for r in rs))
         parse.fill_chart()
         assert with_pos(parse.get_best()[0], pos) == gold
 
@@ -68,6 +72,7 @@ def test_weighted_sample():
     
     parse = ActiveParser(grammar(list(c.rules)))
     for rs, gold, pos in zip(c.goldrules, c.goldtrees, c.goldpos):
-        parse.init(*(rule_weight_vector(len(c.rules), r) for r in rs))
+        parse.init(len(rs))
+        parse.add_rules(*(rule_weight_vector(len(c.rules), r) for r in rs))
         parse.fill_chart()
         assert with_pos(parse.get_best()[0], pos) == gold

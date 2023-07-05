@@ -63,6 +63,7 @@ class KbestChart:
                         (weight := self._compositional_weight(element.bt, si)) is None:
                     continue
                 heappush(heap, HeapElement(element.bt, si, weight))
+                inheap.add((element.bt, si))
         return True
 
 

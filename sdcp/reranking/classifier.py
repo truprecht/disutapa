@@ -8,12 +8,12 @@ from tqdm import tqdm
 from .features import FeatureExtractor
 
 
-def get_float(f: str) -> float:
+def get_float(s):
     try:
-        return float(f)
+        f = float(s)
+        return f if f == f else 0.0 # return 0 if f is NaN
     except:
         return 0.0
-    
 
 
 class TreeRanker:

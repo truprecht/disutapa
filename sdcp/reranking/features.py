@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from discodop.tree import Tree
 from itertools import chain, pairwise
 from typing import Any
+import torch
+from typing import Iterable
+from sortedcontainers import SortedSet
 
 
 def bigrams(tree: Tree):
@@ -102,7 +105,12 @@ def branching_direction(tree: Tree):
             yield (root, "Multi", num_branches)
         else:
             yield (root, "None")
-      
+
+
+def redistribute(ws: Iterable[float]) -> list[int]:
+    buckets = SortedSet(ws)
+    return [buckets.bisect_left(weight) for weight in ws]
+
 
 
 @dataclass
@@ -119,6 +127,13 @@ class FeatureVector:
             self.features[idx]
             for idx in extractor.iterate_features()
         )
+
+    def expand(self, extractor: "FeatureExtractor") -> torch.Tensor:
+        t = torch.zeros(len(extractor))
+        for key, value in self.features.items():
+            if not (idx := extractor.key_to_idx.get(key)) is None:
+                t[idx] = value
+        return t
 
 
 class FeatureExtractor:
@@ -176,6 +191,10 @@ class FeatureExtractor:
             for fname, fobjects in self.objects.items()
             for fidx in fobjects.keys()
         ]
+        self.key_to_idx = {
+            (fname, idx): i
+            for i, (fname, idx) in enumerate(self.iterate_features())
+        }
 
     
     def __len__(self):

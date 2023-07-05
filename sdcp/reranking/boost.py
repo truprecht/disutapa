@@ -6,7 +6,7 @@ from typing import Iterable
 from tqdm import tqdm
 from collections import defaultdict
 
-from .features import FeatureExtractor
+from .features import FeatureExtractor, redistribute
 from .classifier import TreeRanker, get_float
 
 
@@ -17,7 +17,9 @@ class BoostTreeRanker(TreeRanker):
 
     def add_tree(self, gold: Tree, kbest: list[tuple[Tree, float]]):
         # extract vectors even when len(kbest)==1, as it counts features
-        vectors = [self.features.extract(t).add("parsing_score", w) for t, w in kbest]
+        vectors = [self.features.extract(t) for t, _ in kbest]
+        weights = redistribute([w for _, w in kbest])
+        vectors = [v.add("parsing_score", w) for v, w in zip(vectors, weights)]
         if len(kbest) > 1:
             scores = []
             sentence = [str(i) for i in range(len(gold.leaves()))]
@@ -33,8 +35,8 @@ class BoostTreeRanker(TreeRanker):
         self.features.truncate(self.featoccs)
         self.weights = torch.zeros(len(self.features), dtype=float)
         self.kbest_trees = [
-            torch.tensor([
-                vector.tup(self.features)
+            torch.stack([
+                vector.expand(self.features)
                 for vector in vectors
             ])
             for vectors in self.kbest_trees
@@ -47,6 +49,7 @@ class BoostTreeRanker(TreeRanker):
         alphas = torch.arange(-10, 10, 1e-3)
         losses = torch.zeros_like(alphas)
         for trees, scores, oracle in zip(self.kbest_trees, self.scores, self.oracle_trees):
+            print([-(trees[oracle][0]-vector[0]) for vector in trees])
             losses += torch.tensor([
                 [-(trees[oracle][0]-vector[0])*alpha for vector in trees]
                 for alpha in alphas

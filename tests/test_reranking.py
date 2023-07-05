@@ -1,6 +1,6 @@
 from discodop.tree import ImmutableTree, ParentedTree, Tree
 from sdcp.reranking import classifier, pairwise, boost
-
+from sdcp.reranking.features import redistribute
 
 def test_extraction():
     tree = Tree("(S (S (A 0) (B 1)) (S (A 2) (C 3) (S (D 4))))")
@@ -27,6 +27,16 @@ def test_extraction():
 
     extractor.truncate(mincount=2)
     assert vec.tup(extractor) == (2,4,5,2,2)
+
+
+
+def test_redistribute():
+    assert redistribute([]) == []
+    assert redistribute([0]*15) == [0]*15
+    assert redistribute(range(12)) == list(range(12))
+
+    values = [0, -4454449.5000, -0., 1.3259, 1.0583e+12, 1.8025e+12, 0, 1.0583e+12]
+    assert redistribute(values) == [1, 0, 1, 2, 3, 4, 1, 3]
 
 
 def test_ranker():
@@ -126,9 +136,9 @@ def test_boost():
             (Tree("(S (VP (NP (DT 0) (NN 1) (PP (IN 4) (NP (DT 5) (NN 6)))) (VBN 3) (NP (NN 7))) (VBZ 2))"), 1.0),
             (Tree("(S (VP (NP (DT 0) (NN 1)) (VBN 3) (PP (IN 4) (NP (DT 5) (NN 6))) (NP (NN 7))) (VBZ 2))"), 1.0),
             (Tree("(S (NP (DT 0) (NN 1)) (VBZ 2) (VBN 3) (PP (IN 4) (NP (DT 5) (NN 6))) (NN 7))"), 1.0),
-            (Tree("(S (NP (DT 0) (NN 1)) (VBZ 2) (VBN 3) (PP (IN 4) (NP (DT 5) (NN 6))) (NP (NN 7)))"), 0.9),
+            (Tree("(S (NP (DT 0) (NN 1)) (VBZ 2) (VBN 3) (PP (IN 4) (NP (DT 5) (NN 6))) (NP (NN 7)))"), 1.0),
             (Tree("(S (VP (NP (NP (DT 0) (NN 1)) (PP (IN 4) (NP (DT 5) (NN 6) (NN 7)))) (VBN 3)) (VBZ 2))"), 1.0),
-            (Tree("(S (VP (NP (NP (DT 0) (NN 1)) (PP (IN 4) (NP (DT 5) (NN 6) (NN 7)))) (VBN 3)) (VBZ 2))"), 0.9),
+            (Tree("(S (VP (NP (NP (DT 0) (NN 1)) (PP (IN 4) (NP (DT 5) (NN 6) (NN 7)))) (VBN 3)) (VBZ 2))"), 1.0),
             (Tree("(S (VP (NP (NP (DT 0) (NN 1)) (PP (IN 4) (NP (DT 5) (NN 6)))) (VBN 3) (NP (NN 7))) (VBZ 2))"), 1.0),
             (Tree("(S (VP (NP (NP (DT 0) (NN 1)) (PP (IN 4) (NP (DT 5) (NN 7)))) (VBN 3) (NP (NN 6))) (VBZ 2))"), 3.7),
         ]

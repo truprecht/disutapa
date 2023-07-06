@@ -15,16 +15,17 @@ class PairwiseTreeRanker(TreeRanker):
         self.scores = list()
 
     def add_tree(self, gold: Tree, kbest: list[tuple[Tree, float]]):
+        if len(kbest) <= 1:
+            return
         vectors = self.features.extract(t for t, _ in kbest)
         vectors = [v.add("parsing_score", w) for v, (_, w) in zip(vectors, kbest)]
-        if len(kbest) > 1:
-            scores = []
-            sentence = [str(i) for i in range(len(gold.leaves()))]
-            for candidate, _ in kbest:
-                result = TreePairResult(0, ParentedTree.convert(gold), list(sentence), ParentedTree.convert(candidate), list(sentence), self.evalparam)
-                scores.append(get_float(result.scores()["LF"]))
-            self.kbest_trees.append(vectors)
-            self.scores.append(scores)
+        scores = []
+        sentence = [str(i) for i in range(len(gold.leaves()))]
+        for candidate, _ in kbest:
+            result = TreePairResult(0, ParentedTree.convert(gold), list(sentence), ParentedTree.convert(candidate), list(sentence), self.evalparam)
+            scores.append(get_float(result.scores()["LF"]))
+        self.kbest_trees.append(vectors)
+        self.scores.append(scores)
 
     def fit(self, epochs: int = 10, swap_trees_prob: float = 0.2, devset: Iterable[tuple[list[tuple[Tree, float]], Tree]] = None):
         self.features.truncate(self.featoccs)

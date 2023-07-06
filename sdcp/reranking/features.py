@@ -170,14 +170,18 @@ class FeatureExtractor:
     
 
     def extract(self, trees: list[Tree]):
-        features = set()
+        feature_values = dict()
+        counted = set()
         for tree in trees:
             vec = self._extract(tree)
             if not self.fixed:
                 for f in vec.features:
-                    if f in features: continue
-                    self.counts[f] += 1
-                features.update(vec.features)
+                    if f in counted: continue
+                    seen_values = feature_values.setdefault(f, set())
+                    seen_values.add(vec.features[f])
+                    if len(seen_values) >= 2:
+                        self.counts[f] += 1
+                        counted.add(f)
             yield vec
 
     

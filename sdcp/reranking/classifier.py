@@ -41,13 +41,14 @@ class TreeRanker:
 
     
     def add_tree(self, gold: Tree, kbest: list[tuple[Tree, float]]):
+        if len(kbest) <= 1:
+            return
         # extract vectors even when len(kbest)==1, as it counts features
         vectors = self.features.extract(t for t, _ in kbest)
         vectors = [v.add("parsing_score", w) for v, (_, w) in zip(vectors, kbest)]
-        if len(kbest) > 1:
-            oracle_index, _ = self.__class__.oracle(gold, kbest, self.evalparam)
-            self.kbest_trees.append(vectors)
-            self.oracle_trees.append(oracle_index)
+        oracle_index, _ = self.__class__.oracle(gold, kbest, self.evalparam)
+        self.kbest_trees.append(vectors)
+        self.oracle_trees.append(oracle_index)
 
 
     def fit(self, epochs: int = 10, devset: Iterable[tuple[list[tuple[Tree, float]], Tree]] = None):

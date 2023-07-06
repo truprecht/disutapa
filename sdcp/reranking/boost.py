@@ -16,20 +16,20 @@ class BoostTreeRanker(TreeRanker):
         self.scores = list()
 
     def add_tree(self, gold: Tree, kbest: list[tuple[Tree, float]]):
-        # extract vectors even when len(kbest)==1, as it counts features
+        if len(kbest) <= 1:
+            return
         vectors = self.features.extract(t for t, _ in kbest)
         vectors = [v.add("parsing_score", w) for v, w in zip(vectors, redistribute([w for _, w in kbest]))]
-        if len(kbest) > 1:
-            scores = []
-            sentence = [str(i) for i in range(len(gold.leaves()))]
-            for candidate, _ in kbest:
-                result = TreePairResult(0, ParentedTree.convert(gold), list(sentence), ParentedTree.convert(candidate), list(sentence), self.evalparam)
-                candidate_len = sum(1 for node in candidate.subtrees())
-                scores.append(get_float(result.scores()["LF"]) * candidate_len / 100)
-            oracleidx, _ = self.__class__.oracle(gold, kbest, self.evalparam)
-            self.kbest_trees.append(vectors)
-            self.scores.append(torch.tensor([scores[oracleidx]-s for s in scores]))
-            self.oracle_trees.append(oracleidx)
+        scores = []
+        sentence = [str(i) for i in range(len(gold.leaves()))]
+        for candidate, _ in kbest:
+            result = TreePairResult(0, ParentedTree.convert(gold), list(sentence), ParentedTree.convert(candidate), list(sentence), self.evalparam)
+            candidate_len = sum(1 for node in candidate.subtrees())
+            scores.append(get_float(result.scores()["LF"]) * candidate_len / 100)
+        oracleidx, _ = self.__class__.oracle(gold, kbest, self.evalparam)
+        self.kbest_trees.append(vectors)
+        self.scores.append(torch.tensor([scores[oracleidx]-s for s in scores]))
+        self.oracle_trees.append(oracleidx)
 
     def fit(self, epochs: int = int(1e4), smoothing: float = 2e-4, devset: Iterable[tuple[list[tuple[Tree, float]], Tree]] = None):
         self.features.truncate(self.featoccs)

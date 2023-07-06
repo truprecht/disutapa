@@ -9,7 +9,7 @@ from sdcp.grammar.sdcp import grammar, sdcp_clause, rule
 from sdcp.grammar.lcfrs import lcfrs_composition, ordered_union_composition
 from sdcp.tagging.ensemble_model import ModelParameters, EnsembleModel
 from sdcp.tagging.data import CorpusWrapper
-from sdcp.reranking.boost import BoostTreeRanker, Tree
+from sdcp.reranking.mlp import MlpTreeRanker, Tree
 
 from .train import ModelParameters, TrainingParameter
 from os.path import exists
@@ -76,7 +76,7 @@ def main(config: TrainingParameter):
     corpus = CorpusWrapper(config.corpus)
 
     if not exists(vectorfile):
-        ranker = BoostTreeRanker(config.min_feature_occurrence)
+        ranker = MlpTreeRanker(config.min_feature_occurrence)
         for i, subcorpus in enumerate(corpus.train.get_fold_corpora(config.folds)):
             model = get_trained_model(config.output_dir + f"/fold-{i}", subcorpus, config)
             iterator = tqdm(

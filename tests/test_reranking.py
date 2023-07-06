@@ -1,5 +1,5 @@
 from discodop.tree import ImmutableTree, ParentedTree, Tree
-from sdcp.reranking import classifier, pairwise, boost
+from sdcp.reranking import classifier, pairwise, boost, mlp
 from sdcp.reranking.features import redistribute
 
 def test_extraction():
@@ -155,6 +155,45 @@ def test_boost():
         ranker.add_tree(gold, silvers)
     
     ranker.fit(10, devset=list(zip(silvertrees, goldtrees)))
+    for gold, goldidx, silvers in zip(goldtrees, goldindices, silvertrees):
+        i, tree = ranker.select(silvers)
+        assert i == goldidx, f"chose tree {tree} instead of {gold}"
+
+
+def test_mlp():
+    Tree = ImmutableTree
+    goldtrees = [
+        Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))"),
+        Tree("(S (VP (NP (NP (DT 0) (NN 1)) (PP (IN 4) (NP (DT 5) (NN 6)))) (VBN 3) (NP (NN 7))) (VBZ 2))")
+    ]
+    silvertrees = [
+        [
+            (Tree("(SBAR (S (VP (WRB 0) (NP (PT 1) (NN 2)) (VBD 3) (VBN 4) (RP 5))))"), 1.0),
+            (Tree("(SBAR (S (VP (WRB 0) (VBD 3) (VBN 4) (RP 5)) (NP (PT 1) (NN 2))))"), 1.0),
+            (Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))"), 1.0),
+            (Tree("(S (VP (WRB 0) (NP (PT 1) (NN 2)) (VBD 3) (VBN 4) (RP 5)))"), 1.0),
+            (Tree("(S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2)))"), 1.0),
+            (Tree("(S (VP (VP (WRB 0) (VBD 3) (VBN 4) (RP 5))) (NP (PT 1) (NN 2)))"), 1.0),
+            (Tree("(S (VP (WRB 0) (VBD 3) (VBN 4) (RP 5)) (NP (PT 1) (NN 2)))"), 1.0),
+        ],
+        [
+            (Tree("(S (VP (NP (DT 0) (NN 1) (PP (IN 4) (NP (DT 5) (NN 6)))) (VBN 3) (NP (NN 7))) (VBZ 2))"), 1.0),
+            (Tree("(S (VP (NP (DT 0) (NN 1)) (VBN 3) (PP (IN 4) (NP (DT 5) (NN 6))) (NP (NN 7))) (VBZ 2))"), 1.0),
+            (Tree("(S (NP (DT 0) (NN 1)) (VBZ 2) (VBN 3) (PP (IN 4) (NP (DT 5) (NN 6))) (NN 7))"), 1.0),
+            (Tree("(S (NP (DT 0) (NN 1)) (VBZ 2) (VBN 3) (PP (IN 4) (NP (DT 5) (NN 6))) (NP (NN 7)))"), 1.0),
+            (Tree("(S (VP (NP (NP (DT 0) (NN 1)) (PP (IN 4) (NP (DT 5) (NN 6) (NN 7)))) (VBN 3)) (VBZ 2))"), 1.0),
+            (Tree("(S (VP (NP (NP (DT 0) (NN 1)) (PP (IN 4) (NP (DT 5) (NN 6) (NN 7)))) (VBN 3)) (VBZ 2))"), 1.0),
+            (Tree("(S (VP (NP (NP (DT 0) (NN 1)) (PP (IN 4) (NP (DT 5) (NN 6)))) (VBN 3) (NP (NN 7))) (VBZ 2))"), 1.0),
+            (Tree("(S (VP (NP (NP (DT 0) (NN 1)) (PP (IN 4) (NP (DT 5) (NN 7)))) (VBN 3) (NP (NN 6))) (VBZ 2))"), 3.7),
+        ]
+    ]
+    goldindices = [2, 6]
+
+    ranker = mlp.MlpTreeRanker(min_feature_count=2, hidden_dim=20)
+    for gold, silvers in zip(goldtrees, silvertrees):
+        ranker.add_tree(gold, silvers)
+    
+    ranker.fit(10, 1.0, devset=list(zip(silvertrees, goldtrees)))
     for gold, goldidx, silvers in zip(goldtrees, goldindices, silvertrees):
         i, tree = ranker.select(silvers)
         assert i == goldidx, f"chose tree {tree} instead of {gold}"

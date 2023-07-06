@@ -1,6 +1,8 @@
 from discodop.tree import ImmutableTree, ParentedTree, Tree
 from sdcp.reranking import classifier, pairwise, boost, mlp
 from sdcp.reranking.features import redistribute
+from sdcp.reranking import dop
+
 
 def test_extraction():
     tree = Tree("(S (S (A 0) (B 1)) (S (A 2) (C 3) (S (D 4))))")
@@ -197,3 +199,18 @@ def test_mlp():
     for gold, goldidx, silvers in zip(goldtrees, goldindices, silvertrees):
         i, tree = ranker.select(silvers)
         assert i == goldidx, f"chose tree {tree} instead of {gold}"
+
+
+def test_dop():
+    tree = Tree("(S (S (A 0) (B 1)) (S (A 2) (C 3) (S (D 4))))")
+    grammar = dop.Dop([tree])
+    assert grammar.logocc == {
+        dop.DopRule("S", ("S", "S")): 1.0,
+        dop.DopRule("S", ("S", "S"), (0, ("A", "B"))): 1.0,
+        dop.DopRule("S", ("S", "S"), (1, ("A", "C", "S"))): 1.0,
+        dop.DopRule("S", ("A", "B")): 1.0,
+        dop.DopRule("S", ("A", "C", "S")): 1.0,
+        dop.DopRule("S", ("A", "C", "S"), (2, ("D",))): 1.0,
+        dop.DopRule("S", ("D",)): 1.0,
+    }
+    assert grammar.match(tree) == 7

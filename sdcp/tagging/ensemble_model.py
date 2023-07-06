@@ -320,7 +320,7 @@ class EnsembleModel(flair.nn.Model):
                     derivs = [(fix_rotation(with_pos(d[0], pos))[1], w) for d, w in derivs]
                     sentence.store_raw_prediction("kbest-trees", derivs)
 
-                if not self.reranking is None:
+                if not self.reranking is None and self.config.ktrees > 1:
                     _, tree = self.reranking.select(derivs)
                 else:
                     tree = fix_rotation(with_pos(parser.get_best()[0], pos))[1]

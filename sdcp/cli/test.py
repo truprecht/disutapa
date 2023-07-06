@@ -15,7 +15,8 @@ from random import sample, shuffle, random, seed
 from math import exp, log
 
 import torch
-
+from itertools import islice
+from sdcp.reranking.dop import Dop, Tree
 
 def guess_weights(total, hot, k):
     weights = torch.zeros((len(hot), total))
@@ -32,7 +33,8 @@ def guess_weights(total, hot, k):
 def main(config: Namespace):
     seed(config.seed)
     evaluator = Evaluator(readparam(config.param))
-    data = DatasetWrapper(DatasetDict.load_from_disk(config.corpus)["dev"])
+    corpus = DatasetDict.load_from_disk(config.corpus)
+    data = DatasetWrapper(corpus["dev"])
     p = ParserAdapter(grammar([eval(str_hr) for str_hr in data.labels()]), total_limit=config.weighted)
     nrules = len(p.parser.grammar.rules)
     idtopos = data.labels("pos")
@@ -42,31 +44,44 @@ def main(config: Namespace):
     idtopos = data.labels("pos")
     datalen = len(data)
     data = enumerate(data)
+
+    if config.dop:
+        dopgrammar = Dop((
+            Tree(sentence.get_raw_labels("tree"))
+                for sentence in DatasetWrapper(corpus["train"])),
+            min_occurrences=1
+        )
+
     for i, sample in tqdm(data, total=datalen):
         if not config.range is None and not i in range(*config.range):
             continue
 
         weights, indices = guess_weights(nrules, sample.get_raw_labels("supertag"), config.weighted).topk(config.weighted, sorted=True)
         weights = -weights.log_softmax(dim=-1)
+        
+        goldpostags = [idtopos[i] for i in sample.get_raw_labels("pos")]
+        goldtree = ParentedTree(sample.get_raw_labels("tree"))
 
         p.init(len(sample), weights, indices)
         p.fill_chart()
-        prediction = p.get_best()[0]
-        prediction = with_pos(prediction, [idtopos[i] for i in sample.get_raw_labels("pos")])
-        evaluator.add(i, ParentedTree(sample.get_raw_labels("tree")), list(sample.get_raw_labels("sentence")),
+        prediction = with_pos(p.get_best()[0], goldpostags)
+        evaluator.add(i, goldtree, list(sample.get_raw_labels("sentence")),
                 ParentedTree.convert(prediction), list(sample.get_raw_labels("sentence")))
 
         if str(fix_rotation(prediction)[1]) != sample.get_raw_labels("tree"):
             print("best tree is not gold")
-            trees = 0
-            for i, prediction in zip(range(config.k), p.get_best_iter()):
-                trees += 1
-                prediction = with_pos(prediction[0], [idtopos[i] for i in sample.get_raw_labels("pos")])
-                print(str(fix_rotation(prediction)[1]))
-                if str(fix_rotation(prediction)[1]) == sample.get_raw_labels("tree") and i > 0:
+            trees = islice(p.get_best_iter(), config.k)
+            trees = [fix_rotation(with_pos(t[0], goldpostags))[1] for t, w in trees]
+            if config.dop:
+                trees.sort(key=dopgrammar.match, reverse=True)
+            for i, prediction in enumerate(trees):
+                # print(prediction)
+                if str(prediction) == sample.get_raw_labels("tree"):
                     print("found match among k best at", i)
-            print(sample.get_raw_labels("tree"))
-            if trees < config.k:
+                    if config.dop:
+                        print([dopgrammar.match(t) for t in trees])
+            # print(sample.get_raw_labels("tree"))
+            if len(trees) < config.k:
                 print("found only", trees, "instances")
     print(evaluator.summary())
     print(evaluator.breakdowns())
@@ -82,6 +97,7 @@ def subcommand(sub: ArgumentParser):
     sub.add_argument("--snd-order", action="store_true", default=False)
     sub.add_argument("--snd-order-prior", type=int, default=0)
     sub.add_argument("--snd-order-separate", action="store_true", default=False)
+    sub.add_argument("--dop", action="store_true", default=False)
     sub.set_defaults(func=lambda args: main(args))
 
 

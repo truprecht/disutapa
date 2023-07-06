@@ -73,6 +73,8 @@ def test_weighted_sample():
     parse = ActiveParser(grammar(list(c.rules)))
     for rs, gold, pos in zip(c.goldrules, c.goldtrees, c.goldpos):
         parse.init(len(rs))
+        # ActiveParser should not be used with such inputs to add_rules,
+        # without early stopping
         parse.add_rules(*(rule_weight_vector(len(c.rules), r) for r in rs))
-        parse.fill_chart()
+        parse.fill_chart(stop_early=True)
         assert with_pos(parse.get_best()[0], pos) == gold

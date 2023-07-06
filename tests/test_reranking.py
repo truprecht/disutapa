@@ -6,7 +6,7 @@ def test_extraction():
     tree = Tree("(S (S (A 0) (B 1)) (S (A 2) (C 3) (S (D 4))))")
     extractor = classifier.FeatureExtractor()
 
-    vec = extractor.extract(tree)
+    vec = next(extractor.extract([tree]))
 
     assert set(extractor.objects.keys()) == {"rules", "parent_rules", "bigrams", "parent_bigrams", "rightbranch", "ranks", "branching_direction"}
     assert set(extractor.objects["rules"]) == {("S", "S", "S"), ("S", "A", "B"), ("S", "A", "C", "S"), ("S", "D")}
@@ -25,8 +25,13 @@ def test_extraction():
 
     assert  vec.features == features
 
+    assert set(extractor.counts.values()) == {1}
+
+    extractor.truncate(mincount=1)
+    assert len(vec.tup(extractor)) == len(features)
+
     extractor.truncate(mincount=2)
-    assert vec.tup(extractor) == (2,4,5,2,2)
+    assert vec.tup(extractor) == ()
 
 
 

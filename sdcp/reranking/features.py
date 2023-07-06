@@ -151,7 +151,7 @@ class FeatureExtractor:
         )
 
 
-    def extract(self, tree: Tree|int) -> FeatureVector:
+    def _extract(self, tree: Tree|int) -> FeatureVector:
         sparsevec = Counter()
 
         # counted objects features
@@ -165,11 +165,21 @@ class FeatureExtractor:
                     continue
                 idx = feature_dict.setdefault(obj, len(feature_dict))
                 sparsevec[(featname, idx)] += 1
-                if not self.fixed:
-                    self.counts[(featname, idx)] += 1
 
         return FeatureVector(sparsevec)
     
+
+    def extract(self, trees: list[Tree]):
+        features = set()
+        for tree in trees:
+            vec = self._extract(tree)
+            if not self.fixed:
+                for f in vec.features:
+                    if f in features: continue
+                    self.counts[f] += 1
+                features.update(vec.features)
+            yield vec
+
     
     def truncate(self, mincount: int = 5):
         self.objects = {

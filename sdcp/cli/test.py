@@ -18,7 +18,7 @@ import torch
 
 
 def guess_weights(total, hot, k):
-    weights = torch.zeros((len(hot), total), dtype=float)
+    weights = torch.zeros((len(hot), total))
     for i, h in enumerate(hot):
         start = max(0, h-k//2) if h+k < total else total-k
         end = start + k

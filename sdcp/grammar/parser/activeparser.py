@@ -71,7 +71,7 @@ class ActiveParser:
         self.stop_early = early_stopping
 
 
-    def fill_chart(self) -> None:
+    def fill_chart(self, stop_early: bool = False) -> None:
         self.new_item_batch: list[PassiveItem] = []
         self.new_item_batch_minweight: float | None = None
         def register_item(qele: qelement):
@@ -117,15 +117,8 @@ class ActiveParser:
                 if qi.item.lhs == self.grammar.root and qi.item.leaves == disco_span((0, self.len)):
                     if self.rootid is None:
                         self.rootid = backtrace_id
-                # TODO: with the incremental addition of tags, early stopping is not needed
-                # and can be removed. This also seems to benefit reranking results.
-                # # continue as long as there are items with same weight
-                # if not self.rootid is None and self.stop_early is True \
-                #         and abs(qi.weight - self.itemweights[self.rootid]) > 1e-5:
-                #     return
-                # #  if a root item was already found and the current weight is more than a threshold, then exit
-                # if not self.rootid is None and isinstance(self.stop_early, float) and qi.weight > self.stop_early:
-                #     return
+                    if stop_early:
+                        return
 
                 qi.bt = backtrace_id
                 self.from_lhs[qi.item.lhs].append((qi.item.leaves, qi.bt, qi.weight))

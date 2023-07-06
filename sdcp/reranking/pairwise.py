@@ -15,8 +15,8 @@ class PairwiseTreeRanker(TreeRanker):
         self.scores = list()
 
     def add_tree(self, gold: Tree, kbest: list[tuple[Tree, float]]):
-        # extract vectors even when len(kbest)==1, as it counts features
-        vectors = [self.features.extract(t).add("parsing_score", w) for t, w in kbest]
+        vectors = self.features.extract(t for t, _ in kbest)
+        vectors = [v.add("parsing_score", w) for v, (_, w) in zip(vectors, kbest)]
         if len(kbest) > 1:
             scores = []
             sentence = [str(i) for i in range(len(gold.leaves()))]
@@ -28,7 +28,7 @@ class PairwiseTreeRanker(TreeRanker):
 
     def fit(self, epochs: int = 10, swap_trees_prob: float = 0.2, devset: Iterable[tuple[list[tuple[Tree, float]], Tree]] = None):
         self.features.truncate(self.featoccs)
-        self.weights = torch.zeros(len(self.features), dtype=float)
+        self.weights = torch.zeros(len(self.features))
         
         if not self.kbest_trees:
             print("there are no trees for training")
@@ -44,8 +44,8 @@ class PairwiseTreeRanker(TreeRanker):
                 current_tree, current_score = next(trees_and_scores)
                 for (next_tree, next_score), swap_action in zip(trees_and_scores, swap_actions):
                     gold_action = 1 if current_score >= next_score else -1
-                    v = torch.tensor(current_tree.tup(self.features), dtype=float) \
-                      - torch.tensor(next_tree.tup(self.features), dtype=float)
+                    v = torch.tensor(current_tree.tup(self.features)) \
+                      - torch.tensor(next_tree.tup(self.features))
                     action = v @ self.weights
                     accuracies += (action * gold_action) > 0
 
@@ -63,9 +63,9 @@ class PairwiseTreeRanker(TreeRanker):
         iterator = iter(kbest)
         current_idx = 0
         current_tree, current_weight = next(iterator)
-        current_vector = torch.tensor(self.features.extract(current_tree).add("parsing_score", current_weight).tup(self.features), dtype=float)
+        current_vector = torch.tensor(self.features._extract(current_tree).add("parsing_score", current_weight).tup(self.features))
         for idx, (next_tree, next_weight) in enumerate(iterator):
-            next_vector = torch.tensor(self.features.extract(next_tree).add("parsing_score", next_weight).tup(self.features), dtype=float)
+            next_vector = torch.tensor(self.features._extract(next_tree).add("parsing_score", next_weight).tup(self.features))
             action = (current_vector - next_vector) @ self.weights
             if action < 0:
                 current_tree, current_vector, current_weight = next_tree, next_vector, next_weight

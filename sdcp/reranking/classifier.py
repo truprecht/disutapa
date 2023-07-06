@@ -42,7 +42,8 @@ class TreeRanker:
     
     def add_tree(self, gold: Tree, kbest: list[tuple[Tree, float]]):
         # extract vectors even when len(kbest)==1, as it counts features
-        vectors = [self.features.extract(t).add("parsing_score", w) for t, w in kbest]
+        vectors = self.features.extract(t for t, _ in kbest)
+        vectors = [v.add("parsing_score", w) for v, (_, w) in zip(vectors, kbest)]
         if len(kbest) > 1:
             oracle_index, _ = self.__class__.oracle(gold, kbest, self.evalparam)
             self.kbest_trees.append(vectors)
@@ -51,7 +52,7 @@ class TreeRanker:
 
     def fit(self, epochs: int = 10, devset: Iterable[tuple[list[tuple[Tree, float]], Tree]] = None):
         self.features.truncate(self.featoccs)
-        self.weights = torch.zeros(len(self.features), dtype=float)
+        self.weights = torch.zeros(len(self.features))
         
         if not self.oracle_trees:
             print("there are no trees for training")
@@ -62,7 +63,7 @@ class TreeRanker:
             accuracies = 0
             for goldidx, trees in iterator:
                 mat = torch.stack([
-                    torch.tensor(t.tup(self.features), dtype=float)
+                    torch.tensor(t.tup(self.features))
                     for t in trees
                 ])
                 selection = (mat @ self.weights).argmax()
@@ -109,10 +110,10 @@ class TreeRanker:
 
 
     def select(self, kbest: Iterable[tuple[Tree, float]]) -> tuple[int, Tree]:
-        mat = torch.stack([
-            torch.tensor(self.features.extract(tree).add("parsing_score", weight).tup(self.features), dtype=float)
-            for sidx, (tree, weight) in enumerate(kbest)
-        ])
+        vectors = self.features.extract(t for t, _ in kbest)
+        vectors = [v.add("parsing_score", w).expand(self.features) for v, (_, w) in zip(vectors, kbest)]
+        mat = torch.stack(vectors)
+        
         scores = (mat @ self.weights)
         idx = scores.argmax()
         return idx, kbest[idx][0]

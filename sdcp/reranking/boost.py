@@ -17,9 +17,8 @@ class BoostTreeRanker(TreeRanker):
 
     def add_tree(self, gold: Tree, kbest: list[tuple[Tree, float]]):
         # extract vectors even when len(kbest)==1, as it counts features
-        vectors = [self.features.extract(t) for t, _ in kbest]
-        weights = redistribute([w for _, w in kbest])
-        vectors = [v.add("parsing_score", w) for v, w in zip(vectors, weights)]
+        vectors = self.features.extract(t for t, _ in kbest)
+        vectors = [v.add("parsing_score", w) for v, w in zip(vectors, redistribute([w for _, w in kbest]))]
         if len(kbest) > 1:
             scores = []
             sentence = [str(i) for i in range(len(gold.leaves()))]
@@ -31,9 +30,9 @@ class BoostTreeRanker(TreeRanker):
             self.scores.append(torch.tensor([scores[oracleidx]-s for s in scores]))
             self.oracle_trees.append(oracleidx)
 
-    def fit(self, epochs: int = 1000, smoothing: float = 2e-4, devset: Iterable[tuple[list[tuple[Tree, float]], Tree]] = None):
+    def fit(self, epochs: int = 1e4, smoothing: float = 2e-4, devset: Iterable[tuple[list[tuple[Tree, float]], Tree]] = None):
         self.features.truncate(self.featoccs)
-        self.weights = torch.zeros(len(self.features), dtype=float)
+        self.weights = torch.zeros(len(self.features))
         self.kbest_trees = [
             torch.stack([
                 vector.expand(self.features)
@@ -58,7 +57,7 @@ class BoostTreeRanker(TreeRanker):
         print("using weight coefficient", self.weights[0])
         
         feature_diffs = torch.zeros((len(self.kbest_trees), max(len(kbest) for kbest in self.kbest_trees), len(self.features)))
-        score_diffs = torch.zeros((len(self.kbest_trees), max(len(kbest) for kbest in self.kbest_trees)), dtype=torch.double)
+        score_diffs = torch.zeros((len(self.kbest_trees), max(len(kbest) for kbest in self.kbest_trees)))
         for i, (vectors, oracleidx) in enumerate(zip(self.kbest_trees, self.oracle_trees)):
             feature_diffs[i, :len(vectors), :] = vectors[oracleidx]-vectors
             score_diffs[i, :len(vectors)] = self.scores[i]

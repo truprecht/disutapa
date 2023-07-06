@@ -24,7 +24,8 @@ class BoostTreeRanker(TreeRanker):
             sentence = [str(i) for i in range(len(gold.leaves()))]
             for candidate, _ in kbest:
                 result = TreePairResult(0, ParentedTree.convert(gold), list(sentence), ParentedTree.convert(candidate), list(sentence), self.evalparam)
-                scores.append(get_float(result.scores()["LF"]))
+                candidate_len = sum(1 for node in candidate.subtrees())
+                scores.append(get_float(result.scores()["LF"]) * candidate_len / 100)
             oracleidx, _ = self.__class__.oracle(gold, kbest, self.evalparam)
             self.kbest_trees.append(vectors)
             self.scores.append(torch.tensor([scores[oracleidx]-s for s in scores]))
@@ -45,34 +46,38 @@ class BoostTreeRanker(TreeRanker):
             print("there are no trees for training")
             return
         
-        feature_diffs = torch.zeros((len(self.kbest_trees), max(len(kbest) for kbest in self.kbest_trees), len(self.features)))
-        score_diffs = torch.zeros((len(self.kbest_trees), max(len(kbest) for kbest in self.kbest_trees)))
+        max_k_per_sentence = max(len(kbest) for kbest in self.kbest_trees)
+        k_mean_matrix = torch.tensor([
+            [1/len(vs)] * len(vs) + [0] * (max_k_per_sentence-len(vs))
+            for vs in self.kbest_trees
+        ])
+        
+        feature_diffs = torch.zeros((len(self.kbest_trees), max_k_per_sentence, len(self.features)))
+        score_diffs = torch.zeros((len(self.kbest_trees), max_k_per_sentence))
         for i, (vectors, oracleidx) in enumerate(zip(self.kbest_trees, self.oracle_trees)):
             feature_diffs[i, :len(vectors), :] = vectors[oracleidx]-vectors
             score_diffs[i, :len(vectors)] = self.scores[i]
 
-        
         alphas = torch.arange(-10, 10, 1e-3)
-        losses = torch.zeros_like(alphas)
-        single_losses = torch.tensordot(-feature_diffs[:,:,0].unsqueeze(-1), alphas.unsqueeze(-1), dims=([2], [1])).exp()
-        losses = torch.tensordot(single_losses, score_diffs, dims=([0, 1], [0, 1]))
-        self.weights[0] = alphas[losses.argmin()]
+        single_losses = torch.tensordot(-feature_diffs[:,:,0].unsqueeze(-1), alphas.unsqueeze(-1), dims=([2], [1])).exp().permute(2,0,1)
+        mean_loss = torch.tensordot(single_losses * score_diffs, k_mean_matrix, dims=([1,2], [0,1]))
+        self.weights[0] = alphas[mean_loss.argmin()]
         print("using weight coefficient", self.weights[0])
 
+        aplus = feature_diffs.permute(2,0,1) > 0
+        aminus = feature_diffs.permute(2,0,1) < 0
         for epoch in range(epochs):
             print("accuracy", sum(int((vectors @ self.weights).argmax() == oracleidx) for vectors, oracleidx in zip(self.kbest_trees, self.oracle_trees)))
 
-            w = ((-feature_diffs*self.weights).exp().permute(2,0,1) * score_diffs).permute(1,2,0)
-            z = w.sum()
-            wplus = (w * (feature_diffs > 0)).sum(dim=[0, 1])
-            wminus = (w * (feature_diffs < 0)).sum(dim=[0, 1])
-
+            w = ((-feature_diffs*self.weights).exp().permute(2,0,1) * score_diffs)
+            z = torch.tensordot(w, k_mean_matrix, dims=([1,2], [0,1])).sum()
+            wplus = torch.tensordot(w * aplus, k_mean_matrix, dims=([1,2], [0,1]))
+            wminus = torch.tensordot(w * aminus, k_mean_matrix, dims=([1,2], [0,1]))
             k = (wplus.sqrt() - wminus.sqrt()).abs().argmax()
             delta = ((wplus[k] + z*smoothing) / (wminus[k] + z*smoothing)).log() / 2
             self.weights[k] += delta
 
             print("select feature", self.features.backward[k], delta)
-
             
             if not devset is None:
                 self.evaluate(devset)

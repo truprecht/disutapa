@@ -30,7 +30,7 @@ class BoostTreeRanker(TreeRanker):
             self.scores.append(torch.tensor([scores[oracleidx]-s for s in scores]))
             self.oracle_trees.append(oracleidx)
 
-    def fit(self, epochs: int = 1e4, smoothing: float = 2e-4, devset: Iterable[tuple[list[tuple[Tree, float]], Tree]] = None):
+    def fit(self, epochs: int = int(1e4), smoothing: float = 2e-4, devset: Iterable[tuple[list[tuple[Tree, float]], Tree]] = None):
         self.features.truncate(self.featoccs)
         self.weights = torch.zeros(len(self.features))
         self.kbest_trees = [
@@ -60,12 +60,11 @@ class BoostTreeRanker(TreeRanker):
         print("using weight coefficient", self.weights[0])
         
         for epoch in range(epochs):
-            w = (-feature_diffs*self.weights).exp()
-            w = torch.tensordot(score_diffs, w, dims=2)
+            w = ((-feature_diffs*self.weights).exp().permute(2,0,1) * score_diffs).permute(1,2,0)
             z = w.sum()
             wplus = (w * (feature_diffs > 0)).sum(dim=[0, 1])
             wminus = (w * (feature_diffs < 0)).sum(dim=[0, 1])
-            k = (wplus.sqrt() - wminus.sqrt()).argmax()
+            k = (wplus.sqrt() - wminus.sqrt()).abs().argmax()
             delta = ((wplus[k] + z*smoothing) / (wminus[k] + z*smoothing)).log() / 2
             self.weights[k] += delta
 

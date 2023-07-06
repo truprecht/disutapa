@@ -9,7 +9,7 @@ CPU = torch.device("cpu")
 from typing import Tuple, Optional
 from sdcp.grammar.sdcp import grammar
 from sdcp.grammar.parser.activeparser import ActiveParser
-from sdcp.autotree import AutoTree, with_pos
+from sdcp.autotree import AutoTree, with_pos, fix_rotation
 
 from discodop.eval import readparam, TreePairResult
 from discodop.tree import ParentedTree, Tree
@@ -317,13 +317,13 @@ class EnsembleModel(flair.nn.Model):
 
                 if self.config.ktrees > 1:
                     derivs = islice(parser.get_best_iter(), self.config.ktrees)
-                    derivs = [(with_pos(d[0], pos), w) for d, w in derivs]
+                    derivs = [(fix_rotation(with_pos(d[0], pos))[1], w) for d, w in derivs]
                     sentence.store_raw_prediction("kbest-trees", derivs)
 
                 if not self.reranking is None:
                     _, tree = self.reranking.select(derivs)
                 else:
-                    tree = with_pos(parser.get_best()[0], pos)
+                    tree = fix_rotation(with_pos(parser.get_best()[0], pos))[1]
                 
                 sentence.set_label(label_name, str(tree))
                 totalbacktraces += len(parser.parser.backtraces)

@@ -45,23 +45,20 @@ class BoostTreeRanker(TreeRanker):
             print("there are no trees for training")
             return
         
-        alphas = torch.arange(-10, 10, 1e-3)
-        losses = torch.zeros_like(alphas)
-        for trees, scores, oracle in zip(self.kbest_trees, self.scores, self.oracle_trees):
-            print([-(trees[oracle][0]-vector[0]) for vector in trees])
-            losses += torch.tensor([
-                [-(trees[oracle][0]-vector[0])*alpha for vector in trees]
-                for alpha in alphas
-            ]).exp() @ scores
-        self.weights[0] = alphas[losses.argmin()]
-        print("using weight coefficient", self.weights[0])
-        
         feature_diffs = torch.zeros((len(self.kbest_trees), max(len(kbest) for kbest in self.kbest_trees), len(self.features)))
         score_diffs = torch.zeros((len(self.kbest_trees), max(len(kbest) for kbest in self.kbest_trees)))
         for i, (vectors, oracleidx) in enumerate(zip(self.kbest_trees, self.oracle_trees)):
             feature_diffs[i, :len(vectors), :] = vectors[oracleidx]-vectors
             score_diffs[i, :len(vectors)] = self.scores[i]
 
+        
+        alphas = torch.arange(-10, 10, 1e-3)
+        losses = torch.zeros_like(alphas)
+        single_losses = torch.tensordot(-feature_diffs[:,:,0].unsqueeze(-1), alphas.unsqueeze(-1), dims=([2], [1])).exp()
+        losses = torch.tensordot(single_losses, score_diffs, dims=([0, 1], [0, 1]))
+        self.weights[0] = alphas[losses.argmin()]
+        print("using weight coefficient", self.weights[0])
+        
         for epoch in range(epochs):
             w = (-feature_diffs*self.weights).exp()
             w = torch.tensordot(score_diffs, w, dims=2)

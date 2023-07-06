@@ -93,7 +93,7 @@ def main(config: TrainingParameter):
     else:
         ranker = load(open(vectorfile, "rb"))
 
-    ranker.fit(epochs=10, devset=get_dev_set(config, corpus))
+    ranker.fit(devset=get_dev_set(config, corpus))
     dump(ranker, open(rankerfile, "wb"))
 
 

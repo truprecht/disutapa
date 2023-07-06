@@ -58,17 +58,21 @@ class BoostTreeRanker(TreeRanker):
         losses = torch.tensordot(single_losses, score_diffs, dims=([0, 1], [0, 1]))
         self.weights[0] = alphas[losses.argmin()]
         print("using weight coefficient", self.weights[0])
-        
+
         for epoch in range(epochs):
+            print("accuracy", sum(int((vectors @ self.weights).argmax() == oracleidx) for vectors, oracleidx in zip(self.kbest_trees, self.oracle_trees)))
+
             w = ((-feature_diffs*self.weights).exp().permute(2,0,1) * score_diffs).permute(1,2,0)
             z = w.sum()
             wplus = (w * (feature_diffs > 0)).sum(dim=[0, 1])
             wminus = (w * (feature_diffs < 0)).sum(dim=[0, 1])
+
             k = (wplus.sqrt() - wminus.sqrt()).abs().argmax()
             delta = ((wplus[k] + z*smoothing) / (wminus[k] + z*smoothing)).log() / 2
             self.weights[k] += delta
 
             print("select feature", self.features.backward[k], delta)
+
             
             if not devset is None:
                 self.evaluate(devset)

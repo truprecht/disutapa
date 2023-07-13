@@ -46,10 +46,9 @@ def main(config: Namespace):
     data = enumerate(data)
 
     if config.dop:
-        dopgrammar = Dop((
+        dopgrammar = Dop(tqdm(
             Tree(sentence.get_raw_labels("tree"))
                 for sentence in DatasetWrapper(corpus["train"])),
-            min_occurrences=1
         )
 
     for i, sample in tqdm(data, total=datalen):
@@ -64,25 +63,21 @@ def main(config: Namespace):
 
         p.init(len(sample), weights, indices)
         p.fill_chart()
-        prediction = with_pos(p.get_best()[0], goldpostags)
-        evaluator.add(i, goldtree, list(sample.get_raw_labels("sentence")),
-                ParentedTree.convert(prediction), list(sample.get_raw_labels("sentence")))
-
-        if str(fix_rotation(prediction)[1]) != sample.get_raw_labels("tree"):
-            print("best tree is not gold")
+        if config.k == 1:
+            prediction = with_pos(p.get_best()[0], goldpostags)
+            evaluator.add(i, goldtree, list(sample.get_raw_labels("sentence")),
+                    ParentedTree.convert(prediction), list(sample.get_raw_labels("sentence")))
+        else:
             trees = islice(p.get_best_iter(), config.k)
             trees = [fix_rotation(with_pos(t[0], goldpostags))[1] for t, w in trees]
             if config.dop:
                 trees.sort(key=dopgrammar.match, reverse=True)
-            for i, prediction in enumerate(trees):
-                # print(prediction)
-                if str(prediction) == sample.get_raw_labels("tree"):
-                    print("found match among k best at", i)
-                    if config.dop:
-                        print([dopgrammar.match(t) for t in trees])
-            # print(sample.get_raw_labels("tree"))
-            if len(trees) < config.k:
-                print("found only", trees, "instances")
+            evaluator.add(i, goldtree, list(sample.get_raw_labels("sentence")),
+                ParentedTree.convert(trees[0]), list(sample.get_raw_labels("sentence")))
+            if not str(trees[0]) == sample.get_raw_labels("tree"):
+                print("first candidate is not gold, but index", \
+                    next(i for i, prediction in enumerate(trees)
+                        if str(prediction) == sample.get_raw_labels("tree")))
     print(evaluator.summary())
     print(evaluator.breakdowns())
 

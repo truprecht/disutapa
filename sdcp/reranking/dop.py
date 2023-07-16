@@ -15,6 +15,18 @@ class Derivation:
     position: int
     children: tuple["Derivation"]
 
+    def bottom_up(self) -> Iterable["Derivation"]:
+        queue = [self]
+        visited = set()
+        while queue:
+            node = queue.pop()
+            if not node.position in visited and not all(c is None for c in node.children):
+                queue.append(node)
+                queue.extend(c for c in node.children if not c is None)
+                visited.add(node.position)
+                continue
+            yield node
+
 
 treeposition = 0
 def into_derivation(
@@ -51,7 +63,32 @@ def largest_common_fragment(s: Derivation, t: Derivation, excludes: set[tuple[in
     )
 
 
- 
+def fragment_to_transitions(
+        fragment: Tree,
+        id: int,
+        id2rule: dict[int, LcfrsRule],
+        weight: float
+        ) -> Iterable[tuple[tuple[str, ...], int, str, float]]:
+    queue = [(fragment, ())]
+    while queue:
+        node, position = queue.pop()
+
+        w = weight if position == () else 0.0
+        symbol: int = node.label
+        grammar_rule = id2rule[symbol]
+        top = grammar_rule[0] if position == () else f"{id}-{position}"
+        bottoms = tuple(
+            rhsnt if c is None else f"{id}-{position+(i,)}"
+            for i, (c, rhsnt) in enumerate(zip(node.children, grammar_rule[1]))
+        )
+
+        yield (bottoms, symbol, top, w)
+
+        queue.extend(
+            (c, position+(i,))
+            for i, c in enumerate(node.children)
+            if not c is None
+        )
 
 
 class Dop:
@@ -80,9 +117,11 @@ class Dop:
     def __init__(self, training_set: Iterable[Tree], prior: float = 0.1):
         self.rule2idx = {}
         self.idx2lhs = []
+        self.tops = set()
         derivations: list[Tree] = []
         self.rule_index: dict[int, Derivation] = defaultdict(list)
         for tree in training_set:
+            self.tops.add(tree.label)
             derivation, _ = into_derivation(tree, integerize=self.integerize)
             derivations.append(derivation)
             queue = [derivation]
@@ -96,31 +135,29 @@ class Dop:
         for counts in pool.imap_unordered(self.get_tree_fragments, tqdm(derivations, "extract fragments"), chunksize=128):
             dop_fragments += counts            
 
-        self.rules = defaultdict(list)
+        self.transitions = defaultdict(list)
+        idx2rule = list(self.rule2idx.keys())
         denominators = Counter()
         for fragment, c in dop_fragments.items():
             denominators[self.idx2lhs[fragment.label]] += c + 1 + prior
-            self.rules[fragment.label].append(fragment)
-        self.weights = {
-            fragment: log(denominators[self.idx2lhs[fragment.label]] + prior) - log(c + 1 + prior)
-            for fragment, c in dop_fragments.items()
-        }
+        for idx, (fragment, c) in enumerate(dop_fragments.items()):
+            weight = log(denominators[self.idx2lhs[fragment.label]] + prior) - log(c + 1 + prior)
+            for (ps, symb, top, w) in fragment_to_transitions(fragment, idx, idx2rule, weight):
+                self.transitions[symb].append((ps, top, w))
         self.fallback_weight = {
-            label: log(denom + prior) - log(prior) if prior else float("-inf")
+            label: log(denom + prior) - log(prior) if prior else float("inf")
             for label, denom in denominators.items()
         }
-
 
     def integerize(self, rule) -> int:
         if not rule in self.rule2idx:
             self.idx2lhs.append(rule[0])
         return self.rule2idx.setdefault(rule, len(self.idx2lhs)-1)
 
-
     def match(self, tree: Tree) -> float:
         parser = DopTreeParser(self)
         parser.fill_chart(tree)
-        return parser.chart[1]
+        return parser.chart.get((1, tree.label), float("inf"))
     
     def select(self, trees: Iterable[tuple[Tree, float]]) -> tuple[int, Tree]:
         bestidx, besttree, bestweight = None, None, None
@@ -142,45 +179,39 @@ def children_with_positions(tree, position, skip_none: bool = True):
 class DopTreeParser:
     grammar: Dop
     chart: dict[tuple[int, ...], float] = field(default_factory=dict)
-    
-    @classmethod
-    def _match(cls, fragment, derivation) -> Iterable[Derivation] | None:
-        if fragment.label != derivation.rule:
-            return None
-        child_derivations = []
-        for subfragment, subderivation in zip(fragment, derivation.children):
-            if subfragment is None:
-                if not subderivation is None:
-                    child_derivations.append(subderivation)
-                continue
-            if not (children := cls._match(subfragment, subderivation)) is None:
-                child_derivations.extend(children)
-                continue
-            return None
-        return child_derivations
+
+    def _update(self, key, value):
+        if self.chart.setdefault(key, value) > value:
+            self.chart[key] = value
 
     def fill_chart(self, tree: Tree):
         global treeposition
         treeposition = 0
         derivation, _ = into_derivation(tree, self.grammar.integerize)
-        queue = [derivation]
-        while queue:
-            subderivation = queue.pop()
-            if not all(c is None or c.position in self.chart for c in subderivation.children):
-                queue.append(subderivation)
-                queue.extend(c for c in subderivation.children if not c is None)
+        for subderivation in derivation.bottom_up():
+            add_fallback_rule = True
+            for (bottoms, top, w) in self.grammar.transitions[subderivation.rule]:
+                weight = 0
+                for (child, childstate) in zip(subderivation.children, bottoms):
+                    if child is None: continue
+                    if not (childweight := self.chart.get((child.position, childstate))) is None:
+                        weight += childweight
+                    else:
+                        weight = None
+                        break
+                if weight is None: continue
+                self._update((subderivation.position, top), weight+w)
+                if top == self.grammar.idx2lhs[subderivation.rule]:
+                    add_fallback_rule = False
+            if add_fallback_rule:
+                lhs = self.grammar.idx2lhs[subderivation.rule]
+                children = (
+                    (c.position, self.grammar.idx2lhs[c.rule])
+                    for c in subderivation.children
+                    if not c is None
+                )
+                weight = sum(self.chart[child] for child in children)
+                weight += self.grammar.fallback_weight.get(lhs, float("inf"))
+                self._update((subderivation.position, lhs), weight)
                 continue
-            if not subderivation.rule in self.grammar.rules:
-                weight = sum(self.chart[c.position] for c in subderivation.children if not c is None)
-                weight += self.grammar.fallback_weight.get(self.grammar.idx2lhs[subderivation.rule], 0)
-                if not subderivation.position in self.chart or self.chart[subderivation.position] > weight:
-                    self.chart[subderivation.position] = weight
-                continue
-            for doprule in self.grammar.rules[subderivation.rule]:
-                children = self._match(doprule, subderivation)
-                if children is None:
-                    continue
-                weight = sum(self.chart[c.position] for c in children)
-                weight += self.grammar.weights[doprule]
-                if not subderivation.position in self.chart or self.chart[subderivation.position] > weight:
-                    self.chart[subderivation.position] = weight
+                

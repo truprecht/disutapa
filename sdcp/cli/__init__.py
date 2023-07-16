@@ -1,4 +1,4 @@
-from . import extract, test, train, eval, train_reranker
+from . import extract, test, train, eval, train_dop
 from argparse import ArgumentParser
 
 def main():
@@ -13,7 +13,7 @@ def main():
         subcommands.add_parser(name="train", description="Train discriminative model for supertagging"))
     eval.subcommand(
         subcommands.add_parser(name="eval", description="Evaluate a trained classifier"))
-    train_reranker.subcommand(
-        subcommands.add_parser(name="reranking", description="Train a reranking model"))
+    train_dop.subcommand(
+        subcommands.add_parser(name="dop", description="Train a reranking dop model"))
     parsed_args = args.parse_args()
     parsed_args.func(parsed_args)

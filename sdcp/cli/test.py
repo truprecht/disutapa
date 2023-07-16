@@ -11,8 +11,8 @@ from discodop.tree import ParentedTree, ImmutableTree
 from tqdm import tqdm
 
 from datasets import DatasetDict
-from random import sample, shuffle, random, seed
-from math import exp, log
+from random import seed
+from pickle import load
 
 import torch
 from itertools import islice
@@ -45,11 +45,8 @@ def main(config: Namespace):
     datalen = len(data)
     data = enumerate(data)
 
-    if config.dop:
-        dopgrammar = Dop(tqdm(
-            Tree(sentence.get_raw_labels("tree"))
-                for sentence in DatasetWrapper(corpus["train"])),
-        )
+    if not config.dop is None:
+        dopgrammar = load(open(config.dop, "rb"))
 
     for i, sample in tqdm(data, total=datalen):
         if not config.range is None and not i in range(*config.range):
@@ -70,8 +67,8 @@ def main(config: Namespace):
         else:
             trees = islice(p.get_best_iter(), config.k)
             trees = [fix_rotation(with_pos(t[0], goldpostags))[1] for t, w in trees]
-            if config.dop:
-                trees.sort(key=dopgrammar.match, reverse=True)
+            if not config.dop is None:
+                trees.sort(key=dopgrammar.match, reverse=False)
             evaluator.add(i, goldtree, list(sample.get_raw_labels("sentence")),
                 ParentedTree.convert(trees[0]), list(sample.get_raw_labels("sentence")))
             if not str(trees[0]) == sample.get_raw_labels("tree"):
@@ -92,7 +89,7 @@ def subcommand(sub: ArgumentParser):
     sub.add_argument("--snd-order", action="store_true", default=False)
     sub.add_argument("--snd-order-prior", type=int, default=0)
     sub.add_argument("--snd-order-separate", action="store_true", default=False)
-    sub.add_argument("--dop", action="store_true", default=False)
+    sub.add_argument("--dop", type=str, help="trained dop automaton")
     sub.set_defaults(func=lambda args: main(args))
 
 

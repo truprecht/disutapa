@@ -177,7 +177,7 @@ class Dop:
         for counts in pool.imap_unordered(self.get_tree_fragments, tqdm(derivations, "extract fragments"), chunksize=128):
             dop_fragments += counts            
 
-        self.transitions = defaultdict(list)
+        self.transitions = defaultdict(set)
         idx2rule = list(into_derivation.rule2idx.keys())
         denominators = Counter()
         for fragment in dop_fragments:
@@ -188,7 +188,7 @@ class Dop:
         for fragment, c in dop_fragments.items():
             weight = log(denominators[into_derivation.idx2lhs[fragment.rule]] + prior) - log(c + prior)
             for (ps, symb, top, w) in fragment_to_transitions(fragment, idx2rule, weight):
-                self.transitions[symb].append((ps, top, w))
+                self.transitions[symb].add((ps, top, w))
         self.fallback_weight = {
             label: log(denom + prior) - log(prior) if prior else float("inf")
             for label, denom in denominators.items()
@@ -243,10 +243,10 @@ class DopTreeParser:
                         break
                 if weight is None: continue
                 self._update(newweights, top, weight+w)
-            if subderivation.rule not in self.grammar.transitions:
-                lhs = self.grammar.idx2lhs[subderivation.rule]
+            if not self.grammar.transitions[subderivation.rule]:
+                lhs = into_derivation.idx2lhs[subderivation.rule]
                 children = (
-                    (c.position, self.grammar.idx2lhs[c.rule])
+                    (c.position, into_derivation.idx2lhs[c.rule])
                     for c in subderivation.children
                     if not c is None
                 )

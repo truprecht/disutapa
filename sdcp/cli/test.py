@@ -75,6 +75,8 @@ def main(config: Namespace):
                 print("first candidate is not gold, but index", \
                     next(i for i, prediction in enumerate(trees)
                         if str(prediction) == sample.get_raw_labels("tree")))
+                print(trees)
+                print([dopgrammar.match(t) for t in trees])
     print(evaluator.summary())
     print(evaluator.breakdowns())
 

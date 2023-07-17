@@ -197,7 +197,7 @@ class Dop:
 
     def match(self, tree: Tree) -> float:
         parser = DopTreeParser(self)
-        parser.fill_chart(tree, self.derivation_factory_state)
+        parser.fill_chart(Tree.convert(tree), self.derivation_factory_state)
         return parser.chart.get((0, tree.label), float("inf"))
     
     def select(self, trees: Iterable[tuple[Tree, float]]) -> tuple[int, Tree]:

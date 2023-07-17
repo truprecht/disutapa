@@ -105,7 +105,7 @@ def test_dop():
 
 def test_parsing():
     grammar = Dop(trees, prior=0)
-    parser = DopTreeParser(grammar)
+    parser = DopTreeParser(grammar, "min")
     parser.fill_chart(trees[1], grammar.derivation_factory_state)
 
     assert set(parser.chart.keys()) == { (1, 'F (1 *)'), (1, 'S'), (0, 'S') }
@@ -114,7 +114,7 @@ def test_parsing():
     assert parser.chart[(1, 'S')] == log(8) - log(2)
 
     grammar = Dop(trees, prior=1)
-    parser = DopTreeParser(grammar)
+    parser = DopTreeParser(grammar, "min")
     parser.fill_chart(trees[0], grammar.derivation_factory_state)
 
     assert set(parser.chart.keys()) == {(0, "S"), (1, "S"), (2, "S"), (3, "S"), (3, "F (1 *)")}

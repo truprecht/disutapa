@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Iterable, Any, Callable
 from discodop.tree import Tree, ImmutableTree
 from discodop.treetransforms import binarize
-from math import log
+from math import log, exp
 from tqdm import tqdm
 from ..grammar.lcfrs import lcfrs_composition, SortedSet
 from multiprocessing import Pool
@@ -212,16 +212,26 @@ class Dop:
 @dataclass
 class DopTreeParser:
     grammar: Dop
-    chart: dict[tuple[int, ...], float] = field(default_factory=dict)
+    reduction: str = "sum"
+    chart: dict[tuple[int, ...], float] = field(default_factory=Counter)
 
-    def _update(self, key, value):
-        if self.chart.setdefault(key, value) > value:
-            self.chart[key] = value
+    def _update(self, local_chart, key, value):
+        if self.reduction == "min" and local_chart.setdefault(key, value) > value:
+            local_chart[key] = value
+        if self.reduction == "sum":
+            local_chart[key] += exp(-value)
+
+    def assimilate_local_chart(self, local_chart, node):
+        for k, v in local_chart.items():
+            if self.reduction == "sum":
+                v = -log(v)
+            self.chart[(node.position, k)] = v
 
     def fill_chart(self, tree: Tree, factory_state: Any):
         into_derivation = DerivationFactory.from_state(factory_state)
         derivation = into_derivation(tree)
         for subderivation in derivation.bottom_up():
+            newweights = Counter()
             for (bottoms, top, w) in self.grammar.transitions[subderivation.rule]:
                 weight = 0
                 for (child, childstate) in zip(subderivation.children, bottoms):
@@ -232,7 +242,7 @@ class DopTreeParser:
                         weight = None
                         break
                 if weight is None: continue
-                self._update((subderivation.position, top), weight+w)
+                self._update(newweights, top, weight+w)
             if subderivation.rule not in self.grammar.transitions:
                 lhs = self.grammar.idx2lhs[subderivation.rule]
                 children = (
@@ -242,5 +252,6 @@ class DopTreeParser:
                 )
                 weight = sum(self.chart[child] for child in children)
                 weight += self.grammar.fallback_weight.get(lhs, float("inf"))
-                self._update((subderivation.position, lhs), weight)
+                self._update(newweights, lhs, weight)
+            self.assimilate_local_chart(newweights, subderivation)
                 

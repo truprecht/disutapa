@@ -22,11 +22,6 @@ def main(config):
     if config.reranking:
         treeranker = load(open(config.reranking, "rb"))
         model.reranking = treeranker
-    if config.dop:
-        trees = (
-            Tree(sentence.get_raw_labels("tree"))
-            for sentence in corpus.train)
-        model.reranking = Dop(trees, min_occurrences=2)
     results = model.evaluate(testset, progressbar=True, oracle_scores=config.oracle_scores)
     print(results.log_header)
     print(results.log_line)
@@ -43,5 +38,4 @@ def subcommand(sub: ArgumentParser):
     sub.add_argument("--ktags", type=int, default=None)
     sub.add_argument("--step", type=float, default=None)
     sub.add_argument("--oracle-scores", action="store_true", default=False)
-    sub.add_argument("--dop", action="store_true", default=False)
     sub.set_defaults(func=lambda args: main(args))

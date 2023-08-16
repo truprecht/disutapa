@@ -204,7 +204,7 @@ class Dop:
         bestidx, besttree, bestweight = None, None, None
         for i, (tree, _) in enumerate(trees):
             weight = self.match(tree)
-            if bestweight is None or weight > bestweight:
+            if bestweight is None or weight < bestweight:
                 bestidx, besttree, bestweight = i, tree, weight
         return bestidx, besttree
 
@@ -224,7 +224,7 @@ class DopTreeParser:
     def assimilate_local_chart(self, local_chart, node):
         for k, v in local_chart.items():
             if self.reduction == "sum":
-                v = -log(v)
+                v = -log(v) if v > 0 else float("inf")
             self.chart[(node.position, k)] = v
 
     def fill_chart(self, tree: Tree, factory_state: Any):

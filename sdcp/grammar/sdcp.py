@@ -146,6 +146,7 @@ class rule:
             scomp = lcfrs_composition(scomp)
         return cls(lhs, rhs, dcp=dcp, scomp=scomp)
         
+        
     @classmethod
     def from_spine(
             cls,
@@ -160,18 +161,7 @@ class rule:
         if isinstance(scomp, str):
             scomp = lcfrs_composition(scomp)
         return cls(lhs, rhs, dcp=dcp, scomp=scomp)
-
-
-    # def normalize_order(self, lexical: int, child_spans: list[SortedSet]) -> "rule":
-    #     original_order: tuple[NtOrLeaf, ...] = (NtOrLeaf(lexical, is_leaf=True), *(NtOrLeaf(nt, is_leaf=False) for nt in self.rhs))
-    #     reordered_rhs = tuple(original_order[i] for i in self.order_and_fanout[:-1])
-    #     occs = sorted(range(len(original_order)), key=lambda x: next(i for i,v in enumerate(self.inner) if v ==x))
-    #     revoccs = {oldpos: newpos for newpos, oldpos in enumerate(occs)}
-    #     revoccs[255] = 255
-    #     comp = self.__class__(revoccs[v] for v in self.inner)
-    #     return comp, tuple(original_order[i] for i in occs)
-    #     return canon_composition, reordered_rhs
-
+    
 
     def __repr__(self):
         args = [repr(self.lhs)]

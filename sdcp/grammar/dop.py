@@ -1,12 +1,13 @@
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable, Any, Callable
-from discodop.tree import Tree, ImmutableTree
+from typing import Iterable, Any
+from discodop.tree import Tree
 from discodop.treetransforms import binarize
 from math import log, exp
 from tqdm import tqdm
-from ..grammar.lcfrs import lcfrs_composition, SortedSet
 from multiprocessing import Pool
+
+from .lcfrs import lcfrs_composition, SortedSet
 
 LcfrsRule = tuple[str, tuple[str, ...], lcfrs_composition]
 

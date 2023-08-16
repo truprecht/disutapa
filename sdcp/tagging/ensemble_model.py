@@ -16,7 +16,6 @@ from discodop.tree import ParentedTree, Tree
 
 from .data import DatasetWrapper, SentenceWrapper
 from .embeddings import TokenEmbeddingBuilder, EmbeddingPresets, PretrainedBuilder
-from ..reranking.classifier import TreeRanker
 
 
 from dataclasses import dataclass, field, fields

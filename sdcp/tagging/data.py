@@ -1,10 +1,6 @@
 from datasets import Dataset, DatasetDict  # type: ignore
 from flair.data import Sentence, Dictionary, Token  # type: ignore
 from collections import Counter
-from typing import cast, Iterable
-from math import ceil
-
-from ..grammar.derivation import Derivation
 
 class SentenceWrapper(Sentence):
     def __init__(self, dataobj: dict[str, list[int]]):
@@ -12,13 +8,6 @@ class SentenceWrapper(Sentence):
         self.__gold_label_ids = dataobj
         self.__predicted_label_ids: dict[str, list[int]] = {}
         self.__cache: dict[str, object] = {}
-
-    def get_derivation(self) -> Derivation:
-        if not "derivation" in self.__cache:
-            deriv = self.get_raw_labels("derivation")
-            st = self.get_raw_labels("supertag")
-            self.__cache["derivation"] = Derivation.from_str(deriv, st)
-        return cast(Derivation, self.__cache["derivation"])
     
     def cache(self, key, value=None):
         if not value is None:
@@ -33,13 +22,6 @@ class SentenceWrapper(Sentence):
 
     def get_raw_prediction(self, field: str):
         return self.__predicted_label_ids[field]
-
-
-def negative_slices(r: slice, total: int) -> Iterable[slice]:
-    if r.start != 0:
-        yield slice(0, r.start)
-    if r.stop != total:
-        yield slice(r.stop, total)
 
 
 class DatasetWrapper:
@@ -68,28 +50,6 @@ class DatasetWrapper:
             if count[token] == minfreq:
                 vocab.add_item(token)
         return vocab
-    
-    def get_fold_corpora(self, amount: int) -> Iterable["_FoldCorpus"]:
-        per_fold = ceil(len(self)/amount)
-        start = 0
-        for _ in range(amount):
-            devend = min(len(self), start+per_fold)
-            devrange = slice(start, devend)
-            yield _FoldCorpus(
-                DatasetRange(self, *negative_slices(devrange, len(self))),
-                DatasetRange(self, devrange)
-            )
-            start = devend
-
-
-class DatasetRange(DatasetWrapper):
-    def __init__(self, parent: DatasetWrapper, *sentenceranges):
-        self.dataset = parent.dataset
-        self.sentences = [
-            s
-            for r in sentenceranges
-            for s in parent.sentences[r]
-        ]
 
 
 class CorpusWrapper:
@@ -98,10 +58,3 @@ class CorpusWrapper:
         self.train = DatasetWrapper(corpus["train"])
         self.dev = DatasetWrapper(corpus["dev"])
         self.test = DatasetWrapper(corpus["test"])
-
-
-class _FoldCorpus:
-    def __init__(self, train, dev):
-        self.train = train
-        self.dev = dev
-        self.test = None

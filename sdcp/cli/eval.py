@@ -8,7 +8,7 @@ import torch
 from sdcp.grammar.sdcp import grammar, sdcp_clause, rule
 from sdcp.tagging.ensemble_model import ModelParameters, EnsembleModel
 from sdcp.tagging.data import CorpusWrapper
-from sdcp.reranking.dop import Dop, Tree
+from sdcp.grammar.dop import Dop, Tree
 
 
 def main(config):
@@ -33,7 +33,6 @@ def subcommand(sub: ArgumentParser):
     sub.add_argument("corpus", type=str)
     sub.add_argument("--device", type=torch.device, default=None)
     sub.add_argument("--dev", action="store_true", default=False)
-    sub.add_argument("--reranking", type=str, default=None)
     sub.add_argument("--ktrees", type=int, default=None)
     sub.add_argument("--ktags", type=int, default=None)
     sub.add_argument("--step", type=float, default=None)

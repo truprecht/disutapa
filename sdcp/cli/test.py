@@ -3,7 +3,6 @@ from sdcp.grammar.sdcp import rule, sdcp_clause, grammar
 from sdcp.grammar.parser.activeparser import ActiveParser
 from sdcp.grammar.lcfrs import lcfrs_composition, ordered_union_composition
 from sdcp.autotree import AutoTree, with_pos, fix_rotation
-from sdcp.tagging.parsing_scorer import CombinatorialParsingScorer, DummyScorer
 from sdcp.tagging.data import DatasetWrapper
 from sdcp.tagging.ensemble_model import ParserAdapter
 from discodop.eval import Evaluator, readparam
@@ -16,7 +15,7 @@ from pickle import load
 
 import torch
 from itertools import islice
-from sdcp.reranking.dop import Dop, Tree
+from sdcp.grammar.dop import Dop, Tree
 
 def guess_weights(total, hot, k):
     weights = torch.zeros((len(hot), total))

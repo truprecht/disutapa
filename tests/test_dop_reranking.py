@@ -1,4 +1,4 @@
-from sdcp.reranking.dop import *
+from sdcp.grammar.dop import *
 
 
 trees = [

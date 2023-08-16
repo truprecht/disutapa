@@ -3,7 +3,7 @@ from sdcp.tagging.data import DatasetWrapper
 from tqdm import tqdm
 
 from datasets import DatasetDict
-from sdcp.reranking.dop import Dop, Tree
+from sdcp.grammar.dop import Dop, Tree
 from pickle import dump
 
 

@@ -10,14 +10,28 @@ from .grammar.extract_head import Extractor
 from .autotree import AutoTree
 
 
+PTB_SPECIAL_TOKENS = {
+    "-RRB-": ")",
+    "-LRB-": "(",
+    "-LCB-": "{",
+    "-RCB-": "}",
+    "-LSB-": "[",
+    "-RSB-": "]",
+    # "``": '"',
+    # "''": '"',
+}
+
 class corpus_extractor:
     def __init__(self, filename_or_iterator: str | Iterable[Tuple[Tree, Iterable[str]]], headrules: str | None = None, guide="head", cmode="lcfrs", ntmode="plain", **binparams):
+        self.norm_token = lambda x: x
         if isinstance(filename_or_iterator, str):
             filetype = filename_or_iterator.split(".")[-1]
             if filetype == "xml":
                 filetype = "tiger"
             encoding = "iso-8859-1" if filetype == "export" else "utf8"
             self.trees = READERS[filetype](filename_or_iterator, encoding=encoding, punct="move", headrules=headrules)
+            if "ptb" in filename_or_iterator:
+                self.norm_token = lambda x: PTB_SPECIAL_TOKENS.get(x, x)
         else:
             self.trees = filename_or_iterator
         self.rules: dict[rule, int] = defaultdict(lambda: len(self.rules))
@@ -34,6 +48,7 @@ class corpus_extractor:
         self.guide = "head" if not headrules is None else "inorder"
         self.cmode = cmode
         self.ntmode = ntmode
+
 
     def read(self, lrange: range | None = None):
         if isinstance(self.trees, CorpusReader):
@@ -70,7 +85,7 @@ class corpus_extractor:
                         node.children = [(c if len(c) > 0 else c.label) for c in node]
                     pos = tuple(p for _, p in sorted(bintree.postags.items()))
             self.goldtrees.append(tree)
-            self.sentences.append(tuple(sent))
+            self.sentences.append(tuple(self.norm_token(tok) for tok in sent))
             self.goldpos.append(pos)
             self.goldderivs.append(deriv)
             self.goldrules.append(rules)

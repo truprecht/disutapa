@@ -15,7 +15,6 @@ from pickle import load
 
 import torch
 from itertools import islice
-from sdcp.grammar.dop import Dop, Tree
 
 def guess_weights(total, hot, k):
     weights = torch.zeros((len(hot), total))
@@ -36,10 +35,6 @@ def main(config: Namespace):
     data = DatasetWrapper(corpus["dev"])
     p = ParserAdapter(grammar([eval(str_hr) for str_hr in data.labels()]), total_limit=config.weighted)
     nrules = len(p.parser.grammar.rules)
-    idtopos = data.labels("pos")
-    snd_order_weights = CombinatorialParsingScorer(data, prior=config.snd_order_prior, separated=config.snd_order_separate) \
-        if config.snd_order else DummyScorer()
-    p.set_scoring(snd_order_weights)
     idtopos = data.labels("pos")
     datalen = len(data)
     data = enumerate(data)
@@ -87,9 +82,6 @@ def subcommand(sub: ArgumentParser):
     sub.add_argument("--k", type=int, default=1)
     sub.add_argument("--range", type=int, nargs=2, default=None)
     sub.add_argument("--seed", type=int, default=None)
-    sub.add_argument("--snd-order", action="store_true", default=False)
-    sub.add_argument("--snd-order-prior", type=int, default=0)
-    sub.add_argument("--snd-order-separate", action="store_true", default=False)
     sub.add_argument("--dop", type=str, help="trained dop automaton")
     sub.set_defaults(func=lambda args: main(args))
 

@@ -32,7 +32,7 @@ class ActiveParser:
     def add_rules(self, *rules_per_position: Iterable[tuple[int, float]]):
         assert not self.queue
         for i, rules in enumerate(rules_per_position):
-            minweight = min(w for _, w in (rules or [(0,0.0)]))
+            minweight = min(w for _, w in rules) if rules else 0.0
             for rid, weight in rules:
                 weight = weight - minweight
                 r: rule = self.grammar.rules[rid]
@@ -43,10 +43,23 @@ class ActiveParser:
                     weight
                 ))
                 self.ruleweights[(rid, i)] = weight
-        heapify(self.queue)
 
 
-    def fill_chart(self, stop_early: bool = False) -> None:        
+    def add_rules_i(self, i: int, rules: tuple[int], weights: tuple[float]):
+        for rid, weight in zip(rules, weights):
+            r: rule = self.grammar.rules[rid]
+            it = item(r.lhs, disco_span(), r.scomp, r.rhs, i)
+            self.queue.append(qelement(
+                it,
+                backtrace(rid, i, ()),
+                weight
+            ))
+            self.ruleweights[(rid, i)] = weight
+
+
+
+    def fill_chart(self, stop_early: bool = False) -> None:   
+        heapify(self.queue)     
         while self.queue:
             qi: qelement = heappop(self.queue)
             if qi.item in self.expanded:

@@ -440,20 +440,17 @@ class ParserAdapter:
         start = torch.zeros(self.parser.len, dtype=int)
         end = torch.zeros(self.parser.len, dtype=int)
         threshs = self.weights[:, 0].clone().detach().unsqueeze(1)
-        iteration = 1
         while self.parser.rootid is None:
             threshs += self.step
             end = (self.weights < threshs).sum(dim=1)
-            tags = [
-                [(self.tags[pos, tag], self.weights[pos, tag]) for tag in range(s,e) if tag >= 0]
-                for pos, (s,e) in enumerate(zip(start,end))]
-            
-            self.parser.add_rules(*tags)
+            for i, (tags, weights, s, e) in enumerate(zip(self.tags,self.weights, start, end)):
+                if s == e:
+                    continue
+                self.parser.add_rules_i(i, tags[s:e], weights[s:e])
             self.parser.fill_chart()
             start = end
             if all(s == self.total_limit for s in start):
                 break
-            iteration += 1
 
     def get_best(self):
         return self.parser.get_best()

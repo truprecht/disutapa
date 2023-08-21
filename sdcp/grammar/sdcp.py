@@ -4,7 +4,7 @@ from itertools import chain, repeat
 from discodop.tree import Tree, ImmutableTree # type: ignore
 from sortedcontainers import SortedSet # type: ignore
 
-from .lcfrs import lcfrs_composition, ordered_union_composition, NtOrLeaf
+from .lcfrs import lcfrs_composition, ordered_union_composition
     
 
 @dataclass
@@ -110,22 +110,20 @@ class sdcp_clause:
 
 @dataclass(frozen=True, init=False)
 class rule:
-    lhs: str
-    rhs: tuple[NtOrLeaf, ...]
+    lhs: int
+    rhs: tuple[int, ...]
     scomp: lcfrs_composition | ordered_union_composition
     dcp: sdcp_clause
 
-    def __init__(self, lhs, rhs: tuple[str|None, ...] = (None,), scomp = None, dcp = None):
-        irhs = tuple(
-            NtOrLeaf.nt(r) if not r is None else NtOrLeaf.leaf()
-            for r in rhs)
-        assert any(r.is_leaf() for r in irhs) and len(irhs) >= 1
+    def __init__(self, lhs: int, rhs: tuple[int, ...] = (-1,), scomp = None, dcp = None):
+        rhs = tuple((-1 if nt is None else nt) for nt in rhs)
+        assert any(r is None or r == -1 for r in rhs) and len(rhs) >= 1
         if scomp is None:
             scomp = lcfrs_composition.default(len(rhs))
         if dcp is None:
             dcp = sdcp_clause.default(len(rhs)-1)
         object.__setattr__(self, "lhs", lhs)
-        object.__setattr__(self, "rhs", irhs)
+        object.__setattr__(self, "rhs", rhs)
         object.__setattr__(self, "scomp", scomp)
         object.__setattr__(self, "dcp", dcp)
 
@@ -165,8 +163,8 @@ class rule:
 
     def __repr__(self):
         args = [repr(self.lhs)]
-        if self.rhs != (NtOrLeaf.leaf(),):
-            args.append(repr(tuple(r.payload for r in self.rhs)))
+        if self.rhs != (-1,) and self.rhs != (None,):
+            args.append(repr(tuple(r for r in self.rhs)))
         if self.scomp != lcfrs_composition.default(len(self.rhs)):
             kw = "scomp=" if len(args) < 2 else ""
             args.append(f"{repr(self.scomp)}")
@@ -179,4 +177,4 @@ class rule:
 @dataclass
 class grammar:
     rules: list[rule]
-    root: str = "ROOT"
+    root: int = 0

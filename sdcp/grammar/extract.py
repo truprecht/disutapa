@@ -1,7 +1,7 @@
 from discodop.tree import Tree   # type: ignore
 from itertools import chain
 from sortedcontainers import SortedSet   # type: ignore
-from .lcfrs import lcfrs_composition, ordered_union_composition, NtOrLeaf
+from .lcfrs import lcfrs_composition, ordered_union_composition
 from .sdcp import rule, sdcp_clause
 
 

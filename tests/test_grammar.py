@@ -12,10 +12,10 @@ example_rules = [
 def test_str_rule():
     assert [repr(r) for r in example_rules] ==  [
         "rule('L-VP')",
-        "rule('ROOT', ('VP', None, 'NP'), lcfrs_composition('0120'), sdcp_clause('(SBAR+S 2 3)', args=(1, 0)))",
+        "rule('ROOT', ('VP', -1, 'NP'), lcfrs_composition('0120'), sdcp_clause('(SBAR+S 2 3)', args=(1, 0)))",
         "rule('NP', dcp=sdcp_clause('(NP 0 1)'))",
-        "rule('VP', ('VP', None), lcfrs_composition('0,10'), sdcp_clause('(VP 0 2)', args=(1,)))",
-        "rule('VP', ('L-VP', None, 'VP|<>'), lcfrs_composition('0,12'), sdcp_clause('(VP 2 3)', args=(1, 0)))",
+        "rule('VP', ('VP', -1), lcfrs_composition('0,10'), sdcp_clause('(VP 0 2)', args=(1,)))",
+        "rule('VP', ('L-VP', -1, 'VP|<>'), lcfrs_composition('0,12'), sdcp_clause('(VP 2 3)', args=(1, 0)))",
         "rule('VP|<>')",
     ]
 

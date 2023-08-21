@@ -42,7 +42,14 @@ def test_corpus_extractor():
     assert c.goldtrees == [Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))")]
     assert c.sentences == [tuple("where the survey was carried out".split())]
     assert c.goldpos == [tuple("WRB PT NN VBD VBN RP".split())]
-    assert list(c.rules) == example_rules
+    assert list(c.rules) ==  [
+        rule(1, (-1,)),
+        rule(0, (2, -1, 3), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=lcfrs_composition("0120")),
+        rule(3, (-1,), dcp=sdcp_clause.binary_node("NP")),
+        rule(2, (2, -1), dcp=sdcp_clause.binary_node("VP", 1), scomp=lcfrs_composition("0,10")),
+        rule(2, (1, -1, 4), dcp=sdcp_clause.binary_node("VP", 2), scomp=lcfrs_composition("0,12")),
+        rule(4, (-1,)),
+    ]
     
     c = corpus_extractor([(Tree("(ROOT (S ($. 0)))"), ".".split())])
     c.read()
@@ -52,7 +59,7 @@ def test_corpus_extractor():
     assert c.sentences == [tuple(".".split())]
     assert c.goldpos == [tuple("$.".split())]
     assert list(c.rules) == [
-        rule("ROOT", dcp=sdcp_clause.binary_node("ROOT+S")),
+        rule(0, (-1,), dcp=sdcp_clause.binary_node("ROOT+S")),
     ]
 
 

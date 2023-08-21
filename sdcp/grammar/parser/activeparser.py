@@ -9,7 +9,6 @@ from ..lcfrs import disco_span
 from .item import qelement, PassiveItem, ActiveItem, backtrace, item
 from .kbestchart import KbestChart
 
-
 class ActiveParser:
     def __init__(self, grammar: grammar):
         self.grammar = grammar
@@ -57,7 +56,6 @@ class ActiveParser:
             self.ruleweights[(rid, i)] = weight
 
 
-
     def fill_chart(self, stop_early: bool = False) -> None:   
         heapify(self.queue)     
         while self.queue:
@@ -98,8 +96,8 @@ class ActiveParser:
                 continue
 
             assert isinstance(qi.item, ActiveItem)
-            self.actives.setdefault(qi.item.remaining[-1].get_nt(), []).append((qi.item, qi.bt, qi.weight))
-            for (span, pbt, pweight) in self.from_lhs.get(qi.item.remaining[-1].get_nt(), []):
+            self.actives.setdefault(qi.item.remaining[-1], []).append((qi.item, qi.bt, qi.weight))
+            for (span, pbt, pweight) in self.from_lhs.get(qi.item.remaining[-1], []):
                 if not qi.item.is_compatible(span): continue
                 newpos, newfunc = qi.item.remaining_function.partial(span, qi.item.leaves)
                 if newpos is None: continue

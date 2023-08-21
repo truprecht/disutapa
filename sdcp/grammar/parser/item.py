@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from typing import cast
-from ..lcfrs import disco_span, lcfrs_composition, NtOrLeaf, ordered_union_composition
+from ..lcfrs import disco_span, lcfrs_composition, ordered_union_composition
+import cython
+
 
 @dataclass(frozen=True)
 class backtrace:
@@ -14,7 +15,7 @@ class backtrace:
 
 @dataclass(frozen=True)
 class PassiveItem:
-    lhs: str
+    lhs: int
     leaves: disco_span
 
     def __gt__(self, other: "PassiveItem") -> bool:
@@ -24,10 +25,10 @@ class PassiveItem:
 
 @dataclass(frozen=True)
 class ActiveItem:
-    lhs: str
+    lhs: int
     leaves: disco_span
     remaining_function: lcfrs_composition | ordered_union_composition
-    remaining: tuple[NtOrLeaf, ...]
+    remaining: tuple[int, ...]
     leaf: int | None
 
     def __gt__(self, other: "ActiveItem") -> bool:
@@ -39,29 +40,24 @@ class ActiveItem:
 
 
 @dataclass(eq=False, order=False)
+@cython.cclass
 class qelement:
     item: ActiveItem | PassiveItem
     bt: backtrace
-    weight: float
+    weight: cython.float
 
-    # priority queue retrieves lowest weighted elements first
-    # with nll values, lower weights are better
     def __gt__(self, other):
         return self.weight > other.weight
-        # return (self.weight, self.item) > (other.weight,  other.item)
-
-    def tup(self):
-        return self.item, self.bt, self.weight
 
 
 def item(
-        lhs: str,
+        lhs: int,
         leaves: disco_span,
         remaining_function: lcfrs_composition | ordered_union_composition,
-        remaining_rhs: tuple[NtOrLeaf, ...],
+        remaining_rhs: tuple[int, ...],
         leaf: int | None
         ) -> ActiveItem | PassiveItem:
-    if remaining_rhs and remaining_rhs[-1].is_leaf():
+    if remaining_rhs and (remaining_rhs[-1] == -1 or remaining_rhs[-1] is None):
         leaves, remaining_function = remaining_function.partial(disco_span.singleton(leaf), leaves)
         remaining_rhs = remaining_rhs[:-1]
         leaf = None

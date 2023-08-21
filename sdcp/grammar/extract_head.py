@@ -5,7 +5,7 @@ from collections import namedtuple
 from typing import Any
 
 from ..autotree import AutoTree
-from .lcfrs import lcfrs_composition, ordered_union_composition, NtOrLeaf
+from .lcfrs import lcfrs_composition, ordered_union_composition
 from .sdcp import rule, sdcp_clause, swap_vars
 
 

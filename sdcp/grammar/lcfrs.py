@@ -84,27 +84,6 @@ class disco_span:
 
 
 @dataclass(frozen=True)
-class NtOrLeaf:
-    payload: str | None
-    
-    def get_nt(self) -> str:
-        if self.payload is None:
-            raise ValueError()
-        return self.payload
-    
-    def is_leaf(self) -> bool:
-        return self.payload is None
-    
-    @classmethod
-    def nt(cls, n: str) -> "NtOrLeaf":
-        return cls(n)
-    
-    @classmethod
-    def leaf(cls) -> "NtOrLeaf":
-        return cls(None)
-
-
-@dataclass(frozen=True)
 class ordered_union_composition:
     # implement ordered union of leaves without explicit composition function
     fanout: int = 1

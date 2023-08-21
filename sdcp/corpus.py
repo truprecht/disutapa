@@ -35,6 +35,9 @@ class corpus_extractor:
         else:
             self.trees = filename_or_iterator
         self.rules: dict[rule, int] = defaultdict(lambda: len(self.rules))
+        self.nonterminals: dict[str, int] = defaultdict(lambda: len(self.nonterminals))
+        # ensure root is mapped to integer 0
+        self.nonterminals["ROOT"]
         self.sentences: list[tuple[str, ...]] = []
         self.goldtrees: list[Tree] = []
         self.goldrules: list[tuple[rule, ...]] = []
@@ -48,6 +51,15 @@ class corpus_extractor:
         self.guide = "head" if not headrules is None else "inorder"
         self.cmode = cmode
         self.ntmode = ntmode
+
+
+    def store_rule(self, r: rule):
+        irhs = tuple(
+            -1 if nt is None or nt == -1 else self.nonterminals[nt]
+            for nt in r.rhs
+        )
+        irule = rule(self.nonterminals[r.lhs], irhs, r.scomp, r.dcp)
+        return self.rules[irule]
 
 
     def read(self, lrange: range | None = None):
@@ -66,24 +78,24 @@ class corpus_extractor:
             if self.guide == "head":
                 ht: AutoTree = AutoTree.convert(tree)
                 rules, deriv = Extractor(**self._binparams, composition=self.cmode, mark=self.ntmode)(ht)
-                rules = tuple(self.rules[gr] for gr in rules)
                 pos = tuple(p for _, p in sorted(ht.postags.items()))
             else:
                 if len(sent) == 1:
                     stree = collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True)
                     rules, pos = singleton(stree)
-                    rules = tuple(self.rules[gr] for gr in rules)
                     deriv = 0
                 else:
                     bintree: AutoTree = AutoTree.convert(binarize(
                         collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True),
                         **self._binparams))
                     rules, deriv = extract(bintree, ctype=self.cmode, ntype=self.ntmode)
-                    rules = tuple(self.rules[gr] for gr in rules)
                     for node in deriv.subtrees():
                         # node.label = rules[node.label]
                         node.children = [(c if len(c) > 0 else c.label) for c in node]
                     pos = tuple(p for _, p in sorted(bintree.postags.items()))
+            rules = tuple(
+                self.store_rule(gr) for gr in rules
+            )
             self.goldtrees.append(tree)
             self.sentences.append(tuple(self.norm_token(tok) for tok in sent))
             self.goldpos.append(pos)

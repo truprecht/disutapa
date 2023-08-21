@@ -44,8 +44,7 @@ def test_pipeline():
     t[(0, 0, 1)].type = HEAD
     t[(1, 1)].type = HEAD
     rules, _ = Extractor()(AutoTree.convert(t))
-    print(rules)
-    parse = ActiveParser(grammar(rules))
+    parse = ActiveParser(grammar(rules, "ROOT"))
     parse.init(6)
     parse.add_rules(*([(r, 0)] for r in range(6)))
     parse.fill_chart()

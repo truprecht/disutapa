@@ -62,7 +62,8 @@ def test_nonbin_extraction():
 def test_active_parser():
     parse = ActiveParser(grammar(example_rules, "ROOT"))
     parse.init(6)
-    parse.add_rules(*([(rid, 0)] for rid in range(6)))
+    for i in range(6):
+        parse.add_rules_i(i, 1, (i,), (0,))
     parse.fill_chart()
     assert parse.get_best() == [Tree("(SBAR (S (VP 3 (VP 0 5 4)) (NP 2 1)))")]
 
@@ -78,6 +79,7 @@ def test_pipeline():
     print(rules)
     parse = ActiveParser(grammar(rules, "ROOT"))
     parse.init(6)
-    parse.add_rules(*([(r, 0)] for r in range(6)))
+    for i in range(6):
+        parse.add_rules_i(i, 1, (i,), (0,))
     parse.fill_chart()
     assert parse.get_best()[0] == Tree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")

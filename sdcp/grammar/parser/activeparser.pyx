@@ -1,54 +1,84 @@
-from collections import defaultdict
-from heapq import heapify, heappush, heappop
+# cython: profile=True
+# cython: linetrace=True
+from _heapq import heapify, heappush, heappop
 from typing import Iterable
-
 
 from ..extract_head import Tree
 from ..sdcp import grammar, rule
-from ..lcfrs import disco_span
-from .item import qelement, PassiveItem, ActiveItem, backtrace, item
 from .kbestchart import KbestChart
+from .item import item, ActiveItem, PassiveItem, backtrace, disco_span
 
+cimport cython
+import numpy as np
+cimport numpy as cnp
+cnp.import_array()
+
+
+@cython.cclass
+class Qelement:
+    item: ActiveItem|PassiveItem
+    bt: backtrace
+    weight: cython.float
+
+    def __init__(self, item: ActiveItem|PassiveItem, bt: backtrace, weight: cython.float):
+        self.item=item
+        self.bt=bt
+        self.weight=weight
+
+    def __gt__(self, other: "Qelement"):
+        if not isinstance(other, Qelement):
+            return NotImplemented
+        return self.weight > other.weight
+
+
+@cython.cclass
 class ActiveParser:
+    _grammar: grammar
+    len: cython.int
+    rootid: cython.int
+    queue: list[Qelement]
+    actives: dict[int, list[tuple[ActiveItem, backtrace, float]]]
+    expanded: dict[PassiveItem, int]
+    from_lhs: dict[int, list[tuple[ActiveItem, backtrace, float]]]
+    backtraces: list[list[backtrace]]
+    items: list[PassiveItem]
+    ruleweights: dict[tuple[cython.int, cython.int], cython.float]
+    itemweights: list[cython.float]
+    kbestchart: KbestChart
+    
+    @property
+    def grammar(self) -> grammar:
+        return self._grammar
+
     def __init__(self, grammar: grammar):
-        self.grammar = grammar
+        self._grammar = grammar
 
-    def init(self, sentlen):
+    def init(self, sentlen: cython.int):
         self.len = sentlen
-        self.rootid: int | None = None
-        self.queue: list[qelement] = []
-        self.actives: dict[str, list[tuple[ActiveItem, backtrace, float]]] = {}
+        self.rootid = -1
+        self.queue = []
+        self.actives = {}
 
-        self.expanded: dict[ActiveItem|PassiveItem, int] = dict()
-        self.from_lhs: dict[str, list[tuple[disco_span, int, float]]] = defaultdict(list)
-        self.backtraces: list[list[backtrace]] = []  
-        self.items: list[PassiveItem] = []
+        self.expanded = dict()
+        self.from_lhs = {}
+        self.backtraces = []  
+        self.items = []
         
         self.ruleweights = dict()
         self.itemweights = list()
 
-
-    def add_rules(self, *rules_per_position: Iterable[tuple[int, float]]):
-        assert not self.queue
-        for i, rules in enumerate(rules_per_position):
-            minweight = min(w for _, w in rules) if rules else 0.0
-            for rid, weight in rules:
-                weight = weight - minweight
-                r: rule = self.grammar.rules[rid]
-                it = item(r.lhs, disco_span(), r.scomp, r.rhs, i)
-                self.queue.append(qelement(
-                    it,
-                    backtrace(rid, i, ()),
-                    weight
-                ))
-                self.ruleweights[(rid, i)] = weight
-
-
-    def add_rules_i(self, i: int, rules: tuple[int], weights: tuple[float]):
-        for rid, weight in zip(rules, weights):
-            r: rule = self.grammar.rules[rid]
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    def add_rules_i(self, i: cython.int, arlen: cython.int, rules: cnp.ndarray[cython.int], weights: cnp.ndarray[cython.float]):
+        idx: cython.int
+        rid: cython.int
+        weight: cython.float
+        for idx in range(arlen):
+            rid = rules[idx]
+            weight = weights[idx]
+            r: rule = self._grammar.rules[rid]
             it = item(r.lhs, disco_span(), r.scomp, r.rhs, i)
-            self.queue.append(qelement(
+            self.queue.append(Qelement(
                 it,
                 backtrace(rid, i, ()),
                 weight
@@ -56,10 +86,10 @@ class ActiveParser:
             self.ruleweights[(rid, i)] = weight
 
 
-    def fill_chart(self, stop_early: bool = False) -> None:   
+    def fill_chart(self, stop_early: bool = False) -> bool:   
         heapify(self.queue)     
         while self.queue:
-            qi: qelement = heappop(self.queue)
+            qi: Qelement = heappop(self.queue)
             if qi.item in self.expanded:
                 if isinstance(qi.item, PassiveItem):
                     self.backtraces[self.expanded[qi.item]].append(qi.bt)
@@ -73,14 +103,14 @@ class ActiveParser:
                 self.itemweights.append(qi.weight)
 
                 # check if this is the root item and stop the parsing, if early stopping is activated
-                if qi.item.lhs == self.grammar.root and qi.item.leaves == disco_span((0, self.len)):
-                    if self.rootid is None:
+                if qi.item.lhs == self._grammar.root and qi.item.leaves == disco_span((0, self.len)):
+                    if self.rootid == -1:
                         self.rootid = backtrace_id
                     if stop_early:
-                        return
+                        return True
 
                 qi.bt = backtrace_id
-                self.from_lhs[qi.item.lhs].append((qi.item.leaves, qi.bt, qi.weight))
+                self.from_lhs.setdefault(qi.item.lhs, []).append((qi.item.leaves, qi.bt, qi.weight))
                 
                 for active, abt, _weight in self.actives.get(qi.item.lhs, []):
                     if not active.is_compatible(qi.item.leaves): continue
@@ -88,7 +118,7 @@ class ActiveParser:
                     if newpos is None: continue
                     newitem = item(active.lhs, newpos, newcomp, active.remaining[:-1], active.leaf)
                     if newitem.leaves is None: continue
-                    heappush(self.queue, qelement(
+                    heappush(self.queue, Qelement(
                         newitem,
                         backtrace(abt.rid, abt.leaf, (backtrace_id, *abt.children)),
                         qi.weight+_weight,
@@ -103,21 +133,22 @@ class ActiveParser:
                 if newpos is None: continue
                 newitem = item(qi.item.lhs, newpos, newfunc, qi.item.remaining[:-1], qi.item.leaf)
                 if newitem.leaves is None: continue
-                heappush(self.queue, qelement(
+                heappush(self.queue, Qelement(
                     newitem,
                     backtrace(qi.bt.rid, qi.bt.leaf, (pbt, *qi.bt.children)),
                     qi.weight+pweight
                 ))
+        return self.rootid != -1
 
     def get_best_iter(self):
-        if self.rootid is None:
+        if self.rootid == -1:
             yield [Tree("NOPARSE", list(range(self.len)))], 0.0
             return
       
         self.kbestchart = KbestChart(
             self.backtraces,
             self.ruleweights,
-            self.grammar.rules,
+            self._grammar.rules,
             self.itemweights,
             self.rootid
         )
@@ -131,7 +162,7 @@ class ActiveParser:
     def get_best_derivation(self, item=None):
         if item is None:
             item = self.rootid
-            if self.rootid is None:
+            if self.rootid == -1:
                 return None, None
         bt: backtrace = self.backtraces[item][0]
         return Tree((bt.rid, bt.leaf), [self.get_best_derivation(i) for i in bt.children])

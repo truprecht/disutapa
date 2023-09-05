@@ -433,21 +433,24 @@ class ParserAdapter:
 
     def init(self, length, weights, tags):
         self.parser.init(length)
-        self.weights = weights[:self.parser.len]
-        self.tags = tags[:self.parser.len]
+        self.weights = weights[:length]
+        self.tags = tags[:length]
+        self.length = length
 
     def fill_chart(self):
-        start = torch.zeros(self.parser.len, dtype=int)
-        end = torch.zeros(self.parser.len, dtype=int)
-        threshs = self.weights[:, 0].clone().detach().unsqueeze(1)
-        while self.parser.rootid is None:
+        start = torch.zeros(self.length, dtype=int)
+        end = torch.zeros(self.length, dtype=int)
+        threshs = self.weights[:, 0].clone().detach().unsqueeze(1).numpy()
+        weights = self.weights.numpy()
+        found_root_node = False
+        while not found_root_node:
             threshs += self.step
-            end = (self.weights < threshs).sum(dim=1)
-            for i, (tags, weights, s, e) in enumerate(zip(self.tags,self.weights, start, end)):
+            end = (weights < threshs).sum(axis=1)
+            for i, (ts, ws, s, e) in enumerate(zip(self.tags, weights, start, end)):
                 if s == e:
                     continue
-                self.parser.add_rules_i(i, tags[s:e], weights[s:e])
-            self.parser.fill_chart()
+                self.parser.add_rules_i(i, (e-s).item(), ts[s:e], ws[s:e])
+            found_root_node = self.parser.fill_chart()
             start = end
             if all(s == self.total_limit for s in start):
                 break
@@ -457,9 +460,6 @@ class ParserAdapter:
     
     def get_best_iter(self):
         return self.parser.get_best_iter()
-    
-    def set_scoring(self, *args):
-        self.parser.set_scoring(*args)
 
 
 # TODO: move into TreeRanker

@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from ..lcfrs import disco_span, lcfrs_composition, ordered_union_composition
-import cython
 
 
 @dataclass(frozen=True)
@@ -9,18 +8,15 @@ class backtrace:
     leaf: int
     children: tuple[int, ...]
 
-    def as_tuple(self):
-        return self.rid, self.children
-
 
 @dataclass(frozen=True)
 class PassiveItem:
     lhs: int
     leaves: disco_span
 
-    def __gt__(self, other: "PassiveItem") -> bool:
-        if isinstance(other, ActiveItem): return False
-        return other.leaves > self.leaves
+    # def __gt__(self, other: "PassiveItem") -> bool:
+    #     if isinstance(other, ActiveItem): return False
+    #     return other.leaves > self.leaves
 
 
 @dataclass(frozen=True)
@@ -31,20 +27,19 @@ class ActiveItem:
     remaining: tuple[int, ...]
     leaf: int | None
 
-    def __gt__(self, other: "ActiveItem") -> bool:
-        if isinstance(other, PassiveItem): return True
-        return (other.leaves, len(self.remaining)) > (self.leaves, len(other.remaining))
+    # def __gt__(self, other: "ActiveItem") -> bool:
+    #     if isinstance(other, PassiveItem): return True
+    #     return (other.leaves, len(self.remaining)) > (self.leaves, len(other.remaining))
     
     def is_compatible(self, span: disco_span) -> bool:
         return (not self.leaves or self.leaves > span) and (self.leaf is None or span > self.leaf)
 
 
 @dataclass(eq=False, order=False)
-@cython.cclass
 class qelement:
     item: ActiveItem | PassiveItem
     bt: backtrace
-    weight: cython.float
+    weight: float
 
     def __gt__(self, other):
         return self.weight > other.weight

@@ -5,23 +5,15 @@ import cython
 
 from ..lcfrs import lcfrs_composition, ordered_union_composition
 from .span cimport Discospan
-from .span import singleton
-
-@dataclass(frozen=True)
-class backtrace:
-    rid: int
-    leaf: int
-    children: tuple[int, ...]
-
 
 @cython.cclass
-class ParseItem:
-    lhs = cython.declare(cython.int, visibility='public')
-    leaves = cython.declare(Discospan, visibility='public')
-    remaining_function: lcfrs_composition | ordered_union_composition
-    remaining: cython.declare(tuple[int, ...], visibility='public')
-    leaf: cython.int
+class backtrace:
+    def __init__(self, rid: cython.int, leaf: cython.int, children: tuple[cython.int, ...]):
+        self.rid = rid
+        self.leaf = leaf
+        self.children = children
 
+cdef class ParseItem:
     def __init__(self, lhs: cython.int, leaves: Discospan, remaining_function: lcfrs_composition | ordered_union_composition, remaining: tuple[int, ...], leaf: cython.int):
         self.lhs = lhs
         self.leaves = leaves
@@ -29,7 +21,7 @@ class ParseItem:
         self.remaining = remaining
         self.leaf = leaf
 
-    def is_passive(self) -> bool:
+    cdef cython.bint is_passive(self) noexcept:
         return not self.remaining
 
     def complete(self, other_span: Discospan) -> ParseItem:
@@ -43,7 +35,7 @@ class ParseItem:
             return None
         return item(self.lhs, newpos, newcomp, self.remaining[:-1], self.leaf)
 
-    def next_nt(self) -> int:
+    cdef cython.int next_nt(self) noexcept:
         return self.remaining[-1]
 
     def __repr__(self) -> str:
@@ -56,6 +48,8 @@ class ParseItem:
         return hash((self.lhs, self.leaf, self.leaves, self.remaining_function, self.remaining))
 
 
+@cython.ccall
+@cython.exceptval(check=False)
 def item(
         lhs: cython.int,
         leaves: Discospan,
@@ -63,14 +57,14 @@ def item(
         remaining_rhs: tuple[int, ...],
         leaf: cython.int
         ) -> ParseItem:
-    if remaining_rhs and (remaining_rhs[-1] == -1 or remaining_rhs[-1] is None):
-        leaves, remaining_function = remaining_function.partial(singleton(leaf), leaves)
+    if remaining_rhs and remaining_rhs[-1] == -1:
+        leaves, remaining_function = remaining_function.partial(Discospan.singleton(leaf), leaves)
         if leaves is None:
             return None
         remaining_rhs = remaining_rhs[:-1]
         leaf = -1
     if not remaining_rhs:
-        leaves = remaining_function.finalize(leaves) # if remaining_function else Discospan()
+        leaves = remaining_function.finalize(leaves)
     if leaves is None:
         return None
     assert leaves or leaf != -1, str(leaves)

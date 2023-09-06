@@ -6,3 +6,5 @@ notebooks
 *.c
 *.so
 *.o
+*.html
+*.cpp

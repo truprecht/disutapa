@@ -5,7 +5,8 @@ from _heapq import heapify, heappush, heappop
 from ..extract_head import Tree
 from ..sdcp import grammar, rule
 from .kbestchart import KbestChart
-from .item import item, ParseItem, backtrace
+from .item cimport ParseItem, backtrace
+from .item import item, ParseItem
 from .span import Discospan
 
 cimport cython
@@ -24,9 +25,7 @@ class Qelement:
         self.bt=bt
         self.weight=weight
 
-    def __gt__(self, other: "Qelement"):
-        if not isinstance(other, Qelement):
-            return NotImplemented
+    def __gt__(self, other: Qelement):
         return self.weight > other.weight
 
 
@@ -77,7 +76,7 @@ class ActiveParser:
             rid = rules[idx]
             weight = weights[idx]
             r: rule = self._grammar.rules[rid]
-            it = item(r.lhs, Discospan(), r.scomp, r.rhs, i)
+            it = item(r.lhs, Discospan.empty(), r.scomp, r.rhs, i)
             self.queue.append(Qelement(
                 it,
                 backtrace(rid, i, ()),
@@ -88,6 +87,9 @@ class ActiveParser:
 
     def fill_chart(self, stop_early: bool = False) -> bool:
         qi: Qelement
+        backtrace_id: cython.int
+        rootspan: Discospan = Discospan((0, self.len))
+        rootnt: cython.int = self._grammar.root
         heapify(self.queue)     
         while self.queue:
             qi = heappop(self.queue)
@@ -104,14 +106,13 @@ class ActiveParser:
                 self.itemweights.append(qi.weight)
 
                 # check if this is the root item and stop the parsing, if early stopping is activated
-                if qi.item.lhs == self._grammar.root and qi.item.leaves == Discospan((0, self.len)):
+                if qi.item.lhs == rootnt and qi.item.leaves == rootspan:
                     if self.rootid == -1:
                         self.rootid = backtrace_id
                     if stop_early:
                         return True
 
-                qi.bt = backtrace_id
-                self.from_lhs.setdefault(qi.item.lhs, []).append((qi.item.leaves, qi.bt, qi.weight))
+                self.from_lhs.setdefault(qi.item.lhs, []).append((qi.item.leaves, backtrace_id, qi.weight))
                 
                 for active, abt, _weight in self.actives.get(qi.item.lhs, []):
                     newitem = active.complete(qi.item.leaves)

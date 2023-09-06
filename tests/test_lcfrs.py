@@ -1,5 +1,5 @@
 from sdcp.grammar.lcfrs import fanout, lcfrs_composition, ordered_union_composition
-from sdcp.grammar.parser.span import Discospan, singleton
+from sdcp.grammar.parser.span import Discospan
 
 def test_fanout():
     assert fanout([1]) == 1
@@ -9,11 +9,11 @@ def test_fanout():
     assert fanout([0,4,5,6,9]) == 3
 
 def test_spans():
-    sp1 = Discospan((1,2), (3,4))
-    sp2 = Discospan((2,3))
-    sp3 = singleton(2)
-    sp4 = Discospan((2,3), (4,8))
-    sp5 = Discospan((1,2), (3,6))
+    sp1 = Discospan.from_tuples((1,2), (3,4))
+    sp2 = Discospan.from_tuples((2,3))
+    sp3 = Discospan.singleton(2)
+    sp4 = Discospan.from_tuples((2,3), (4,8))
+    sp5 = Discospan.from_tuples((1,2), (3,6))
     
     assert len(sp1) == 2 and len(sp2) == 1
     
@@ -50,16 +50,16 @@ def test_composition():
     assert repr(c1) == "lcfrs_composition('010')" and eval(repr(c1)) == c1
     assert repr(c3) == "lcfrs_composition('01,0')" and eval(repr(c3)) == c3
 
-    sp1 = Discospan((1,2), (3,4))
-    sp2 = Discospan((2,3))
+    sp1 = Discospan.from_tuples((1,2), (3,4))
+    sp2 = Discospan.from_tuples((2,3))
 
     assert c1.partial(sp1, sp2) == (Discospan((1,4)), lcfrs_composition('0'))
     assert c4.partial(sp1, sp2) == (None, None)
     assert c5.partial(sp1, sp2) == (Discospan((1,4)), lcfrs_composition('01,2'))
 
-    assert lcfrs_composition("010").partial(Discospan((0, 13), (15,16)), Discospan((14, 20))) == (None, None)
-    assert lcfrs_composition("01").partial(Discospan((0, 13), (15,16)), Discospan((14, 20))) == (None, None)
-    assert lcfrs_composition("012").partial(Discospan((0, 13), (15,16)),Discospan((13, 14))) == (None, None)
+    assert lcfrs_composition("010").partial(Discospan.from_tuples((0, 13), (15,16)), Discospan((14, 20))) == (None, None)
+    assert lcfrs_composition("01").partial(Discospan.from_tuples((0, 13), (15,16)), Discospan((14, 20))) == (None, None)
+    assert lcfrs_composition("012").partial(Discospan.from_tuples((0, 13), (15,16)),Discospan((13, 14))) == (None, None)
 
     ps = list(range(6))
     ps0 = [0,4,5]
@@ -81,7 +81,7 @@ def test_union_composition():
     assert repr(c1) == "ordered_union_composition(fanout=1)" and eval(repr(c1)) == c1
     assert repr(c3) == "ordered_union_composition(fanout=2)" and eval(repr(c3)) == c3
 
-    sp1 = Discospan((1,2), (3,4))
+    sp1 = Discospan.from_tuples((1,2), (3,4))
     sp2 = Discospan((2,3))
 
     assert c1.partial(sp1, sp2) == (Discospan((1,4)), ordered_union_composition())

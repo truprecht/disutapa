@@ -92,13 +92,14 @@ class lcfrs_composition:
             return x, self
         xs = [iter(x), iter(accumulator)]
         fs = [len(x), len(accumulator)]
-        total: list[tuple[int, int]] = []
+        total: list[int] = []
         current_l, current_r = None, None
         remainder = []
         for var in chain(self.inner, (255,)):
             if not var in (self.arity, self.arity-1):
                 if not current_l is None:
-                    total.append((current_l, current_r))
+                    total.append(current_l)
+                    total.append(current_r)
                     current_r = current_l = None
                 remainder.append(var)
                 continue
@@ -111,7 +112,7 @@ class lcfrs_composition:
             fs[var] -= 1
             if current_l is None:
                 current_l, current_r = next(xs[var])
-                if total and total[-1][1] >= current_l:
+                if total and total[-1] >= current_l:
                     return None, None
             else:
                 l,r = next(xs[var])
@@ -120,7 +121,7 @@ class lcfrs_composition:
                 else:
                     return None, None
         if any(f!=0 for f in fs): return None, None
-        return Discospan(*total), lcfrs_composition(remainder[:-1])
+        return Discospan(tuple(total)), lcfrs_composition(remainder[:-1])
 
 
     def __str__(self) -> str:

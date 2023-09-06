@@ -1,4 +1,4 @@
-from sdcp.grammar.sdcp import rule, grammar, lcfrs_composition, sdcp_clause
+from sdcp.grammar.sdcp import rule, grammar, lcfrs_composition, sdcp_clause, integerize_rules
 from sdcp.grammar.extract_head import Extractor
 from sdcp.grammar.parser.activeparser import ActiveParser
 from sdcp.corpus import corpus_extractor
@@ -15,8 +15,10 @@ hrules = [
     rule("arg(V)"),
 ]
 
+ihrules = list(integerize_rules(hrules))
+
 def test_active_parser():
-    parse = ActiveParser(grammar(hrules, "ROOT"))
+    parse = ActiveParser(grammar(ihrules, 0))
     parse.init(6)
     for i in range(6):
         parse.add_rules_i(i, 1, (i,), (0,))
@@ -32,7 +34,7 @@ def rule_weight_vector(totallen: int, hot: int):
 
 
 def test_weighted_active_parser():
-    parse = ActiveParser(grammar(hrules, "ROOT"))
+    parse = ActiveParser(grammar(ihrules, 0))
     parse.init(6)
     for position in range(6):
         parse.add_rules_i(position, 6, *rule_weight_vector(6, position))
@@ -47,7 +49,7 @@ def test_pipeline():
     t[(0, 0, 1)].type = HEAD
     t[(1, 1)].type = HEAD
     rules, _ = Extractor()(AutoTree.convert(t))
-    parse = ActiveParser(grammar(rules, "ROOT"))
+    parse = ActiveParser(grammar(list(integerize_rules(rules)), 0))
     parse.init(6)
     for r in range(6):
         parse.add_rules_i(r, 1, (r,), (0,))

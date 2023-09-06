@@ -1,26 +1,25 @@
 # cython: profile=True
 # cython: linetrace=True
 from _heapq import heapify, heappush, heappop
-from typing import Iterable
 
 from ..extract_head import Tree
 from ..sdcp import grammar, rule
 from .kbestchart import KbestChart
-from .item import item, ActiveItem, PassiveItem, backtrace, disco_span
+from .item import item, ParseItem, backtrace
+from .span import Discospan
 
 cimport cython
-import numpy as np
 cimport numpy as cnp
 cnp.import_array()
 
 
 @cython.cclass
 class Qelement:
-    item: ActiveItem|PassiveItem
+    item: ParseItem
     bt: backtrace
     weight: cython.float
 
-    def __init__(self, item: ActiveItem|PassiveItem, bt: backtrace, weight: cython.float):
+    def __init__(self, item: ParseItem, bt: backtrace, weight: cython.float):
         self.item=item
         self.bt=bt
         self.weight=weight
@@ -37,11 +36,11 @@ class ActiveParser:
     len: cython.int
     rootid: cython.int
     queue: list[Qelement]
-    actives: dict[int, list[tuple[ActiveItem, backtrace, float]]]
-    expanded: dict[PassiveItem, int]
-    from_lhs: dict[int, list[tuple[ActiveItem, backtrace, float]]]
+    actives: dict[int, list[tuple[ParseItem, backtrace, float]]]
+    expanded: dict[ParseItem, int]
+    from_lhs: dict[int, list[tuple[ParseItem, backtrace, float]]]
     backtraces: list[list[backtrace]]
-    items: list[PassiveItem]
+    items: list[ParseItem]
     ruleweights: dict[tuple[cython.int, cython.int], cython.float]
     itemweights: list[cython.float]
     kbestchart: KbestChart
@@ -72,12 +71,13 @@ class ActiveParser:
     def add_rules_i(self, i: cython.int, arlen: cython.int, rules: cnp.ndarray[cython.int], weights: cnp.ndarray[cython.float]):
         idx: cython.int
         rid: cython.int
+        it: ParseItem
         weight: cython.float
         for idx in range(arlen):
             rid = rules[idx]
             weight = weights[idx]
             r: rule = self._grammar.rules[rid]
-            it = item(r.lhs, disco_span(), r.scomp, r.rhs, i)
+            it = item(r.lhs, Discospan(), r.scomp, r.rhs, i)
             self.queue.append(Qelement(
                 it,
                 backtrace(rid, i, ()),
@@ -86,24 +86,25 @@ class ActiveParser:
             self.ruleweights[(rid, i)] = weight
 
 
-    def fill_chart(self, stop_early: bool = False) -> bool:   
+    def fill_chart(self, stop_early: bool = False) -> bool:
+        qi: Qelement
         heapify(self.queue)     
         while self.queue:
-            qi: Qelement = heappop(self.queue)
+            qi = heappop(self.queue)
             if qi.item in self.expanded:
-                if isinstance(qi.item, PassiveItem):
+                if qi.item.is_passive():
                     self.backtraces[self.expanded[qi.item]].append(qi.bt)
                 continue
             self.expanded[qi.item] = len(self.backtraces)
 
-            if isinstance(qi.item, PassiveItem):
+            if qi.item.is_passive():
                 backtrace_id = len(self.backtraces)
                 self.backtraces.append([qi.bt])
                 self.items.append(qi.item)
                 self.itemweights.append(qi.weight)
 
                 # check if this is the root item and stop the parsing, if early stopping is activated
-                if qi.item.lhs == self._grammar.root and qi.item.leaves == disco_span((0, self.len)):
+                if qi.item.lhs == self._grammar.root and qi.item.leaves == Discospan((0, self.len)):
                     if self.rootid == -1:
                         self.rootid = backtrace_id
                     if stop_early:
@@ -113,11 +114,8 @@ class ActiveParser:
                 self.from_lhs.setdefault(qi.item.lhs, []).append((qi.item.leaves, qi.bt, qi.weight))
                 
                 for active, abt, _weight in self.actives.get(qi.item.lhs, []):
-                    if not active.is_compatible(qi.item.leaves): continue
-                    newpos, newcomp = active.remaining_function.partial(qi.item.leaves, active.leaves)
-                    if newpos is None: continue
-                    newitem = item(active.lhs, newpos, newcomp, active.remaining[:-1], active.leaf)
-                    if newitem.leaves is None: continue
+                    newitem = active.complete(qi.item.leaves)
+                    if newitem is None or newitem.leaves is None: continue
                     heappush(self.queue, Qelement(
                         newitem,
                         backtrace(abt.rid, abt.leaf, (backtrace_id, *abt.children)),
@@ -125,14 +123,11 @@ class ActiveParser:
                     ))
                 continue
 
-            assert isinstance(qi.item, ActiveItem)
-            self.actives.setdefault(qi.item.remaining[-1], []).append((qi.item, qi.bt, qi.weight))
-            for (span, pbt, pweight) in self.from_lhs.get(qi.item.remaining[-1], []):
-                if not qi.item.is_compatible(span): continue
-                newpos, newfunc = qi.item.remaining_function.partial(span, qi.item.leaves)
-                if newpos is None: continue
-                newitem = item(qi.item.lhs, newpos, newfunc, qi.item.remaining[:-1], qi.item.leaf)
-                if newitem.leaves is None: continue
+            assert not qi.item.is_passive()
+            self.actives.setdefault(qi.item.next_nt(), []).append((qi.item, qi.bt, qi.weight))
+            for (span, pbt, pweight) in self.from_lhs.get(qi.item.next_nt(), []):
+                newitem = qi.item.complete(span)
+                if newitem is None or newitem.leaves is None: continue
                 heappush(self.queue, Qelement(
                     newitem,
                     backtrace(qi.bt.rid, qi.bt.leaf, (pbt, *qi.bt.children)),

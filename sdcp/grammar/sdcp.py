@@ -117,7 +117,7 @@ class rule:
 
     def __init__(self, lhs: int, rhs: tuple[int, ...] = (-1,), scomp = None, dcp = None):
         rhs = tuple((-1 if nt is None else nt) for nt in rhs)
-        assert any(r is None or r == -1 for r in rhs) and len(rhs) >= 1
+        assert any(r == -1 for r in rhs) and len(rhs) >= 1
         if scomp is None:
             scomp = lcfrs_composition.default(len(rhs))
         if dcp is None:
@@ -173,6 +173,12 @@ class rule:
             args.append(f"{kw}{repr(self.dcp)}")
         return f"{self.__class__.__name__}({', '.join(args)})"
 
+
+def integerize_rules(rules):
+    rtoi = dict(ROOT=0)
+    i = lambda n: rtoi.setdefault(n, len(rtoi))
+    for r in rules:
+        yield rule(i(r.lhs), tuple(-1 if n == -1 else i(n) for n in r.rhs), r.scomp, r.dcp)
 
 @dataclass
 class grammar:

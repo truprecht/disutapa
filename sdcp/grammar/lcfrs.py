@@ -3,84 +3,10 @@ from typing import Iterable, Union, cast
 from itertools import chain
 from sortedcontainers import SortedSet  # type: ignore
 
+from .parser.span import Discospan
+
 def fanout(leaves: SortedSet[int]) -> int:
     return 1+sum(1 for x,y in zip(leaves[:-1], leaves[1:]) if x+1 != y)
-
-
-class spanzip:
-    def __init__(self, xs: tuple[tuple[int, int], ...], ys: tuple[tuple[int, int], ...]):
-        self.xi, self.yi = 0, 0
-        self.xs, self.ys = xs, ys
-
-    def __iter__(self):
-        return self
-
-    def __next__(self) -> tuple[int, int]:
-        if self.yi >= len(self.ys) and self.xi >= len(self.xs):
-            raise StopIteration()
-        if not self.yi < len(self.ys) or self.xi < len(self.xs) and (self.xs[self.xi]) < self.ys[self.yi]:
-            x = self.xs[self.xi]
-            self.xi += 1
-            return x
-        else:
-            y = self.ys[self.yi]
-            self.yi += 1
-            return y
-    
-    def finished(self):
-        return self.xi == len(self.xs) and self.yi == len(self.ys)
-
-
-@dataclass(init=False, frozen=True)
-class disco_span:
-    spans: tuple[tuple[int, int], ...]
-
-    def __init__(self, *spans: tuple[int, int]):
-        self.__dict__["spans"] = spans
-
-    def __getitem__(self, idx: int) -> tuple[int, int]:
-        return self.spans[idx]
-
-    def __iter__(self):
-        return iter(self.spans)
-    
-    def __bool__(self):
-        return bool(self.spans)
-    
-    def __len__(self):
-        return len(self.spans)
-    
-    @classmethod
-    def singleton(cls, idx: int) -> "disco_span":
-        return cls((idx, idx+1))
-    
-    def exclusive_union(self, other: "disco_span") -> Union["disco_span", None]:
-        spans: list[tuple[int, int]] = []
-        spanit = spanzip(self.spans, other.spans)
-        current_l, current_r = next(spanit)
-        for l, r in spanit:
-            if current_r == l:
-                current_r = r
-            elif current_r > l:
-                return None
-            else:
-                spans.append((current_l, current_r))
-                current_r, current_l = r, l
-        spans.append((current_l, current_r))
-        return self.__class__(*spans)
-    
-    def spanlen(self) -> int:
-        return sum(r-l for l,r in self)
-    
-    def __contains__(self, position: int) -> bool:
-        return any(l <= position < r for l,r in self)
-
-    def __gt__(self, other: Union[int, tuple[int, int], "disco_span"]) -> bool:
-        if isinstance(other, int):
-            return self.spans[0][0] > other and not other in self
-        if isinstance(other, tuple):
-            return self.spans[0][0] > other[0]
-        return self.spans > other.spans
 
 
 @dataclass(frozen=True)
@@ -100,14 +26,14 @@ class ordered_union_composition:
         order = [succs[p] for p in sorted(succs.keys())]
         return cls(fanout(positions)), order
         
-    def partial(self, x: disco_span, y: disco_span) -> tuple[disco_span | None, Union["ordered_union_composition", None]]:
+    def partial(self, x: Discospan, y: Discospan) -> tuple[Discospan | None, Union["ordered_union_composition", None]]:
         if not y:
             return x, self
         if not (spans := x.exclusive_union(y)) is None:
             return spans, self
         return None, None
 
-    def finalize(self, span: disco_span):
+    def finalize(self, span: Discospan):
         return span if len(span) == self.fanout else None
 
 
@@ -161,7 +87,7 @@ class lcfrs_composition:
         return cls(vars), revorder.keys()
     
 
-    def partial(self, x: disco_span, accumulator: disco_span) -> tuple[disco_span, "lcfrs_composition"] | tuple[None, None]:
+    def partial(self, x: Discospan, accumulator: Discospan) -> tuple[Discospan, "lcfrs_composition"] | tuple[None, None]:
         if not accumulator:
             return x, self
         xs = [iter(x), iter(accumulator)]
@@ -194,7 +120,7 @@ class lcfrs_composition:
                 else:
                     return None, None
         if any(f!=0 for f in fs): return None, None
-        return disco_span(*total), lcfrs_composition(remainder[:-1])
+        return Discospan(*total), lcfrs_composition(remainder[:-1])
 
 
     def __str__(self) -> str:
@@ -209,7 +135,7 @@ class lcfrs_composition:
 
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({str(self)})"
+        return "lcfrs_composition(" + str(self) + ")"
     
-    def finalize(self, span: disco_span) -> disco_span:
+    def finalize(self, span: Discospan) -> Discospan:
         return span

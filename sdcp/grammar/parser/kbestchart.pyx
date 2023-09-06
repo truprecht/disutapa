@@ -1,8 +1,9 @@
+# cython: profile=True
+# cython: linetrace=True
 from dataclasses import dataclass
 from discodop.tree import Tree
 from heapq import heapify, heappush, heappop
 from typing import Iterable
-
 
 from .item import backtrace
 from ..sdcp import rule
@@ -27,7 +28,7 @@ def successor_indices(idxs: tuple[int, ...]) -> Iterable[tuple[int, ...]]:
 
 
 class KbestChart:
-    def __init__(self, chart: list[list[backtrace]], rweights: dict[tuple[int, int], float], rules: list[rule], iweights: dict[int, float], rootid: int):
+    def __init__(self, chart: list[list[backtrace]], rweights: dict[tuple[int, int], float], rules: list[rule], iweights: list[float], rootid: int):
         self.rootid = rootid
         self.chart = chart
         self.rweights = rweights

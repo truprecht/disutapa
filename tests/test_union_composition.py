@@ -6,7 +6,7 @@ from sdcp.grammar.extract_head import Extractor, SortedSet, ordered_union_compos
 from sdcp.autotree import AutoTree, Tree, HEAD
 
 from sortedcontainers import SortedSet # type: ignore
-
+from sdcp.grammar.sdcp import integerize_rules
 
 example_rules = [
     rule("L-VP"),
@@ -60,7 +60,7 @@ def test_nonbin_extraction():
     ]
 
 def test_active_parser():
-    parse = ActiveParser(grammar(example_rules, "ROOT"))
+    parse = ActiveParser(grammar(list(integerize_rules(example_rules)), 0))
     parse.init(6)
     for i in range(6):
         parse.add_rules_i(i, 1, (i,), (0,))
@@ -77,7 +77,7 @@ def test_pipeline():
     e = Extractor(composition="dcp")
     rules, _ = e(AutoTree.convert(t))
     print(rules)
-    parse = ActiveParser(grammar(rules, "ROOT"))
+    parse = ActiveParser(grammar(list(integerize_rules(rules)), 0))
     parse.init(6)
     for i in range(6):
         parse.add_rules_i(i, 1, (i,), (0,))

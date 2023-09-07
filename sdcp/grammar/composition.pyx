@@ -1,19 +1,15 @@
 # cython: profile=True
 # cython: linetrace=True
 from dataclasses import dataclass
-from typing import Iterable, Union, cast
-from itertools import chain
+from typing import Iterable
 from sortedcontainers import SortedSet  # type: ignore
-
-from .parser.span import Discospan
 import cython
 
 def fanout(leaves: SortedSet[int]) -> int:
     return 1+sum(1 for x,y in zip(leaves[:-1], leaves[1:]) if x+1 != y)
 
 @dataclass(frozen=True)
-@cython.cclass
-class Composition:
+cdef class Composition:
     @classmethod
     def union(cls, fanout: cython.int = 1):
         return cls(fanout, 0, bytes())
@@ -40,31 +36,32 @@ class Composition:
             compstr = "[" + compstr + "]"
         return "Composition.lcfrs(" + compstr + ")"
 
-    def view(self, arg: cython.int = -1) -> CompositionView:
+    cpdef CompositionView view(self, cython.int arg = -1) noexcept:
         return CompositionView(self, arg)
 
 
 @dataclass(init=False, frozen=True)
-@cython.cclass
-class CompositionView(Composition):
+cdef class CompositionView(Composition):
     def __init__(self, c: Composition, na: cython.int = -1):
-        super().__init__(c.fanout, c.arity, c.variables)
+        self.fanout = c.fanout
+        self.arity = c.arity
+        self.variables = c.variables
         self.next_arg = na if na != -1 else c.arity-1
 
-    def next(self) -> CompositionView:
+    cdef CompositionView next(self) noexcept:
         if not self.variables:
             return self
         return CompositionView(self, self.next_arg-1)
 
-    def partial(self, arg: Discospan, acc: Discospan) -> Discospan | None:
-        total: list[int] = []
+    cpdef Discospan partial(self, arg: Discospan, acc: Discospan) noexcept:
+        total: list[cython.int] = []
         vars_len: cython.int = len(self.variables)
+        arg_idx: cython.int = 0
+        acc_idx: cython.int = 0
         arg_len: cython.int = len(arg)
         acc_len: cython.int = len(acc)
-        cl: cython.int = -1
-        cr: cython.int = -1
-        l: cython.int = -1
-        r: cython.int = -1
+        current: tuple[cython.int, cython.int] = (-1, -1)
+        lr: tuple[cython.int, cython.int] = (-1, -1)
         last_var: cython.int = -1
         vidx: cython.int
         cvar: cython.int
@@ -75,7 +72,6 @@ class CompositionView(Composition):
         if self.next_arg < 0:
             return None
         
-        arg_iter, acc_iter = iter(arg), iter(acc)
         for vidx in range(vars_len):
             cvar = self.variables[vidx]
             if cvar != 255 and last_var != 255 and last_var > self.next_arg and cvar > self.next_arg:
@@ -83,40 +79,40 @@ class CompositionView(Composition):
             last_var = cvar
 
             if not cvar >= self.next_arg or cvar == 255:
-                if not cl == -1:
-                    total.append(cl)
-                    total.append(cr)
-                    cl = cr = -1
+                if not current[0] == -1:
+                    total.append(current[0])
+                    total.append(current[1])
+                    current = (-1, -1)
                 continue            
 
-            if cvar > self.next_arg and acc_len == 0 or \
-                    cvar == self.next_arg and arg_len == 0:
+            if cvar > self.next_arg and acc_len == acc_idx or \
+                    cvar == self.next_arg and arg_len == arg_idx:
                 return None
             if cvar > self.next_arg:
-                l, r = next(acc_iter)
-                acc_len -= 1
+                lr = acc[acc_idx]
+                acc_idx += 1
             else:
-                l, r = next(arg_iter)
-                arg_len -= 1
+                lr = arg[arg_idx]
+                arg_idx += 1
             
-            if cl == cr == -1:
-                cl, cr = l, r
+            if current[0] == -1:
+                current = lr
                 continue
 
-            if not cr == l:
+            if current[1] != lr[0]:
                 return None
-            cr = r
+            current[1] = lr[1]
 
-        if not cl == -1:
-            total.append(cl)
-            total.append(cr)
+        if not current[0] == -1:
+            total.append(current[0])
+            total.append(current[1])
 
-        if arg_len > 0 or acc_len > 0:
+        if arg_idx < arg_len or acc_idx < acc_len:
             return None
         return Discospan(tuple(total))
 
-    def finalize(self, accumulator: Discospan) -> Discospan | None:
-        return accumulator if len(accumulator) == self.fanout else None
+    cdef Discospan finalize(self, Discospan acc) noexcept:
+        return acc if len(acc) == self.fanout else None
 
 
 def union_from_positions(

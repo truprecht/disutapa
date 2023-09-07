@@ -1,9 +1,8 @@
+import cython
 # cython: profile=True
 # cython: linetrace=True
-import cython
 
-@cython.cclass
-class Discospan:
+cdef class Discospan:
     def __init__(self, borders: tuple[cython.int, ...]):
         self.borders = borders
         self.length = len(borders)
@@ -18,10 +17,11 @@ class Discospan:
         for idx in range(0, self.length, 2):
             yield self.borders[idx:idx+2]
     
-    def __bool__(self):
+    def __bool__(self) -> cython.bint:
         return self.length > 0
     
-    def __len__(self):
+    @cython.exceptval(check=False)
+    def __len__(self) -> cython.int:
         return self.length // 2
     
     def exclusive_union(self, other: Discospan) -> Discospan:
@@ -45,9 +45,18 @@ class Discospan:
         borders.append(current_r)
         return Discospan(tuple(borders))
     
+    @cython.exceptval(check=False)
     def __contains__(self, position: cython.int) -> cython.bint:
-
-        return any(l <= position < r for l,r in self)
+        idx: cython.int
+        stop: cython.int = len(self)
+        lr: tuple[cython.int, cython.int]
+        for idx in range(stop):
+            lr = self[idx]
+            if lr[0] <= position < lr[1]:
+                return True
+            if lr[1] > position:
+                return False
+        return False
 
     def __str__(self) -> str:
         return f"<{', '.join(str((i,j)) for (i,j) in self)}>"
@@ -57,27 +66,29 @@ class Discospan:
 
     def __gt__(self, other: Discospan) -> bool:
         return self.borders > other.borders
-
-    def gt_leaf(self, other: cython.int) -> bool:
+    
+    cdef bint gt_leaf(self, cython.int other) noexcept:
         return self.length > 0 and self.borders[0] > other
 
     def __eq__(self, other: Discospan) -> bool:
         return self.borders == other.borders
 
-    def __hash__(self) -> int:
+    def __hash__(self):
         return hash(self.borders)
-
-    @classmethod
-    def singleton(cls, idx: int) -> Discospan:
-        return cls((idx, idx+1))
 
     @classmethod
     def from_tuples(cls, *tups: tuple[int, int]) -> Discospan:
         return cls(tuple(b for bs in tups for b in bs))
 
-    @classmethod
-    def empty(cls):
-        return cls(())
+
+cdef Discospan singleton_span(idx: cython.int) noexcept:
+    cdef tuple[cython.int, cython.int] lr = (idx, idx+1)
+    return Discospan(lr)
+
+
+cdef Discospan empty_span() noexcept:
+    cdef tuple[] lr = ()
+    return Discospan(lr)
 
 
 @cython.cclass

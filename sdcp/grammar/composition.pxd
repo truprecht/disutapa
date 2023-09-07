@@ -1,10 +1,14 @@
-from .parser.span import Discospan
-import cython
+from .parser.span cimport Discospan
 
 cdef class Composition:
-    cdef public cython.int fanout
-    cdef public cython.int arity
+    cdef public int fanout
+    cdef public int arity
     cdef public bytes variables
 
+    cpdef CompositionView view(self, int arg=*) noexcept
+
 cdef class CompositionView(Composition):
-    cdef public cython.int next_arg
+    cdef int next_arg
+    cdef CompositionView next(self) noexcept
+    cpdef Discospan partial(self, Discospan arg, Discospan acc) noexcept
+    cdef Discospan finalize(self, Discospan acc) noexcept

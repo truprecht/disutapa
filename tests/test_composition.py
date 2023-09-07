@@ -11,7 +11,7 @@ def test_fanout():
 def test_spans():
     sp1 = Discospan.from_tuples((1,2), (3,4))
     sp2 = Discospan.from_tuples((2,3))
-    sp3 = Discospan.singleton(2)
+    sp3 = Discospan.from_tuples((2,3))
     sp4 = Discospan.from_tuples((2,3), (4,8))
     sp5 = Discospan.from_tuples((1,2), (3,6))
     
@@ -49,16 +49,16 @@ def test_composition():
     sp1 = Discospan.from_tuples((1,2), (3,4))
     sp2 = Discospan.from_tuples((2,3))
 
-    assert c1.view().partial(sp2, Discospan.empty()) == sp2
+    assert c1.view().partial(sp2, Discospan.from_tuples()) == sp2
     assert c1.view(0).partial(sp1, sp2) == Discospan((1,4))
 
-    assert c4.view().partial(sp2, Discospan.empty()) == sp2
+    assert c4.view().partial(sp2, Discospan.from_tuples()) == sp2
     assert c4.view(3).partial(sp1, sp2) is None
 
-    assert c5.view().partial(sp2, Discospan.empty()) == sp2
+    assert c5.view().partial(sp2, Discospan.from_tuples()) == sp2
     assert c5.view(2).partial(sp1, sp2) == Discospan((1,4))
 
-    assert Composition.lcfrs("010").view(0).partial(Discospan((14, 20)), Discospan.empty()) is None
+    assert Composition.lcfrs("010").view(0).partial(Discospan((14, 20)), Discospan.from_tuples()) is None
 
     assert Composition.lcfrs("010").view(0).partial(Discospan.from_tuples((0, 13), (15,16)), Discospan((14, 20))) is None
     assert Composition.lcfrs("01").view(0).partial(Discospan.from_tuples((0, 13), (15,16)), Discospan((14, 20))) is None

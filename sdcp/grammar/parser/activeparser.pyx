@@ -5,9 +5,9 @@ from _heapq import heapify, heappush, heappop
 from ..extract_head import Tree
 from ..sdcp import grammar, rule
 from .kbestchart import KbestChart
-from .item cimport ParseItem, backtrace
-from .item import item, ParseItem
-from .span import Discospan
+from .item cimport ParseItem, backtrace, item
+from .span cimport Discospan, empty_span
+from ..composition cimport Composition
 
 cimport cython
 cimport numpy as cnp
@@ -71,15 +71,19 @@ class ActiveParser:
         idx: cython.int
         rid: cython.int
         it: ParseItem
+        r: rule
+        comp: Composition
         weight: cython.float
+        emptybt: tuple = ()
         for idx in range(arlen):
             rid = rules[idx]
             weight = weights[idx]
-            r: rule = self._grammar.rules[rid]
-            it = item(r.lhs, Discospan.empty(), r.scomp.view(), r.rhs, i)
+            r = self._grammar.rules[rid]
+            comp = r.scomp
+            it = item(r.lhs, empty_span(), comp.view(), r.rhs, i)
             self.queue.append(Qelement(
                 it,
-                backtrace(rid, i, ()),
+                backtrace(rid, i, emptybt),
                 weight
             ))
             self.ruleweights[(rid, i)] = weight
@@ -90,6 +94,14 @@ class ActiveParser:
         backtrace_id: cython.int
         rootspan: Discospan = Discospan((0, self.len))
         rootnt: cython.int = self._grammar.root
+        active: ParseItem
+        abt: backtrace
+        _weight: cython.float
+        newitem: ParseItem
+        span: Discospan
+        pbt: cython.int
+        pweight: cython.float
+
         heapify(self.queue)     
         while self.queue:
             qi = heappop(self.queue)

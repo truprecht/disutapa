@@ -167,7 +167,7 @@ class rule:
             args.append(repr(tuple(r for r in self.rhs)))
         if self.scomp != default_lcfrs(len(self.rhs)):
             kw = "scomp=" if len(args) < 2 else ""
-            args.append(f"{repr(self.scomp)}")
+            args.append(f"{kw}{repr(self.scomp)}")
         if self.dcp != sdcp_clause.default(len(self.rhs)-1):
             kw = "dcp=" if len(args) < 3 else ""
             args.append(f"{kw}{repr(self.dcp)}")

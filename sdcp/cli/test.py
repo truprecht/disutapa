@@ -10,7 +10,6 @@ from discodop.tree import ParentedTree, ImmutableTree
 from tqdm import tqdm
 
 from datasets import DatasetDict
-from random import seed
 from pickle import load
 
 import torch
@@ -29,7 +28,7 @@ def guess_weights(total, hot, k):
 
 
 def main(config: Namespace):
-    seed(config.seed)
+    torch.manual_seed(0)
     evaluator = Evaluator(readparam(config.param))
     corpus = DatasetDict.load_from_disk(config.corpus)
     data = DatasetWrapper(corpus["dev"])
@@ -52,8 +51,7 @@ def main(config: Namespace):
         goldpostags = [idtopos[i] for i in sample.get_raw_labels("pos")]
         goldtree = ParentedTree(sample.get_raw_labels("tree"))
 
-        p.init(len(sample), weights, indices)
-        p.fill_chart()
+        p.fill_chart(len(sample), weights.numpy(), indices.numpy())
         if config.k == 1:
             prediction = with_pos(p.get_best()[0], goldpostags)
             evaluator.add(i, goldtree, list(sample.get_raw_labels("sentence")),

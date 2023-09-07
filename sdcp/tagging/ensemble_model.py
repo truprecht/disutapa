@@ -8,7 +8,6 @@ CPU = torch.device("cpu")
 
 from typing import Tuple, Optional
 from sdcp.grammar.sdcp import grammar
-from sdcp.grammar.parser.activeparser import ActiveParser
 from sdcp.autotree import AutoTree, with_pos, fix_rotation
 
 from discodop.eval import readparam, TreePairResult
@@ -16,7 +15,7 @@ from discodop.tree import ParentedTree, Tree
 
 from .data import DatasetWrapper, SentenceWrapper
 from .embeddings import TokenEmbeddingBuilder, EmbeddingPresets, PretrainedBuilder
-
+from .parser_adapter import ParserAdapter
 
 from dataclasses import dataclass, field, fields
 from argparse import Namespace
@@ -190,8 +189,7 @@ class EnsembleModel(flair.nn.Model):
 
                 # parse sentence and store parse tree in sentence
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
-                parser.init(len(sentence), sentweights, senttags-1)
-                parser.fill_chart()
+                parser.fill_chart(len(sentence), sentweights, senttags-1)
 
                 # todo: move into evaluate
                 # chosen_tag_stats = []
@@ -423,43 +421,6 @@ def float_or_zero(s):
         return f if f == f else 0.0 # return 0 if f is NaN
     except:
         return 0.0
-
-
-class ParserAdapter:
-    def __init__(self, grammar, step: float = 2, total_limit = 10):
-        self.parser = ActiveParser(grammar)
-        self.step = step
-        self.total_limit = total_limit
-
-    def init(self, length, weights, tags):
-        self.parser.init(length)
-        self.weights = weights[:length]
-        self.tags = tags[:length]
-        self.length = length
-
-    def fill_chart(self):
-        start = torch.zeros(self.length, dtype=int)
-        end = torch.zeros(self.length, dtype=int)
-        threshs = self.weights[:, 0].clone().detach().unsqueeze(1).numpy()
-        weights = self.weights.numpy()
-        found_root_node = False
-        while not found_root_node:
-            threshs += self.step
-            end = (weights < threshs).sum(axis=1)
-            for i, (ts, ws, s, e) in enumerate(zip(self.tags, weights, start, end)):
-                if s == e:
-                    continue
-                self.parser.add_rules_i(i, (e-s).item(), ts[s:e], ws[s:e])
-            found_root_node = self.parser.fill_chart()
-            start = end
-            if all(s == self.total_limit for s in start):
-                break
-
-    def get_best(self):
-        return self.parser.get_best()
-    
-    def get_best_iter(self):
-        return self.parser.get_best_iter()
 
 
 # TODO: move into TreeRanker

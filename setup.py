@@ -5,7 +5,7 @@ import numpy
 setup(
     name='Hybrid Grammar Supertagging',
     version="0.1",
-    ext_modules=cythonize(["sdcp/grammar/parser/*.pyx", "sdcp/grammar/composition.pyx"]),
+    ext_modules=cythonize(["sdcp/grammar/parser/*.pyx", "sdcp/grammar/composition.pyx", "sdcp/tagging/parser_adapter.pyx"]),
     include_dirs=[numpy.get_include()],
     packages=["sdcp"],
     package_dir={"sdcp": "sdcp"},

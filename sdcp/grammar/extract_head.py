@@ -5,7 +5,7 @@ from collections import namedtuple
 from typing import Any
 
 from ..autotree import AutoTree
-from .lcfrs import lcfrs_composition, ordered_union_composition
+from .composition import lcfrs_from_positions, union_from_positions, lcfrs_composition, ordered_union_composition
 from .sdcp import rule, sdcp_clause, swap_vars
 
 
@@ -66,14 +66,14 @@ extraction_result = namedtuple("extraction_result", ["lex", "leaves", "rule"])
 @dataclass(init=False)
 class Extractor:
     nonterminals: Nonterminal
-    root: str = "ROOT"
-    ctype: Any = lcfrs_composition
+    root: str
+    ctype: Any
 
     def __init__(self, root: str = "ROOT", composition: str = "lcfrs", **ntargs):
         self.nonterminals = Nonterminal(**ntargs)
         self.root = root
         self.__binarize = self.nonterminals.horzmarkov < 999
-        self.ctype = {"lcfrs": lcfrs_composition, "dcp": ordered_union_composition}.get(composition, lcfrs_composition)
+        self.cconstructor = {"lcfrs": lcfrs_from_positions, "dcp": union_from_positions}.get(composition, lcfrs_from_positions)
 
     def read_spine(self, tree: AutoTree, parents: tuple[str, ...], firstvar: int = 1):
         if not isinstance(tree, AutoTree):
@@ -125,7 +125,7 @@ class Extractor:
         leaves = SortedSet([lex])
         for child in children:
             leaves |= child.label.leaves
-        lcfrs, rhs_order = self.ctype.from_positions(leaves, [c.label.leaves for c in children])
+        lcfrs, rhs_order = self.cconstructor(leaves, [c.label.leaves for c in children])
         lhs += self.nonterminals.fo(lcfrs.fanout)
         rhs = tuple((None, *rhs_nts)[o] for o in rhs_order)
 
@@ -138,7 +138,7 @@ class Extractor:
         toprule = mod_deriv.label.rule
 
         children = [*mod_deriv.children, successor_mods]
-        lcfrs, rhs_order = self.ctype.from_positions(all_leaves, [c.label.leaves for c in children])
+        lcfrs, rhs_order = self.cconstructor(all_leaves, [c.label.leaves for c in children])
         oldrhs = (None, *(child.label.rule.lhs for child in children))
         rhs = tuple(oldrhs[o] for o in rhs_order)
         old_context = (*toprule.dcp.tree, len(toprule.rhs)+1)

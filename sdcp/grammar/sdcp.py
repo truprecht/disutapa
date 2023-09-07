@@ -4,7 +4,7 @@ from itertools import chain, repeat
 from discodop.tree import Tree, ImmutableTree # type: ignore
 from sortedcontainers import SortedSet # type: ignore
 
-from .lcfrs import lcfrs_composition, ordered_union_composition
+from .composition import Composition, default_lcfrs, lcfrs_composition, ordered_union_composition
     
 
 @dataclass
@@ -112,14 +112,14 @@ class sdcp_clause:
 class rule:
     lhs: int
     rhs: tuple[int, ...]
-    scomp: lcfrs_composition | ordered_union_composition
+    scomp: Composition
     dcp: sdcp_clause
 
     def __init__(self, lhs: int, rhs: tuple[int, ...] = (-1,), scomp = None, dcp = None):
         rhs = tuple((-1 if nt is None else nt) for nt in rhs)
         assert any(r == -1 for r in rhs) and len(rhs) >= 1
         if scomp is None:
-            scomp = lcfrs_composition.default(len(rhs))
+            scomp = default_lcfrs(len(rhs))
         if dcp is None:
             dcp = sdcp_clause.default(len(rhs)-1)
         object.__setattr__(self, "lhs", lhs)
@@ -135,13 +135,13 @@ class rule:
             rhs: tuple[str, ...],
             dnode: str | None = None,
             dtrans: int | None = None,
-            scomp: str | lcfrs_composition | ordered_union_composition | None = None
+            scomp: str | Composition | None = None
             ) -> "rule":
         dcp = sdcp_clause.binary_node(dnode, len(rhs), dtrans)
         if scomp is None and dtrans == 0:
-            scomp = lcfrs_composition(range(len(rhs)+1))
+            scomp = default_lcfrs(len(rhs)+1)
         if isinstance(scomp, str):
-            scomp = lcfrs_composition(scomp)
+            scomp = Composition.lcfrs(scomp)
         return cls(lhs, rhs, dcp=dcp, scomp=scomp)
         
         
@@ -151,13 +151,13 @@ class rule:
             lhs: str,
             rhs: tuple[str, ...],
             spine: tuple[str|int|Tree] | str | int | Tree,
-            scomp: str | lcfrs_composition | ordered_union_composition | None = None
+            scomp: str | Composition | None = None
             ) -> "rule":
         if not isinstance(spine, tuple):
             spine = (spine,)
         dcp = sdcp_clause.spine(spine)
         if isinstance(scomp, str):
-            scomp = lcfrs_composition(scomp)
+            scomp = Composition.lcfrs(scomp)
         return cls(lhs, rhs, dcp=dcp, scomp=scomp)
     
 
@@ -165,7 +165,7 @@ class rule:
         args = [repr(self.lhs)]
         if self.rhs != (-1,) and self.rhs != (None,):
             args.append(repr(tuple(r for r in self.rhs)))
-        if self.scomp != lcfrs_composition.default(len(self.rhs)):
+        if self.scomp != default_lcfrs(len(self.rhs)):
             kw = "scomp=" if len(args) < 2 else ""
             args.append(f"{repr(self.scomp)}")
         if self.dcp != sdcp_clause.default(len(self.rhs)-1):

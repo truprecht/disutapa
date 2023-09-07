@@ -1,5 +1,6 @@
 import cython
 from .span cimport Discospan
+from ..composition cimport CompositionView
 
 cdef class backtrace:
     cdef public cython.int rid
@@ -11,7 +12,7 @@ cdef class ParseItem:
     cdef public cython.int lhs
     cdef public Discospan leaves
     cdef tuple remaining
-    cdef object remaining_function
+    cdef CompositionView remaining_function
     cdef cython.int leaf
 
     cdef cython.bint is_passive(self) noexcept

@@ -5,7 +5,7 @@ import flair
 import torch
 
 from sdcp.grammar.sdcp import grammar, sdcp_clause, rule
-from sdcp.grammar.lcfrs import lcfrs_composition, ordered_union_composition
+from sdcp.grammar.composition import lcfrs_composition, ordered_union_composition
 from sdcp.tagging.ensemble_model import ModelParameters, EnsembleModel
 from sdcp.tagging.data import CorpusWrapper
 

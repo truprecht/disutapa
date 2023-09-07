@@ -1,7 +1,7 @@
 from discodop.tree import Tree   # type: ignore
 from itertools import chain
 from sortedcontainers import SortedSet   # type: ignore
-from .lcfrs import lcfrs_composition, ordered_union_composition
+from .composition import lcfrs_from_positions, union_from_positions, lcfrs_composition, ordered_union_composition
 from .sdcp import rule, sdcp_clause
 
 
@@ -18,7 +18,7 @@ def getnt(type: str, base: str, fanout: int) -> str:
     return base
 
 
-def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str | None = None, ctype = lcfrs_composition, ntype = "plain") -> Tree:
+def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str | None = None, cconstructor = lcfrs_from_positions, ntype = "plain") -> Tree:
     if not isinstance(tree, Tree):
         if tree in exclude:
             return None
@@ -30,7 +30,7 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str | No
     exclude.add(lex)
     rules = []
     for c in tree:
-        crules = __extract_tree(c, parent=tree.label, exclude=exclude, ctype=ctype, ntype=ntype)
+        crules = __extract_tree(c, parent=tree.label, exclude=exclude, cconstructor=cconstructor, ntype=ntype)
         if not crules is None:
             rules.append(crules)
             yd |= crules.label[1]
@@ -45,7 +45,7 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str | No
     # drop constituents that were introduced during binarization
     nodestr = None if "|<" in tree.label else tree.label.split("^")[0]
     lhs = tree.label
-    composition, rhs_order = ctype.from_positions(yd, [c.label[1] for c in rules]) if rules else (None, [0])
+    composition, rhs_order = cconstructor(yd, [c.label[1] for c in rules]) if rules else (None, [0])
     origrhs = (None, *(t.label[2].lhs for t in rules))
     rhs = tuple(origrhs[o] for o in rhs_order)
     if not override_lhs is None:
@@ -59,8 +59,8 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str | No
 
 
 def extract(tree: Tree, override_root: str = "ROOT", ctype = "lcfrs", ntype = "plain"):
-    ctype = {"lcfrs": lcfrs_composition, "dcp": ordered_union_composition}.get(ctype, ctype)
-    derivation = __extract_tree(tree, "ROOT", set(), override_lhs=override_root, ctype=ctype, ntype=ntype)
+    ctype = {"lcfrs": lcfrs_from_positions, "dcp": union_from_positions}.get(ctype, ctype)
+    derivation = __extract_tree(tree, "ROOT", set(), override_lhs=override_root, cconstructor=ctype, ntype=ntype)
     rules = [r for _, _, r, _ in sorted(node.label for node in derivation.subtrees())]
     for node in derivation.subtrees():
         node.label = node.label[0]

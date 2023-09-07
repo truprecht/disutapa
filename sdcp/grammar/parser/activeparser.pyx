@@ -76,7 +76,7 @@ class ActiveParser:
             rid = rules[idx]
             weight = weights[idx]
             r: rule = self._grammar.rules[rid]
-            it = item(r.lhs, Discospan.empty(), r.scomp, r.rhs, i)
+            it = item(r.lhs, Discospan.empty(), r.scomp.view(), r.rhs, i)
             self.queue.append(Qelement(
                 it,
                 backtrace(rid, i, ()),

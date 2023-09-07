@@ -7,9 +7,10 @@ from math import log, exp
 from tqdm import tqdm
 from multiprocessing import Pool
 
-from .lcfrs import lcfrs_composition, SortedSet
+from .composition import Composition, lcfrs_from_positions
+from sortedcontainers import SortedSet
 
-LcfrsRule = tuple[str, tuple[str, ...], lcfrs_composition]
+LcfrsRule = tuple[str, tuple[str, ...], Composition]
 
 @dataclass
 class Derivation:
@@ -69,7 +70,7 @@ class DerivationFactory:
         self.seen_positions += 1
         children, positions = zip(*(self._produce_with_positions(c) for c in tree))
         allpositions = positions[0].union(*positions[1:])
-        composition, _ = lcfrs_composition.from_positions(allpositions, positions)
+        composition, _ = lcfrs_from_positions(allpositions, positions)
         rule = self._integerize((tree.label, tuple(c.label for c in tree), composition))
         return Derivation(
             rule,

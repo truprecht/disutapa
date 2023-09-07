@@ -1,7 +1,7 @@
 from argparse import ArgumentParser, Namespace
 from sdcp.grammar.sdcp import rule, sdcp_clause, grammar
 from sdcp.grammar.parser.activeparser import ActiveParser
-from sdcp.grammar.lcfrs import lcfrs_composition, ordered_union_composition
+from sdcp.grammar.composition import lcfrs_composition, ordered_union_composition
 from sdcp.autotree import AutoTree, with_pos, fix_rotation
 from sdcp.tagging.data import DatasetWrapper
 from sdcp.tagging.ensemble_model import ParserAdapter

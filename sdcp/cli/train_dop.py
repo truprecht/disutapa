@@ -22,7 +22,8 @@ def main(config: Namespace):
             for sentence in DatasetWrapper(corpus["train"])),
         total=len(corpus["train"]),
         desc="reading tree corpus"),
-        markovization=markov
+        markovization=markov,
+        prior=config.prior
     )
     dump(dopgrammar, open(config.output, "wb"))
 
@@ -33,6 +34,7 @@ def subcommand(sub: ArgumentParser):
     sub.add_argument("--hmarkov", help="horizontal markov window", type=int)
     sub.add_argument("--vmarkov", help="vertical markov window", type=int)
     sub.add_argument("--bin", help="binarization factor direction", type=str)
+    sub.add_argument("--prior", help="smoothing factor for weights and fallback value for unseen rules", type=float, default=0.0)
     sub.set_defaults(func=lambda args: main(args))
 
 

@@ -159,7 +159,7 @@ class Dop:
         return dop_fragments
 
 
-    def __init__(self, training_set: Iterable[Tree], prior: float = 0.1, markovization: None | tuple[str,int,int] = None):
+    def __init__(self, training_set: Iterable[Tree], prior: float = 0, markovization: None | tuple[str,int,int] = None):
         self.tops = set()
         derivations: list[Tree] = []
         self.rule_index: dict[int, Derivation] = defaultdict(list)

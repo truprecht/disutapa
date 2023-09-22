@@ -16,7 +16,7 @@ class HeapElement:
     weight: float
 
     def __lt__(self, other):
-        return self.weight < other.weight
+        return self.weight < other.weight or self.bt.leaf < other.bt.leaf or self.bt.children < other.bt.children or max(self.successor_ks) < max(other.successor_ks)
     
     def __eq__(self, other):
         return self.bt == other.bt and self.successor_ks == other.successor_ks

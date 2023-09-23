@@ -1,6 +1,5 @@
-from sdcp.autotree import AutoTree
-from sdcp.autotree import AutoTree
-from discodop.tree import Tree, HEAD # type: ignore
+from sdcp.autotree import AutoTree, Tree, HEAD
+from sdcp.ranktransform import Binarizer
 
 def test_tree():
     t = AutoTree("(WRB 0)")
@@ -66,3 +65,37 @@ def test_auto_tree():
     assert t[0].headterm == 3
     assert t[(0,0)].headidx == 1
     assert t[(0,0)].headterm == 4
+
+
+def test_binarize():
+    t = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4))")
+    t[2].type = HEAD
+    t2 = Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))")
+    t2[0].type = HEAD
+    t2[(0,0)].type = HEAD
+    t2[(0,0,1)].type = HEAD
+    t2[(0,0,0,1)].type = HEAD
+    t2[(0,1,1)].type = HEAD
+
+    binarize = Binarizer()
+    assert binarize(t) == Tree("(S (A 0) (S|<B,C,D,E> (B 1) (S|<C,D,E> (C 2) (S|<D,E> (D 3) (E 4)))))")
+    assert binarize(t2) == Tree("(SBAR+S (VP (VP (WRB 0) (VP|<VBN,RP> (VBN 4) (RP 5))) (VBD 3)) (NP (PT 1) (NN 2)))")
+
+    binarize = Binarizer(hmarkov=0)
+    assert binarize(t) == Tree("(S (A 0) (S|<> (B 1) (S|<> (C 2) (S|<> (D 3) (E 4)))))")
+    assert binarize(t2) == Tree("(SBAR+S (VP (VP (WRB 0) (VP|<> (VBN 4) (RP 5))) (VBD 3)) (NP (PT 1) (NN 2)))")
+
+    binarize = Binarizer(head_outward=True)
+    bt = binarize(t)
+    assert bt == Tree("(S (A 0) (S|<B,C,D,E> (B 1) (S|<C,D,E> (S|<C,D> (C 2) (D 3)) (E 4))))")
+    assert bt[1].type == HEAD
+    assert bt[(1,1)].type == HEAD
+    assert bt[(1,1,0)].type == HEAD
+    assert bt[(1,1,0,0)].type == HEAD
+    bt2 = binarize(t2)
+    assert bt2 == Tree("(SBAR+S (VP (VP (WRB 0) (VP|<VBN,RP> (VBN 4) (RP 5))) (VBD 3)) (NP (PT 1) (NN 2)))")
+    assert bt2[0].type == HEAD
+    assert bt2[(0,1)].type == HEAD
+    assert bt2[(0,0,1)].type == HEAD
+    assert bt2[(0,0,1,0)].type == HEAD
+    assert bt2[(1,1)].type == HEAD

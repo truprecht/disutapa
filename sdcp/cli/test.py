@@ -59,14 +59,14 @@ def main(config: Namespace):
         else:
             trees = islice(p.get_best_iter(), config.k)
             trees = [fix_rotation(with_pos(t[0], goldpostags))[1] for t, w in trees]
-            if not config.dop is None:
+            if not config.dop is None and len(trees) > 1:
                 trees.sort(key=dopgrammar.match, reverse=False)
             evaluator.add(i, goldtree, list(sample.get_raw_labels("sentence")),
                 ParentedTree.convert(trees[0]), list(sample.get_raw_labels("sentence")))
             if not str(trees[0]) == sample.get_raw_labels("tree"):
-                print("first candidate is not gold, but index", \
-                    next(i for i, prediction in enumerate(trees)
-                        if str(prediction) == sample.get_raw_labels("tree")))
+                # print("first candidate is not gold, but index", \
+                #     next(i for i, prediction in enumerate(trees)
+                #         if str(prediction) == sample.get_raw_labels("tree")))
                 print(trees)
                 print([dopgrammar.match(t) for t in trees])
     print(evaluator.summary())

@@ -31,6 +31,7 @@ def main(config: Namespace):
 def subcommand(sub: ArgumentParser):
     sub.add_argument("corpus", help="file containing gold tags", type=str)
     sub.add_argument("output", help="grammar file", type=str, default="2dop.automaton", nargs="?")
+    sub.add_argument("--maxheight", help="extract dop fragments up to a certain height instead of 2dop", type=int)
     sub.add_argument("--hmarkov", help="horizontal markov window", type=int)
     sub.add_argument("--vmarkov", help="vertical markov window", type=int)
     sub.add_argument("--bin", help="binarization factor direction", type=str)

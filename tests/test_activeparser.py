@@ -68,7 +68,7 @@ def test_sample():
         for position, r in enumerate(rs):
             parse.add_rules_i(position, 1, (r,), (0,))
         parse.fill_chart()
-        assert with_pos(parse.get_best()[0], pos) == gold
+        assert AutoTree.convert(with_pos(parse.get_best()[0], pos)) == AutoTree.convert(gold)
 
 
 def test_weighted_sample():
@@ -84,4 +84,4 @@ def test_weighted_sample():
         for position, r in enumerate(rs):
             parse.add_rules_i(position, len(c.rules), *rule_weight_vector(len(c.rules), r))
         parse.fill_chart(stop_early=True)
-        assert with_pos(parse.get_best()[0], pos) == gold
+        assert AutoTree.convert(with_pos(parse.get_best()[0], pos)) == AutoTree.convert(gold)

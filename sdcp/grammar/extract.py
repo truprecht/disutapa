@@ -3,6 +3,7 @@ from itertools import chain
 from sortedcontainers import SortedSet   # type: ignore
 from .composition import lcfrs_from_positions, union_from_positions, lcfrs_composition, ordered_union_composition
 from .sdcp import rule, sdcp_clause
+from .guide import Guide
 
 
 def singleton(tree: Tree, nonterminal: str = "ROOT") -> tuple[tuple[rule, ...], tuple[str, ...]]:
@@ -18,19 +19,19 @@ def getnt(type: str, base: str, fanout: int) -> str:
     return base
 
 
-def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str | None = None, cconstructor = lcfrs_from_positions, ntype = "plain") -> Tree:
+def __extract_tree(tree: Tree, guide: Guide, parent: str, exclude: set, override_lhs: str | None = None, cconstructor = lcfrs_from_positions, ntype = "plain") -> Tree:
     if not isinstance(tree, Tree):
         if tree in exclude:
             return None
         lhs = override_lhs if not override_lhs is None else \
             "L-" + parent.split("+")[0]
         return Tree((tree, SortedSet([tree]), rule(lhs), SortedSet([tree])), [])
-    lex: int = min(tree[1].leaves()) if isinstance(tree[1], Tree) else tree[1]
+    lex: int = guide(tree)
     yd = SortedSet([lex])
     exclude.add(lex)
     rules = []
     for c in tree:
-        crules = __extract_tree(c, parent=tree.label, exclude=exclude, cconstructor=cconstructor, ntype=ntype)
+        crules = __extract_tree(c, guide, parent=tree.label, exclude=exclude, cconstructor=cconstructor, ntype=ntype)
         if not crules is None:
             rules.append(crules)
             yd |= crules.label[1]
@@ -58,9 +59,10 @@ def __extract_tree(tree: Tree, parent: str, exclude: set, override_lhs: str | No
     return Tree((lex, yd, rule(lhs, rhs, dcp=dcp, scomp=composition), tree.leaves()), rules)
 
 
-def extract(tree: Tree, override_root: str = "ROOT", ctype = "lcfrs", ntype = "plain"):
+def extract(tree: Tree, override_root: str = "ROOT", ctype = "lcfrs", ntype = "plain", gtype = "strict"):
     ctype = {"lcfrs": lcfrs_from_positions, "dcp": union_from_positions}.get(ctype, ctype)
-    derivation = __extract_tree(tree, "ROOT", set(), override_lhs=override_root, cconstructor=ctype, ntype=ntype)
+    guide = Guide.construct(gtype, tree)
+    derivation = __extract_tree(tree, guide, "ROOT", set(), override_lhs=override_root, cconstructor=ctype, ntype=ntype)
     rules = [r for _, _, r, _ in sorted(node.label for node in derivation.subtrees())]
     for node in derivation.subtrees():
         node.label = node.label[0]

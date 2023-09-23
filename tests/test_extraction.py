@@ -1,4 +1,4 @@
-from sdcp.grammar.extract import rule, extract, __extract_tree, singleton, sdcp_clause, lcfrs_composition
+from sdcp.grammar.extract import rule, extract, __extract_tree, singleton, sdcp_clause, lcfrs_composition, Guide
 from sdcp.corpus import corpus_extractor
 from sdcp.autotree import AutoTree, Tree
 
@@ -23,9 +23,10 @@ example_rules = [
 
 def test_extract():
     tree = AutoTree("(SBAR+S (VP (VP 0 (VP|<> 4 5)) 3) (NP 1 2))")
+    guide = Guide.construct("strict", tree)
     
-    assert __extract_tree(tree[(0,0,1)], "VP", {4}) == Tree((5, SortedSet([5]), example_rules[5], SortedSet([4,5])), [])
-    assert __extract_tree(tree[(0,0)], "VP", set()) == \
+    assert __extract_tree(tree[(0,0,1)], guide, "VP", {4}) == Tree((5, SortedSet([5]), example_rules[5], SortedSet([4,5])), [])
+    assert __extract_tree(tree[(0,0)], guide, "VP", set()) == \
         Tree((4, SortedSet([0,4,5]), example_rules[4], SortedSet([0,4,5])), [
             Tree((0, SortedSet([0]), example_rules[0], SortedSet([0])), []),
             Tree((5, SortedSet([5]), example_rules[5], SortedSet([4,5])), [])
@@ -75,7 +76,8 @@ def test_derivations():
 
 
     t = AutoTree("(SBAR+S (VP (VP (WRB 0) (VP|<> (VBN 4) (RP 5))) (VBD 3)) (NP (PT 1) (NN 2)))")
-    assert __extract_tree(t, None, set(), override_lhs="ROOT") == Tree(
+    guide = Guide.construct("strict", t)
+    assert __extract_tree(t, guide, None, set(), override_lhs="ROOT") == Tree(
         (1, SortedSet(range(6)), example_rules[1], SortedSet([0,1,2,3,4,5])), [
             Tree((3, SortedSet([0,3,4,5]), example_rules[3], SortedSet([0,3,4,5])), [
                 Tree((4, SortedSet([0,4,5]), example_rules[4], SortedSet([0,4,5])), [
@@ -86,7 +88,7 @@ def test_derivations():
             Tree((2, SortedSet([2]), example_rules[2], SortedSet([1,2])), [])
         ]
     )
-    assert AutoTree.convert(eval_derivation(__extract_tree(t, "ROOT", set()))[0]) == AutoTree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
+    assert AutoTree.convert(eval_derivation(__extract_tree(t, guide, "ROOT", set()))[0]) == AutoTree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
 
 
     rules = [
@@ -112,7 +114,8 @@ def test_derivations():
                         SortedSet([3,8])
     ]
     t = AutoTree("(ROOT (DU (PP 0 1) (DU|<> 2 (SMAIN (NP 3 8) (PP 4 (NP 5 6))))) 7)")
-    assert __extract_tree(t, None, set()) == Tree(
+    guide = Guide.construct("strict", t)
+    assert __extract_tree(t, guide, None, set()) == Tree(
         (7, yields[0], rules[0], yields[0]), [
             Tree((2, yields[1], rules[1], yields[1]), [
                 Tree((1, yields[2], rules[2], yields[2]), [
@@ -129,4 +132,4 @@ def test_derivations():
             ])
         ]
     )
-    assert AutoTree.convert(eval_derivation(__extract_tree(t, "ROOT", set()))[0]) == AutoTree("(ROOT (DU (PP 0 1) 2 (SMAIN (NP 3 8) (PP 4 (NP 5 6)))) 7)")
+    assert AutoTree.convert(eval_derivation(__extract_tree(t, guide, "ROOT", set()))[0]) == AutoTree("(ROOT (DU (PP 0 1) 2 (SMAIN (NP 3 8) (PP 4 (NP 5 6)))) 7)")

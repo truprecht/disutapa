@@ -1,6 +1,6 @@
 from typing import Iterable, Tuple
 from discodop.treebank import READERS, CorpusReader  # type: ignore
-from discodop.treetransforms import binarize, collapseunary  # type: ignore
+# from discodop.treetransforms import binarize, collapseunary  # type: ignore
 from discodop.tree import Tree  # type: ignore
 from collections import defaultdict
 from dataclasses import dataclass
@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from .grammar.extract import extract, singleton, rule
 from .grammar.extract_head import Extractor
 from .autotree import AutoTree
+from .ranktransform import Binarizer
 
 
 PTB_SPECIAL_TOKENS = {
@@ -22,7 +23,7 @@ PTB_SPECIAL_TOKENS = {
 }
 
 class corpus_extractor:
-    def __init__(self, filename_or_iterator: str | Iterable[Tuple[Tree, Iterable[str]]], headrules: str | None = None, guide="head", cmode="lcfrs", ntmode="plain", **binparams):
+    def __init__(self, filename_or_iterator: str | Iterable[Tuple[Tree, Iterable[str]]], headrules: str | None = None, guide="strict", cmode="lcfrs", ntmode="plain", **binparams):
         self.norm_token = lambda x: x
         if isinstance(filename_or_iterator, str):
             filetype = filename_or_iterator.split(".")[-1]
@@ -44,11 +45,14 @@ class corpus_extractor:
         self.goldpos: list[tuple[str, ...]] = []
         self.goldderivs: list[Tree] = []
         self.idx: dict[int, int] = {}
-        self._binparams = binparams
+        self.binarizer = Binarizer(
+            vmarkov = binparams.get("vertmarkov", 1),
+            hmarkov = binparams.get("horzmarkov", 2),
+            head_outward = (guide == "dependent")
+        )
         # todo: merge headed and strict extraction and remove this
-        if not headrules:
-            self._binparams = {"vertmarkov": binparams.get("vertmarkov", 1), "horzmarkov": binparams.get("horzmarkov", 2)}
-        self.guide = "head" if not headrules is None else "inorder"
+        self._binparams = binparams
+        self.guide = guide
         self.cmode = cmode
         self.ntmode = ntmode
 
@@ -81,16 +85,13 @@ class corpus_extractor:
                 pos = tuple(p for _, p in sorted(ht.postags.items()))
             else:
                 if len(sent) == 1:
-                    stree = collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True)
+                    stree = self.binarizer(tree)
                     rules, pos = singleton(stree)
                     deriv = 0
                 else:
-                    bintree: AutoTree = AutoTree.convert(binarize(
-                        collapseunary(Tree.convert(tree), collapsepos=True, collapseroot=True),
-                        **self._binparams))
-                    rules, deriv = extract(bintree, ctype=self.cmode, ntype=self.ntmode)
+                    bintree: AutoTree = AutoTree.convert(self.binarizer(tree))
+                    rules, deriv = extract(bintree, ctype=self.cmode, ntype=self.ntmode, gtype=self.guide)
                     for node in deriv.subtrees():
-                        # node.label = rules[node.label]
                         node.children = [(c if len(c) > 0 else c.label) for c in node]
                     pos = tuple(p for _, p in sorted(bintree.postags.items()))
             rules = tuple(

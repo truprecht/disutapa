@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, MISSING
 from discodop.tree import Tree, HEAD
 
 @dataclass
@@ -7,7 +7,13 @@ class Binarizer:
     vmarkov: int = 1
     head_outward: bool = False
     factor: str = "right"
-    mark_direction: bool = False
+    mark_direction: bool | None = None
+
+    def __post_init__(self):
+        if self.mark_direction is None:
+            self.mark_direction = self.head_outward
+        if self.head_outward:
+            self.factor = "right"
 
     def __call__(self, tree: Tree, vlist=[]) -> Tree:
         if not isinstance(tree, Tree):

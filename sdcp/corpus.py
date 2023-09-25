@@ -36,9 +36,6 @@ class corpus_extractor:
         else:
             self.trees = filename_or_iterator
         self.rules: dict[rule, int] = defaultdict(lambda: len(self.rules))
-        self.nonterminals: dict[str, int] = defaultdict(lambda: len(self.nonterminals))
-        # ensure root is mapped to integer 0
-        self.nonterminals["ROOT"]
         self.sentences: list[tuple[str, ...]] = []
         self.goldtrees: list[Tree] = []
         self.goldrules: list[tuple[rule, ...]] = []
@@ -55,15 +52,6 @@ class corpus_extractor:
         self.guide = guide
         self.cmode = cmode
         self.ntmode = ntmode
-
-
-    def store_rule(self, r: rule):
-        irhs = tuple(
-            -1 if nt is None or nt == -1 else self.nonterminals[nt]
-            for nt in r.rhs
-        )
-        irule = rule(self.nonterminals[r.lhs], irhs, r.scomp, r.dcp)
-        return self.rules[irule]
 
 
     def read(self, lrange: range | None = None):
@@ -95,7 +83,7 @@ class corpus_extractor:
                         node.children = [(c if len(c) > 0 else c.label) for c in node]
                     pos = tuple(p for _, p in sorted(bintree.postags.items()))
             rules = tuple(
-                self.store_rule(gr) for gr in rules
+                self.rules[gr] for gr in rules
             )
             self.goldtrees.append(tree)
             self.sentences.append(tuple(self.norm_token(tok) for tok in sent))

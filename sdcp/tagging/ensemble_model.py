@@ -165,7 +165,6 @@ class EnsembleModel(flair.nn.Model):
                 predicted pos tags in each token of the given sentences.
         """
         from flair.training_utils import store_embeddings
-        from numpy import argpartition
 
         if not label_name:
             label_name = "predicted"
@@ -178,8 +177,6 @@ class EnsembleModel(flair.nn.Model):
             topweights, toptags = scores["supertag"].topk(parser.total_limit, dim=-1, sorted=True)
             topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
             postags = scores["pos"].argmax(dim=-1)
-            totalbacktraces = 0
-            totalqueuelen = 0
 
             for sentence, sembed, sentweights, senttags, postag in zip(batch, embeds, topweights, toptags, postags):
                 # store tags in tokens
@@ -189,7 +186,7 @@ class EnsembleModel(flair.nn.Model):
 
                 # parse sentence and store parse tree in sentence
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
-                parser.fill_chart(len(sentence), sentweights, senttags-1)
+                parser.fill_chart(len(sentence), sentweights.numpy(), (senttags-1).numpy())
 
                 # todo: move into evaluate
                 # chosen_tag_stats = []
@@ -211,8 +208,6 @@ class EnsembleModel(flair.nn.Model):
                     tree = fix_rotation(with_pos(parser.get_best()[0], pos))[1]
                 
                 sentence.set_label(label_name, str(tree))
-                totalbacktraces += len(parser.parser.backtraces)
-                totalqueuelen += len(parser.parser.queue)
 
             store_embeddings(batch, storage_mode=embedding_storage_mode)
             if return_loss:
@@ -398,7 +393,6 @@ class EnsembleModel(flair.nn.Model):
             "embedding_builder": self.embedding_builder,
             "tags": self.dictionaries,
             "grammar": (self.__grammar__.rules, self.__grammar__.root),
-            "scoring_builder": self.scoring_builder,
             "config": self.config,
         }
 
@@ -408,7 +402,6 @@ class EnsembleModel(flair.nn.Model):
             state["embedding_builder"],
             state["tags"],
             grammar(*state["grammar"]),
-            state["scoring_builder"],
             state["config"],
         )
         model.load_state_dict(state["state_dict"])

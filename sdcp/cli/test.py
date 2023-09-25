@@ -1,12 +1,9 @@
 from argparse import ArgumentParser, Namespace
-from sdcp.grammar.sdcp import rule, sdcp_clause, grammar
-from sdcp.grammar.parser.activeparser import ActiveParser
-from sdcp.grammar.composition import lcfrs_composition, ordered_union_composition, Composition
-from sdcp.autotree import AutoTree, with_pos, fix_rotation
+from sdcp.autotree import with_pos, fix_rotation
 from sdcp.tagging.data import DatasetWrapper
 from sdcp.tagging.ensemble_model import ParserAdapter
 from discodop.eval import Evaluator, readparam
-from discodop.tree import ParentedTree, ImmutableTree
+from discodop.tree import ParentedTree
 from tqdm import tqdm
 
 from datasets import DatasetDict
@@ -32,7 +29,7 @@ def main(config: Namespace):
     evaluator = Evaluator(readparam(config.param))
     corpus = DatasetDict.load_from_disk(config.corpus)
     data = DatasetWrapper(corpus["dev"])
-    p = ParserAdapter(grammar([eval(str_hr) for str_hr in data.labels()]), total_limit=config.weighted)
+    p = ParserAdapter(data.get_grammar(), total_limit=config.weighted)
     nrules = len(p.parser.grammar.rules)
     idtopos = data.labels("pos")
     datalen = len(data)

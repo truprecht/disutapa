@@ -1,7 +1,6 @@
-from dataclasses import dataclass, field, fields, MISSING
+from dataclasses import dataclass, fields, MISSING
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Iterable
 from datasets import Dataset, DatasetDict, Features, Value, ClassLabel, Sequence
 from tqdm import tqdm
 from sdcp.corpus import corpus_extractor, Split

@@ -1,5 +1,5 @@
 from sdcp.autotree import AutoTree, Tree, HEAD
-from sdcp.ranktransform import Binarizer
+from sdcp.grammar.extraction.ranktransform import Binarizer
 
 def test_tree():
     t = AutoTree("(WRB 0)")
@@ -87,13 +87,13 @@ def test_binarize():
 
     binarize = Binarizer(head_outward=True)
     bt = binarize(t)
-    assert bt == Tree("(S (A 0) (S|<B,C,D,E> (B 1) (S|<C,D,E> (S|<C,D> (C 2) (D 3)) (E 4))))")
+    assert bt == Tree("(S (A 0) (S|<B,C,D,E>[r] (B 1) (S|<C,D,E>[r] (S|<C,D>[l] (C 2) (D 3)) (E 4))))")
     assert bt[1].type == HEAD
     assert bt[(1,1)].type == HEAD
     assert bt[(1,1,0)].type == HEAD
     assert bt[(1,1,0,0)].type == HEAD
     bt2 = binarize(t2)
-    assert bt2 == Tree("(SBAR+S (VP (VP (WRB 0) (VP|<VBN,RP> (VBN 4) (RP 5))) (VBD 3)) (NP (PT 1) (NN 2)))")
+    assert bt2 == Tree("(SBAR+S (VP (VP (WRB 0) (VP|<VBN,RP>[r] (VBN 4) (RP 5))) (VBD 3)) (NP (PT 1) (NN 2)))")
     assert bt2[0].type == HEAD
     assert bt2[(0,1)].type == HEAD
     assert bt2[(0,0,1)].type == HEAD

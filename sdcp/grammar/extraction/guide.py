@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from ..autotree import AutoTree
+from ...autotree import AutoTree
 
 Guide_Classes = dict()   
 

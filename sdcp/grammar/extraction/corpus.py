@@ -5,9 +5,9 @@ from discodop.tree import Tree  # type: ignore
 from collections import defaultdict
 from dataclasses import dataclass
 
-from .grammar.extract import extract, singleton, rule
-from .grammar.extract_head import Extractor
-from .autotree import AutoTree
+from .extract import extract, singleton, rule
+from .extract_head import Extractor
+from ...autotree import AutoTree
 from .ranktransform import Binarizer
 
 

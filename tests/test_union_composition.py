@@ -1,8 +1,8 @@
-from sdcp.grammar.extract import rule, extract, __extract_tree, Guide
+from sdcp.grammar.extraction.extract import rule, extract, __extract_tree, Guide
 from sdcp.grammar.parser.activeparser import ActiveParser, grammar
 from sdcp.autotree import AutoTree, Tree
 
-from sdcp.grammar.extract_head import Extractor, SortedSet, ordered_union_composition, sdcp_clause
+from sdcp.grammar.extraction.extract_head import Extractor, SortedSet, ordered_union_composition, sdcp_clause
 from sdcp.autotree import AutoTree, Tree, HEAD
 
 from sortedcontainers import SortedSet # type: ignore

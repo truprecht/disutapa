@@ -1,6 +1,3 @@
-# cython: profile=True
-# cython: linetrace=True
-from dataclasses import dataclass
 import cython
 
 from .span cimport Discospan, singleton_span

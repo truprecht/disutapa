@@ -1,5 +1,3 @@
-# cython: profile=True
-# cython: linetrace=True
 from dataclasses import dataclass
 from discodop.tree import Tree
 from heapq import heapify, heappush, heappop

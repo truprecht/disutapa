@@ -1,13 +1,9 @@
-# cython: profile=True
-# cython: linetrace=True
 from _heapq import heapify, heappush, heappop
 
-from ..extract_head import Tree
-from ..sdcp import grammar, rule
+from ..sdcp import grammar, rule, Tree, Composition
 from .kbestchart import KbestChart
 from .item cimport ParseItem, backtrace, item
 from .span cimport Discospan, empty_span
-from ..composition cimport Composition
 
 cimport cython
 cimport numpy as cnp

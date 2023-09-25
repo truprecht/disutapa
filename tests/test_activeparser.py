@@ -1,7 +1,7 @@
 from sdcp.grammar.sdcp import rule, grammar, lcfrs_composition, sdcp_clause, integerize_rules
-from sdcp.grammar.extract_head import Extractor
+from sdcp.grammar.extraction.extract_head import Extractor
 from sdcp.grammar.parser.activeparser import ActiveParser
-from sdcp.corpus import corpus_extractor
+from sdcp.grammar.extraction.corpus import corpus_extractor
 from sdcp.autotree import with_pos
 from random import sample, randint, shuffle
 from sdcp.autotree import AutoTree, Tree, HEAD
@@ -14,7 +14,6 @@ hrules = [
     rule("arg(V)[L]", ("arg(V)[L]", None, "arg(V)"), dcp=sdcp_clause.spine("(VP 1 0 2)"), scomp=lcfrs_composition("0,12")),
     rule("arg(V)"),
 ]
-
 ihrules = list(integerize_rules(hrules))
 
 def test_active_parser():
@@ -62,7 +61,7 @@ def test_sample():
     c.read()
     assert len(c.goldtrees) == len(c.goldrules) == len(c.sentences) == 3
     
-    parse = ActiveParser(grammar(list(c.rules)))
+    parse = ActiveParser(grammar(list(integerize_rules(c.rules))))
     for rs, gold, pos in zip(c.goldrules, c.goldtrees, c.goldpos):
         parse.init(len(rs))
         for position, r in enumerate(rs):
@@ -76,7 +75,7 @@ def test_weighted_sample():
     c.read()
     assert len(c.goldtrees) == len(c.goldrules) == len(c.sentences) == 3
     
-    parse = ActiveParser(grammar(list(c.rules)))
+    parse = ActiveParser(grammar(list(integerize_rules(c.rules))))
     for rs, gold, pos in zip(c.goldrules, c.goldtrees, c.goldpos):
         parse.init(len(rs))
         # ActiveParser should not be used with such inputs to add_rules,

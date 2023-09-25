@@ -1,5 +1,6 @@
-from sdcp.grammar.extract import rule, extract, __extract_tree, singleton, sdcp_clause, lcfrs_composition, Guide
-from sdcp.corpus import corpus_extractor
+from sdcp.grammar.extraction.extract import rule, extract, __extract_tree, singleton, sdcp_clause, lcfrs_composition, Guide
+from sdcp.grammar.extraction.corpus import corpus_extractor
+from sdcp.grammar.sdcp import integerize_rules
 from sdcp.autotree import AutoTree, Tree
 
 from sortedcontainers import SortedSet # type: ignore
@@ -43,7 +44,7 @@ def test_corpus_extractor():
     assert c.goldtrees == [Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))")]
     assert c.sentences == [tuple("where the survey was carried out".split())]
     assert c.goldpos == [tuple("WRB PT NN VBD VBN RP".split())]
-    assert list(c.rules) ==  [
+    assert list(integerize_rules(c.rules)) ==  [
         rule(1, (-1,)),
         rule(0, (2, -1, 3), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=lcfrs_composition("0120")),
         rule(3, (-1,), dcp=sdcp_clause.binary_node("NP")),
@@ -59,13 +60,13 @@ def test_corpus_extractor():
     assert c.goldtrees == [Tree("(ROOT (S ($. 0)))")]
     assert c.sentences == [tuple(".".split())]
     assert c.goldpos == [tuple("$.".split())]
-    assert list(c.rules) == [
+    assert list(integerize_rules(c.rules)) == [
         rule(0, (-1,), dcp=sdcp_clause.binary_node("ROOT+S")),
     ]
 
 
 def test_derivations():
-    from sdcp.grammar.extract import __extract_tree
+    from sdcp.grammar.extraction.extract import __extract_tree
     from discodop.tree import Tree # type: ignore
 
     def eval_derivation(deriv, p = None):

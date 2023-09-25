@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 from datasets import Dataset, DatasetDict, Features, Value, ClassLabel, Sequence
 from tqdm import tqdm
-from sdcp.corpus import corpus_extractor, Split
+from sdcp.grammar.extraction.corpus import corpus_extractor, Split
 
 def splitstr(s: str) -> dict:
     return eval(s)

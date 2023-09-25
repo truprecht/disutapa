@@ -4,9 +4,9 @@ from sortedcontainers import SortedSet  # type: ignore
 from collections import namedtuple
 from typing import Any
 
-from ..autotree import AutoTree
-from .composition import lcfrs_from_positions, union_from_positions, lcfrs_composition, ordered_union_composition
-from .sdcp import rule, sdcp_clause, swap_vars
+from ...autotree import AutoTree
+from ..composition import lcfrs_from_positions, union_from_positions, lcfrs_composition, ordered_union_composition
+from ..sdcp import rule, sdcp_clause, swap_vars
 
 
 def read_clusters(filename: str):

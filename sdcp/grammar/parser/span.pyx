@@ -1,6 +1,5 @@
 import cython
-# cython: profile=True
-# cython: linetrace=True
+
 
 cdef class Discospan:
     def __init__(self, borders: tuple[cython.int, ...]):

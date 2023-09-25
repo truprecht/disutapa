@@ -1,11 +1,9 @@
 from dataclasses import dataclass
-from typing import Tuple, Iterable
+from typing import Iterable
 from itertools import chain, repeat
 from discodop.tree import Tree, ImmutableTree # type: ignore
-from sortedcontainers import SortedSet # type: ignore
 
 from .composition import Composition, default_lcfrs, lcfrs_composition, ordered_union_composition
-    
 
 @dataclass
 class tree_constructor:
@@ -178,7 +176,12 @@ def integerize_rules(rules):
     rtoi = dict(ROOT=0)
     i = lambda n: rtoi.setdefault(n, len(rtoi))
     for r in rules:
-        yield rule(i(r.lhs), tuple(-1 if n == -1 else i(n) for n in r.rhs), r.scomp, r.dcp)
+        yield rule(
+            i(r.lhs),
+            tuple(-1 if n is None or n == -1 else i(n) for n in r.rhs),
+            r.scomp,
+            r.dcp
+        )
 
 @dataclass
 class grammar:

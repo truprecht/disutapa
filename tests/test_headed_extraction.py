@@ -1,4 +1,4 @@
-from sdcp.grammar.extract_head import Extractor, Nonterminal, extraction_result, SortedSet, lcfrs_composition, rule, sdcp_clause
+from sdcp.grammar.extraction.extract_head import Extractor, Nonterminal, extraction_result, SortedSet, lcfrs_composition, rule, sdcp_clause
 from sdcp.autotree import AutoTree, Tree, HEAD
 
 def test_read_spine():

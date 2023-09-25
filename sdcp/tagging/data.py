@@ -52,18 +52,12 @@ class DatasetWrapper:
         return vocab
     
     def get_grammar(self):
-        from sdcp.grammar.sdcp import rule, sdcp_clause, grammar
+        from sdcp.grammar.sdcp import rule, sdcp_clause, grammar, integerize_rules
         from sdcp.grammar.composition import lcfrs_composition, ordered_union_composition, Composition
-        nonterminals: dict[str, int] = dict(ROOT=0)
-        rules: list[rule] = list()
-        for rulestr in self.dataset.features["supertag"].feature.names:
-            r: rule = eval(rulestr)
-            irhs = tuple(
-                -1 if nt is None or nt == -1 else nonterminals.setdefault(nt, len(nonterminals))
-                for nt in r.rhs
-            )
-            ilhs = nonterminals.setdefault(r.lhs, len(nonterminals))
-            rules.append(rule(ilhs, irhs, r.scomp, r.dcp))
+        rules: list[rule] = list(integerize_rules(
+            eval(r)
+            for r in self.dataset.features["supertag"].feature.names
+        ))
         return grammar(rules, root=0)
 
 

@@ -1,6 +1,17 @@
 from ..composition import fanout
 from re import escape, compile, Match
 
+def read_clusters(filename: str):
+    label_to_clusterid = {}
+    with open(filename, "r") as cfile:
+        for line in cfile:
+            array = line.strip().split()
+            clusterid = array[0]
+            for label in array[1:]:
+                assert not label in label_to_clusterid, f"label {label} appears multiple times in {filename}"
+                label_to_clusterid[label] = clusterid
+    return label_to_clusterid
+
 class MultiKeyReplacement:
     def __init__(self, map: dict[str, str]):
         self.regex = compile(
@@ -19,7 +30,8 @@ def firstCharReplacement(string: str):
     if not "|<" in string:
         return string[0]
     head, tail = string[:-1].split("|<")
-    markovsuffix = ",".join(nt[0] for nt in tail.replace("$,", "$").split(","))
+    markovsuffix = ",".join((nt[0] if nt else "") for nt in tail.replace("$,", "$").split(",")) \
+        if tail else ""
     return f"{head[0]}|<{markovsuffix}>"
 
 

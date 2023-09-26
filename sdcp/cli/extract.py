@@ -4,6 +4,7 @@ from pathlib import Path
 from datasets import Dataset, DatasetDict, Features, Value, ClassLabel, Sequence
 from tqdm import tqdm
 from sdcp.grammar.extraction.corpus import corpus_extractor, Split, ExtractionParameter
+from sdcp.grammar.extraction.nonterminal import read_clusters
 
 from discodop.treebank import READERS, CorpusReader  # type: ignore
 
@@ -34,6 +35,9 @@ def main(config):
         filetype = "tiger"
     encoding = "iso-8859-1" if filetype == "export" else "utf8"
     trees = READERS[filetype](config.inputfile, encoding=encoding, punct="move", headrules=config.headrules)
+
+    if not config.coarsents is None:
+        config.coarsents = read_clusters(config.coarsents)
     ex = corpus_extractor(config)
     
     splitdict = config.split or next(preset_splits[k] for k in preset_splits if k in config.inputfile.lower())

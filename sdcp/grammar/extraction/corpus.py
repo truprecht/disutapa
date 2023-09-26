@@ -32,8 +32,8 @@ class ExtractionParameter:
         assert self.factor in ("right", "left", "headoutward")
         assert self.composition in ("lcfrs", "dcp")
         assert self.nts in ("vanilla", "classic", "coarse")
-        if self.nts == "coarse":
-            assert not self.coarsents is None
+        if not self.coarsents is None:
+            assert self.nts == "coarse"
         assert self.guide in ("strict", "vanilla", "dependent", "head", "least", "near")
 
 
@@ -58,7 +58,6 @@ class corpus_extractor:
             hmarkov = config.hmarkov,
             factor = config.factor if not config.guide == "dependent" else "headoutward"
         )
-        print(self.binarizer)
         # todo: merge headed and strict extraction and remove this
         self.params = config
 
@@ -82,7 +81,7 @@ class corpus_extractor:
                 deriv = 0
             else:
                 bintree: AutoTree = AutoTree.convert(bintree)
-                rules, deriv = extract(bintree, ctype=self.params.composition, ntype=self.params.nts, gtype=self.params.guide)
+                rules, deriv = extract(bintree, ctype=self.params.composition, ntype=self.params.nts, gtype=self.params.guide, nt_tab=self.params.coarsents)
                 for node in deriv.subtrees():
                     node.children = [(c if len(c) > 0 else c.label) for c in node]
                 pos = tuple(p for _, p in sorted(bintree.postags.items()))

@@ -1,10 +1,12 @@
 from sdcp.grammar.sdcp import rule, grammar, lcfrs_composition, sdcp_clause, integerize_rules
+from sdcp.grammar.composition import lcfrs_composition, ordered_union_composition, Composition
 from sdcp.grammar.extraction.extract_head import Extractor
 from sdcp.grammar.parser.activeparser import ActiveParser
-from sdcp.grammar.extraction.corpus import corpus_extractor
+from sdcp.grammar.extraction.corpus import corpus_extractor, ExtractionParameter
 from sdcp.autotree import with_pos
 from random import sample, randint, shuffle
 from sdcp.autotree import AutoTree, Tree, HEAD
+
 
 hrules = [
     rule("arg(V)[L]"),
@@ -56,31 +58,34 @@ def test_pipeline():
     assert parse.get_best()[0] == Tree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
 
 
+def read_corpus():
+    from discodop.treebank import READERS, CorpusReader  # type: ignore
+    ctrees = READERS["export"]("tests/sample.export", encoding="iso-8859-1", punct="move", headrules="../disco-dop/alpino.headrules")
+    ex = corpus_extractor(ExtractionParameter())
+    trees, rules, pos = [], [], []
+    for ctree in ctrees.trees().values():
+        trees.append(ctree)
+        rs, ps = ex.read_tree(ctree)
+        rules.append(rs)
+        pos.append(ps)
+    rtoi = {r: i for i,r in enumerate(ex.rules)}
+    rs = [[rtoi[r] for r in srs] for srs in rules]
+    return grammar(list(integerize_rules(eval(r) for r in ex.rules))), rs, pos, trees
+
+
 def test_sample():
-    c = corpus_extractor("tests/sample.export", headrules="../disco-dop/alpino.headrules")
-    c.read()
-    assert len(c.goldtrees) == len(c.goldrules) == len(c.sentences) == 3
-    
-    parse = ActiveParser(grammar(list(integerize_rules(c.rules))))
-    for rs, gold, pos in zip(c.goldrules, c.goldtrees, c.goldpos):
-        parse.init(len(rs))
-        for position, r in enumerate(rs):
-            parse.add_rules_i(position, 1, (r,), (0,))
-        parse.fill_chart()
-        assert AutoTree.convert(with_pos(parse.get_best()[0], pos)) == AutoTree.convert(gold)
+    gram, rules, pos, trees = read_corpus()
 
-
-def test_weighted_sample():
-    c = corpus_extractor("tests/sample.export", headrules="../disco-dop/alpino.headrules")
-    c.read()
-    assert len(c.goldtrees) == len(c.goldrules) == len(c.sentences) == 3
-    
-    parse = ActiveParser(grammar(list(integerize_rules(c.rules))))
-    for rs, gold, pos in zip(c.goldrules, c.goldtrees, c.goldpos):
-        parse.init(len(rs))
-        # ActiveParser should not be used with such inputs to add_rules,
-        # without early stopping
+    parser = ActiveParser(gram)
+    for rs, ps, gold in zip(rules, pos, trees):
+        parser.init(len(rs))
         for position, r in enumerate(rs):
-            parse.add_rules_i(position, len(c.rules), *rule_weight_vector(len(c.rules), r))
-        parse.fill_chart(stop_early=True)
-        assert AutoTree.convert(with_pos(parse.get_best()[0], pos)) == AutoTree.convert(gold)
+            parser.add_rules_i(position, 1, (r,), (0,))
+        parser.fill_chart()
+        assert AutoTree.convert(with_pos(parser.get_best()[0], ps)) == AutoTree.convert(gold)
+        
+        parser.init(len(rs))
+        for position, r in enumerate(rs):
+            parser.add_rules_i(position, len(gram.rules), *rule_weight_vector(len(gram.rules), r))
+        parser.fill_chart(stop_early=True)
+        assert AutoTree.convert(with_pos(parser.get_best()[0], ps)) == AutoTree.convert(gold)

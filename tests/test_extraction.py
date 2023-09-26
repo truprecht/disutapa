@@ -1,5 +1,6 @@
 from sdcp.grammar.extraction.extract import rule, extract, __extract_tree, singleton, sdcp_clause, lcfrs_composition, Guide
-from sdcp.grammar.extraction.corpus import corpus_extractor
+from sdcp.grammar.composition import Composition
+from sdcp.grammar.extraction.corpus import corpus_extractor, ExtractionParameter
 from sdcp.grammar.sdcp import integerize_rules
 from sdcp.autotree import AutoTree, Tree
 
@@ -37,14 +38,12 @@ def test_extract():
 
 
 def test_corpus_extractor():
-    c = corpus_extractor([(Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))"), "where the survey was carried out".split())], horzmarkov=0)
-    c.read()
+    c = corpus_extractor(ExtractionParameter(hmarkov=0))
+    rules, pos = c.read_tree(Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))"))
+    rules = list(integerize_rules(eval(r) for r in rules))
 
-    assert c.goldrules == [tuple(range(6))]
-    assert c.goldtrees == [Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))")]
-    assert c.sentences == [tuple("where the survey was carried out".split())]
-    assert c.goldpos == [tuple("WRB PT NN VBD VBN RP".split())]
-    assert list(integerize_rules(c.rules)) ==  [
+    assert pos == tuple("WRB PT NN VBD VBN RP".split())
+    assert rules ==  [
         rule(1, (-1,)),
         rule(0, (2, -1, 3), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=lcfrs_composition("0120")),
         rule(3, (-1,), dcp=sdcp_clause.binary_node("NP")),
@@ -53,14 +52,11 @@ def test_corpus_extractor():
         rule(4, (-1,)),
     ]
     
-    c = corpus_extractor([(Tree("(ROOT (S ($. 0)))"), ".".split())])
-    c.read()
+    rules, pos = c.read_tree(Tree("(ROOT (S ($. 0)))"))
+    rules = list(integerize_rules(eval(r) for r in rules))
 
-    assert c.goldrules == [tuple(range(1))]
-    assert c.goldtrees == [Tree("(ROOT (S ($. 0)))")]
-    assert c.sentences == [tuple(".".split())]
-    assert c.goldpos == [tuple("$.".split())]
-    assert list(integerize_rules(c.rules)) == [
+    assert pos == tuple("$.".split())
+    assert rules == [
         rule(0, (-1,), dcp=sdcp_clause.binary_node("ROOT+S")),
     ]
 

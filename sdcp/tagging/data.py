@@ -2,6 +2,10 @@ from datasets import Dataset, DatasetDict  # type: ignore
 from flair.data import Sentence, Dictionary, Token  # type: ignore
 from collections import Counter
 
+from ..grammar.sdcp import rule, sdcp_clause, grammar, integerize_rules
+from ..grammar.composition import lcfrs_composition, ordered_union_composition, Composition
+
+
 class SentenceWrapper(Sentence):
     def __init__(self, dataobj: dict[str, list[int]]):
         super().__init__(dataobj["sentence"], use_tokenizer=False)
@@ -52,8 +56,6 @@ class DatasetWrapper:
         return vocab
     
     def get_grammar(self):
-        from sdcp.grammar.sdcp import rule, sdcp_clause, grammar, integerize_rules
-        from sdcp.grammar.composition import lcfrs_composition, ordered_union_composition, Composition
         rules: list[rule] = list(integerize_rules(
             eval(r)
             for r in self.dataset.features["supertag"].feature.names

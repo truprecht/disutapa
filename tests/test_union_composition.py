@@ -35,7 +35,7 @@ def test_extract():
 
 
 def test_nonbin_extraction():
-    e = Extractor(horzmarkov=0, rightmostunary=True, composition="dcp")
+    e = Extractor(hmarkov=0, rightmostunary=True, composition="dcp")
     t = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4))")
     t[1].type = HEAD
     t = AutoTree.convert(t)

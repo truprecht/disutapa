@@ -11,6 +11,30 @@ from ...autotree import AutoTree
 from .ranktransform import Binarizer
 
 
+def splitstr(s: str) -> dict:
+    return eval(s)
+
+
+@dataclass
+class ExtractionParameter:
+    hmarkov: int = 999
+    vmarkov: int = 1
+    factor: str = "right"
+    rightmostunary: bool = False
+    coarsents: str = None
+    composition: str = "lcfrs"
+    nts: str = "fanout"
+    guide: str = "strict"
+    penn_treebank_replacements: bool = None
+
+    def __post_init__(self):
+        assert self.hmarkov >= 0 and self.vmarkov > 0
+        assert self.factor in ("right", "left", "headoutward")
+        assert self.composition in ("lcfrs", "dcp")
+        assert self.nts in ("fanout", "plain")
+        assert self.guide in ("strict", "vanilla", "dependent", "head", "least", "near")
+
+
 PTB_SPECIAL_TOKENS = {
     "-RRB-": ")",
     "-LRB-": "(",
@@ -22,84 +46,52 @@ PTB_SPECIAL_TOKENS = {
     # "''": '"',
 }
 
+
 class corpus_extractor:
-    def __init__(self, filename_or_iterator: str | Iterable[Tuple[Tree, Iterable[str]]], headrules: str | None = None, guide="strict", cmode="lcfrs", ntmode="plain", **binparams):
-        self.norm_token = lambda x: x
-        if isinstance(filename_or_iterator, str):
-            filetype = filename_or_iterator.split(".")[-1]
-            if filetype == "xml":
-                filetype = "tiger"
-            encoding = "iso-8859-1" if filetype == "export" else "utf8"
-            self.trees = READERS[filetype](filename_or_iterator, encoding=encoding, punct="move", headrules=headrules)
-            if "ptb" in filename_or_iterator:
-                self.norm_token = lambda x: PTB_SPECIAL_TOKENS.get(x, x)
-        else:
-            self.trees = filename_or_iterator
-        self.rules: dict[rule, int] = defaultdict(lambda: len(self.rules))
-        self.sentences: list[tuple[str, ...]] = []
-        self.goldtrees: list[Tree] = []
-        self.goldrules: list[tuple[rule, ...]] = []
-        self.goldpos: list[tuple[str, ...]] = []
-        self.goldderivs: list[Tree] = []
-        self.idx: dict[int, int] = {}
+    def __init__(self, config: ExtractionParameter):
+        self.rules: set[str] = set()
+        self.postags: set[str] = set()
         self.binarizer = Binarizer(
-            vmarkov = binparams.get("vertmarkov", 1),
-            hmarkov = binparams.get("horzmarkov", 2),
-            head_outward = (guide == "dependent")
+            vmarkov = config.vmarkov,
+            hmarkov = config.hmarkov,
+            factor = config.factor if not config.guide == "dependent" else "headoutward"
         )
+        print(self.binarizer)
         # todo: merge headed and strict extraction and remove this
-        self._binparams = binparams
-        self.guide = guide
-        self.cmode = cmode
-        self.ntmode = ntmode
+        self.params = config
 
 
-    def read(self, lrange: range | None = None):
-        if isinstance(self.trees, CorpusReader):
-            start, stop = None, None
-            if not lrange is None:
-                start, stop = lrange.start, lrange.stop
-            trees_sents = ((Tree.convert(item.tree), item.sent) for _, item in self.trees.itertrees(start, stop))
-            treeit: Iterable[tuple[int, tuple[Tree, list[str]]]] \
-                = zip(lrange, trees_sents) if not lrange is None else enumerate(trees_sents)
+    def read_tree(self, tree):
+        if self.params.guide == "head":
+            ht: AutoTree = AutoTree.convert(tree)
+            rules, deriv = Extractor(
+                composition=self.params.composition,
+                hmarkov=self.params.hmarkov,
+                vmarkov=self.params.vmarkov,
+                rightmostunary=self.params.rightmostunary,
+                bindirection=True if self.params.bindirection is None else self.params.bindirection,
+                mark=self.params.nts
+            )(ht)
+            pos = tuple(p for _, p in sorted(ht.postags.items()))
         else:
-            treeit = enumerate(self.trees)
-        for i, (tree, sent) in treeit:
-            if not isinstance(self.trees, CorpusReader) and not (lrange is None or i in lrange): continue
-            self.idx[i] = len(self.goldtrees)
-            if self.guide == "head":
-                ht: AutoTree = AutoTree.convert(tree)
-                rules, deriv = Extractor(**self._binparams, composition=self.cmode, mark=self.ntmode)(ht)
-                pos = tuple(p for _, p in sorted(ht.postags.items()))
+            bintree = self.binarizer(tree)
+            if len(bintree) == 1 and not isinstance(bintree[0], Tree):
+                rules, pos = singleton(bintree)
+                deriv = 0
             else:
-                if len(sent) == 1:
-                    stree = self.binarizer(tree)
-                    rules, pos = singleton(stree)
-                    deriv = 0
-                else:
-                    bintree: AutoTree = AutoTree.convert(self.binarizer(tree))
-                    rules, deriv = extract(bintree, ctype=self.cmode, ntype=self.ntmode, gtype=self.guide)
-                    for node in deriv.subtrees():
-                        node.children = [(c if len(c) > 0 else c.label) for c in node]
-                    pos = tuple(p for _, p in sorted(bintree.postags.items()))
-            rules = tuple(
-                self.rules[gr] for gr in rules
-            )
-            self.goldtrees.append(tree)
-            self.sentences.append(tuple(self.norm_token(tok) for tok in sent))
-            self.goldpos.append(pos)
-            self.goldderivs.append(deriv)
-            self.goldrules.append(rules)
+                bintree: AutoTree = AutoTree.convert(bintree)
+                rules, deriv = extract(bintree, ctype=self.params.composition, ntype=self.params.nts, gtype=self.params.guide)
+                for node in deriv.subtrees():
+                    node.children = [(c if len(c) > 0 else c.label) for c in node]
+                pos = tuple(p for _, p in sorted(bintree.postags.items()))
+        rules = tuple(repr(gr) for gr in rules)
+        self.rules.update(rules)
+        self.postags.update(pos)
+        return rules, pos
     
-    def __getitem__(self, idx):
-        idx = self.idx[idx]
-        return (
-            self.goldtrees[idx],
-            self.sentences[idx],
-            self.goldpos[idx],
-            self.goldrules[idx],
-            self.goldderivs[idx],
-        )
+    @staticmethod
+    def ptb_sentence(sentence: Iterable[str]):
+        return tuple(PTB_SPECIAL_TOKENS.get(tok, tok) for tok in sentence)
 
 
 @dataclass(init=False)

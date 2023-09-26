@@ -3,85 +3,68 @@ from argparse import ArgumentParser
 from pathlib import Path
 from datasets import Dataset, DatasetDict, Features, Value, ClassLabel, Sequence
 from tqdm import tqdm
-from sdcp.grammar.extraction.corpus import corpus_extractor, Split
+from sdcp.grammar.extraction.corpus import corpus_extractor, Split, ExtractionParameter
+
+from discodop.treebank import READERS, CorpusReader  # type: ignore
+
 
 def splitstr(s: str) -> dict:
     return eval(s)
-
-@dataclass
-class ExtractionParameter:
-    corpus: str
-    output: str = None
-    split: splitstr = None # e.g. "dict(train=range(18602), dev=range(18602, 19602), test=range(19602, 20602))"
-    hmarkov: int = 999
-    vmarkov: int = 1
-    rightmostunary: bool = False
-    headrules: str = None
-    coarsents: str = None
-    bindirection: bool = False
-    composition: str = "lcfrs"
-    nts: str = "fanout"
-    guide: str = "strict"
 
 
 preset_splits = {
     "negra": { "train": range(18602), "dev": range(18602, 19602), "test": range(19602, 20602) },
     "dptb": { "train": range(3914, 43746), "dev": range(43746, 45446), "test": range(45446, 47862) },
     "tiger": { "train": range(40472), "dev": range(40472, 45472), "test": range(45472, 50472) },
-    "alpinosample": { "train": range(2), "dev": range(2), "test": range(2, 3) },
+    "alpinosample": { "train": range(2), "test": range(2, 3) },
 }
-        
 
-def main(config: ExtractionParameter):
-    ex = corpus_extractor(config.corpus,
-            horzmarkov=config.hmarkov, vertmarkov=config.vmarkov, headrules=config.headrules,
-            rightmostunary=config.rightmostunary, coarselabels=config.coarsents, bindirection=config.bindirection, cmode=config.composition, ntmode=config.nts,
-            guide=config.guide)
-    splitdict = config.split or next(preset_splits[k] for k in preset_splits if k in config.corpus.lower())
-    for r in Split(**splitdict).nonoverlapping():
-        ex.read(r)
-    rules = list(ex.rules)
+
+@dataclass
+class CliParams:
+    inputfile: str
+    outputfile: str = None
+    split: splitstr = None # e.g. "dict(train=range(18602), dev=range(18602, 19602), test=range(19602, 20602))"
+    headrules: str = None
+
+
+def main(config):
+    filetype = config.inputfile.split(".")[-1]
+    if filetype == "xml":
+        filetype = "tiger"
+    encoding = "iso-8859-1" if filetype == "export" else "utf8"
+    trees = READERS[filetype](config.inputfile, encoding=encoding, punct="move", headrules=config.headrules)
+    print(config)
+    ex = corpus_extractor(config)
+    
+    splitdict = config.split or next(preset_splits[k] for k in preset_splits if k in config.inputfile.lower())
     datasets = {}
     for split, portion in splitdict.items():
-        dataset = { "sentence": [], "supertag": [], "pos": [], "tree": [], "derivation": [] }
+        dataset = { "sentence": [], "supertag": [], "pos": [], "tree": [] }
         total = portion.stop-portion.start
         desc = f"extracting {split} portion"
-        for idx in tqdm(range(portion.start, portion.stop), total=total, desc=desc):
-            gtree, sentence, gpos, grules, gderiv = ex[idx]
+        for _, corpusobj in tqdm(trees.itertrees(portion.start, portion.stop), total=total, desc=desc):
+            rules, pos = ex.read_tree(corpusobj.tree)
+            sentence = corpusobj.sent if not "ptb" in config.inputfile else \
+                corpus_extractor.ptb_sentence(corpusobj.sent)
             dataset["sentence"].append(list(sentence))
-            dataset["supertag"].append([repr(rules[r]) for r in grules])
-            dataset["pos"].append(list(gpos))
-            dataset["tree"].append(str(gtree))
-            dataset["derivation"].append(str(gderiv))
-        datasets[split] = dataset
-    tagsets = {
-        "train": {
-            "supertag": set(tag for tagseq in datasets["train"]["supertag"] for tag in tagseq),
-            "pos": set(tag for tagseq in datasets["train"]["pos"] for tag in tagseq)
-        }
-    }
-    for split in splitdict:
-        if split == "train": continue
-        tagsets[split] = {}
-        for field in ("supertag", "pos"):
-            newtags = set(tag for tagseq in datasets[split][field] for tag in tagseq) - tagsets["train"][field]
-            tagsets[split][field] = list(tagsets["train"][field]) + list(newtags)
-    
-    datasets = {
-        split: Dataset.from_dict(dataset, features=Features({
+            dataset["supertag"].append(list(rules))
+            dataset["pos"].append(list(pos))
+            dataset["tree"].append(str(corpusobj.tree))
+        datasets[split] = Dataset.from_dict(dataset, features=Features({
             "sentence": Sequence(Value("string")),
-            "supertag": Sequence(ClassLabel(names = list(tagsets[split]["supertag"]))),
-            "pos": Sequence(ClassLabel(names = list(tagsets[split]["pos"]))),
+            "supertag": Sequence(ClassLabel(names = list(ex.rules))),
+            "pos": Sequence(ClassLabel(names = list(ex.postags))),
             "tree": Value("string"),
-            "derivation": Value("string")
         }))
-        for split, dataset in datasets.items()
-    }
-    DatasetDict(**datasets).save_to_disk(config.output or f"/tmp/{Path(config.corpus).stem}")
+
+    if not "dev" in datasets:
+        datasets["dev"] = datasets["train"]
+    DatasetDict(**datasets).save_to_disk(config.outputfile or f"/tmp/{Path(config.inputfile).stem}")
 
 
 def subcommand(sub: ArgumentParser):
-    for f in fields(ExtractionParameter):
+    for f in fields(ExtractionParameter) + fields(CliParams):
         required = f.default is MISSING and f.default_factory is MISSING
         name = f.name if required else f"--{f.name}"
         default = None if required else (f.default if not f.default is MISSING else f.default_factory())

@@ -85,7 +85,7 @@ def test_binarize():
     assert binarize(t) == Tree("(S (A 0) (S|<> (B 1) (S|<> (C 2) (S|<> (D 3) (E 4)))))")
     assert binarize(t2) == Tree("(SBAR+S (VP (VP (WRB 0) (VP|<> (VBN 4) (RP 5))) (VBD 3)) (NP (PT 1) (NN 2)))")
 
-    binarize = Binarizer(head_outward=True)
+    binarize = Binarizer(factor="headoutward")
     bt = binarize(t)
     assert bt == Tree("(S (A 0) (S|<B,C,D,E>[r] (B 1) (S|<C,D,E>[r] (S|<C,D>[l] (C 2) (D 3)) (E 4))))")
     assert bt[1].type == HEAD

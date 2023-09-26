@@ -23,8 +23,8 @@ def read_clusters(filename: str):
 
 @dataclass
 class Nonterminal:
-    horzmarkov: int = 999
-    vertmarkov: int = 1
+    hmarkov: int = 999
+    vmarkov: int = 1
     rightmostunary: bool = False
     markrepeats: bool = False
     coarselabels: dict[str, str] | None = None
@@ -32,8 +32,8 @@ class Nonterminal:
     mark: str = "plain"
 
     def __post_init__(self):
-        if self.horzmarkov < 0 or self.vertmarkov < 1:
-            raise ValueError("illegal markov. parameters: h =", self.horzmarkov, "and v =", self.vertmarkov)
+        if self.hmarkov < 0 or self.vmarkov < 1:
+            raise ValueError("illegal markov. parameters: h =", self.hmarkov, "and v =", self.vmarkov)
         if self.coarselabels:
             self.coarselabels = read_clusters(self.coarselabels)
 
@@ -48,10 +48,10 @@ class Nonterminal:
         return label
 
     def vert(self, parents: tuple[str, ...], siblings: list[str]) -> str:
-        return self(parents) + f"|<{','.join(siblings[:self.horzmarkov])}>"
+        return self(parents) + f"|<{','.join(siblings[:self.hmarkov])}>"
 
     def __call__(self, parents: tuple[str, ...]) -> str:
-        lab = ";".join(parents[-self.vertmarkov:])
+        lab = ";".join(parents[-self.vmarkov:])
         if self.markrepeats and len(parents) >= 2 and parents[-1] == parents[-2]:
             lab += "+"
         return lab
@@ -72,7 +72,7 @@ class Extractor:
     def __init__(self, root: str = "ROOT", composition: str = "lcfrs", **ntargs):
         self.nonterminals = Nonterminal(**ntargs)
         self.root = root
-        self.__binarize = self.nonterminals.horzmarkov < 999
+        self.__binarize = self.nonterminals.hmarkov < 999
         self.cconstructor = {"lcfrs": lcfrs_from_positions, "dcp": union_from_positions}.get(composition, lcfrs_from_positions)
 
     def read_spine(self, tree: AutoTree, parents: tuple[str, ...], firstvar: int = 1):

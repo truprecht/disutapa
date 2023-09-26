@@ -1,19 +1,16 @@
-from dataclasses import dataclass, MISSING
+from dataclasses import dataclass, MISSING, field
 from discodop.tree import Tree, HEAD
 
 @dataclass
 class Binarizer:
     hmarkov: int = 999
     vmarkov: int = 1
-    head_outward: bool = False
     factor: str = "right"
-    mark_direction: bool | None = None
+    mark_direction: bool = field(init=False, default=True)
 
     def __post_init__(self):
-        if self.mark_direction is None:
-            self.mark_direction = self.head_outward
-        if self.head_outward:
-            self.factor = "right"
+        if self.factor != "headoutward":
+            self.mark_direction = False
 
     def __call__(self, tree: Tree, vlist=[]) -> Tree:
         if not isinstance(tree, Tree):
@@ -37,10 +34,11 @@ class Binarizer:
         rootnode = constructree
 
         vlist = [tree.label] + vlist
-        currentfactor = self.factor
+        head_outward = self.factor == "headoutward"
+        currentfactor = self.factor if not head_outward else "right"
         siblings = list(tree.children)
         for i in range(len(tree)-1):
-            if self.head_outward and tree[i].type == HEAD:
+            if head_outward and tree[i].type == HEAD:
                 currentfactor = "left"
             
             factornode = siblings.pop(0 if currentfactor == "right" else -1)
@@ -54,7 +52,7 @@ class Binarizer:
             constructree.children.append(self(factornode, vlist))
             if i < len(tree)-2:
                 constructree.children.append(Tree(nodelabel, []))
-                if self.head_outward:
+                if head_outward:
                     constructree[1].type = HEAD
             else:
                 assert len(siblings) == 1

@@ -30,3 +30,11 @@ def test_coarse():
     assert nt(tree[1], SortedSet([2])) == "N/1"
 
     assert nt(tree[(0,0)], SortedSet([4,5])) == "S/1"
+
+    nt = NtConstructor("coarse")
+    assert nt(tree, SortedSet(range(6))) == "S/1"
+    assert nt(tree[0], SortedSet([0,3,4,5])) == "V/2"
+    assert nt(tree[(0,0,1)], SortedSet([5])) == "V|<V,P>/1"
+    assert nt(tree[1], SortedSet([2])) == "N/1"
+
+    assert nt(tree[(0,0)], SortedSet([4,5])) == "V/1"

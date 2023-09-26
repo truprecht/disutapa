@@ -13,14 +13,21 @@ class MultiKeyReplacement:
 
     def __call__(self, string: str) -> str:
         return self.regex.sub(self._replace_single_match, string)
+    
+
+def firstCharReplacement(string: str):
+    if not "|<" in string:
+        return string[0]
+    head, tail = string[:-1].split("|<")
+    markovsuffix = ",".join(nt[0] for nt in tail.replace("$,", "$").split(","))
+    return f"{head[0]}|<{markovsuffix}>"
 
 
 class NtConstructor:
     def __init__(self, type: str, coarsetab: dict[str, str] | None = None):
         self.type = type
-        if not coarsetab is None:
-            assert self.type == "coarse"
-            self.coarsetab = MultiKeyReplacement(coarsetab)
+        self.coarsetab = MultiKeyReplacement(coarsetab) \
+            if not coarsetab is None else firstCharReplacement
     
     def __call__(self, ctree, deriv_yield):
         match self.type:

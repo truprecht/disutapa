@@ -4,6 +4,7 @@ from sortedcontainers import SortedSet   # type: ignore
 from ..composition import lcfrs_from_positions, union_from_positions, lcfrs_composition, ordered_union_composition
 from ..sdcp import rule, sdcp_clause
 from .guide import Guide
+from .nonterminal import NtConstructor
 
 
 def singleton(tree: Tree, nonterminal: str = "ROOT") -> tuple[tuple[rule, ...], tuple[str, ...]]:
@@ -11,15 +12,7 @@ def singleton(tree: Tree, nonterminal: str = "ROOT") -> tuple[tuple[rule, ...], 
     return (rule(nonterminal, dcp=sdcp_clause.binary_node(label or None)),), (pos,)
 
 
-def getnt(type: str, base: str, fanout: int) -> str:
-    if type.startswith("d"):
-        return base + ("/D" if fanout > 1 else "")
-    if type.startswith("f"):
-        return f"{base}/{fanout}"
-    return base
-
-
-def __extract_tree(tree: Tree, guide: Guide, parent: str, exclude: set, override_lhs: str | None = None, cconstructor = lcfrs_from_positions, ntype = "plain") -> Tree:
+def __extract_tree(tree: Tree, guide: Guide, ntype: NtConstructor, parent: str, exclude: set, override_lhs: str | None = None, cconstructor = lcfrs_from_positions) -> Tree:
     if not isinstance(tree, Tree):
         if tree in exclude:
             return None
@@ -31,7 +24,7 @@ def __extract_tree(tree: Tree, guide: Guide, parent: str, exclude: set, override
     exclude.add(lex)
     rules = []
     for c in tree:
-        crules = __extract_tree(c, guide, parent=tree.label, exclude=exclude, cconstructor=cconstructor, ntype=ntype)
+        crules = __extract_tree(c, guide, ntype, parent=tree.label, exclude=exclude, cconstructor=cconstructor)
         if not crules is None:
             rules.append(crules)
             yd |= crules.label[1]
@@ -45,24 +38,19 @@ def __extract_tree(tree: Tree, guide: Guide, parent: str, exclude: set, override
 
     # drop constituents that were introduced during binarization
     nodestr = None if "|<" in tree.label else tree.label.split("^")[0]
-    lhs = tree.label
     composition, rhs_order = cconstructor(yd, [c.label[1] for c in rules]) if rules else (None, [0])
     origrhs = (None, *(t.label[2].lhs for t in rules))
     rhs = tuple(origrhs[o] for o in rhs_order)
-    if not override_lhs is None:
-        lhs = override_lhs
-    else:
-        if "+" in tree.label:
-            lhs = tree.label.split("+")[0] + ("|<>" if "|<" in tree.label else "")
-        lhs = getnt(ntype, lhs, composition.fanout if composition else 1)
+    lhs = override_lhs or ntype(tree, yd)
     dcp = sdcp_clause.binary_node(nodestr, len(rules), push_idx)
     return Tree((lex, yd, rule(lhs, rhs, dcp=dcp, scomp=composition), tree.leaves()), rules)
 
 
-def extract(tree: Tree, override_root: str = "ROOT", ctype = "lcfrs", ntype = "plain", gtype = "strict"):
+def extract(tree: Tree, override_root: str = "ROOT", ctype = "lcfrs", ntype = "classic", nt_tab = None, gtype = "strict"):
     ctype = {"lcfrs": lcfrs_from_positions, "dcp": union_from_positions}.get(ctype, ctype)
+    ntype = NtConstructor(ntype, nt_tab)
     guide = Guide.construct(gtype, tree)
-    derivation = __extract_tree(tree, guide, "ROOT", set(), override_lhs=override_root, cconstructor=ctype, ntype=ntype)
+    derivation = __extract_tree(tree, guide, ntype, "ROOT", set(), override_lhs=override_root, cconstructor=ctype)
     rules = [r for _, _, r, _ in sorted(node.label for node in derivation.subtrees())]
     for node in derivation.subtrees():
         node.label = node.label[0]

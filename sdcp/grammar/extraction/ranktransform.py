@@ -13,27 +13,34 @@ class Binarizer:
             self.mark_direction = False
 
     def __call__(self, tree: Tree, vlist=[]) -> Tree:
-        if not isinstance(tree, Tree):
+        # abort at pos nodes
+        if len(tree) == 1 and not isinstance(tree[0], Tree):
             return tree
 
+        # unary node, merge with successor
         if len(tree) == 1 and isinstance(tree[0], Tree):
             collapsenode = Tree(f"{tree.label}+{tree[0].label}", tree[0].children)
             collapsenode.type = tree.type
             return self(collapsenode , vlist)
 
-        if len(tree) <= 2:
-            constructree = Tree(tree.label, [self(c, [tree.label]+vlist) for c in tree])
-            constructree.type = tree.type
-            return constructree
-
         rootlabel = tree.label
         if self.vmarkov > 1:
             rootlabel = f"{tree.label}^<{','.join(vlist[:self.vmarkov-1])}>"
+        vlist = list(reversed(tree.label.split("+"))) + vlist
+
+        # binary node
+        if len(tree) == 2:
+            constructree = Tree(rootlabel, [self(c, vlist) for c in tree])
+            constructree.type = tree.type
+            return constructree
+
+        basehorzlabel = vlist[0]
+        if self.vmarkov > 1:
+            basehorzlabel += f"^<{','.join(vlist[1:self.vmarkov])}>"
         constructree = Tree(rootlabel, [])
         constructree.type = tree.type
         rootnode = constructree
 
-        vlist = [tree.label] + vlist
         head_outward = self.factor == "headoutward"
         currentfactor = self.factor if not head_outward else "right"
         siblings = list(tree.children)
@@ -45,7 +52,7 @@ class Binarizer:
             hmarkovslice = slice(0, self.hmarkov) if currentfactor == "right" else \
                     slice(len(siblings)-self.hmarkov, len(siblings))
             siblinglabels = (s.label for s in siblings[hmarkovslice])
-            nodelabel = f"{rootlabel}|<{','.join(siblinglabels)}>"
+            nodelabel = f"{basehorzlabel}|<{','.join(siblinglabels)}>"
             if self.mark_direction:
                 nodelabel += f"[{currentfactor[0]}]"
 

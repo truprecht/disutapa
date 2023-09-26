@@ -1,4 +1,4 @@
-from sdcp.grammar.extraction.extract import rule, extract, __extract_tree, Guide
+from sdcp.grammar.extraction.extract import rule, extract, __extract_tree, Guide, NtConstructor
 from sdcp.grammar.parser.activeparser import ActiveParser, grammar
 from sdcp.autotree import AutoTree, Tree
 
@@ -11,20 +11,21 @@ from sdcp.grammar.composition import union_from_positions
 
 example_rules = [
     rule("L-VP"),
-    rule("ROOT", ("VP", None, "NP"), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=ordered_union_composition(fanout=1)),
-    rule("NP", dcp=sdcp_clause.binary_node("NP")),
-    rule("VP", ("VP", None), dcp=sdcp_clause.binary_node("VP", 1), scomp=ordered_union_composition(fanout=2)),
-    rule("VP", ("L-VP", None, "VP|<>"), dcp=sdcp_clause.binary_node("VP", 2), scomp=ordered_union_composition(fanout=2)),
-    rule("VP|<>"),
+    rule("ROOT", ("VP/2", None, "NP/1"), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=ordered_union_composition(fanout=1)),
+    rule("NP/1", dcp=sdcp_clause.binary_node("NP")),
+    rule("VP/2", ("VP/2", None), dcp=sdcp_clause.binary_node("VP", 1), scomp=ordered_union_composition(fanout=2)),
+    rule("VP/2", ("L-VP", None, "VP|<>/1"), dcp=sdcp_clause.binary_node("VP", 2), scomp=ordered_union_composition(fanout=2)),
+    rule("VP|<>/1"),
 ]
 
 def test_extract():
     tree = AutoTree("(SBAR+S (VP (VP 0 (VP|<> 4 5)) 3) (NP 1 2))")
     guide = Guide.construct("strict", tree)
+    nt = NtConstructor("classic")
     
-    assert __extract_tree(tree[(0,0,1)], guide, "VP", {4}, cconstructor=union_from_positions) == \
+    assert __extract_tree(tree[(0,0,1)], guide, nt, "VP", {4}, cconstructor=union_from_positions) == \
         Tree((5, SortedSet([5]), example_rules[5], SortedSet([4,5])), [])
-    assert __extract_tree(tree[(0,0)], guide, "VP", set(), cconstructor=union_from_positions) == \
+    assert __extract_tree(tree[(0,0)], guide, nt, "VP", set(), cconstructor=union_from_positions) == \
         Tree((4, SortedSet([0,4,5]), example_rules[4], SortedSet([0,4,5])), [
             Tree((0, SortedSet([0]), example_rules[0], SortedSet([0])), []),
             Tree((5, SortedSet([5]), example_rules[5], SortedSet([4,5])),[])

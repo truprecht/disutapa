@@ -34,7 +34,6 @@ def main(config):
         filetype = "tiger"
     encoding = "iso-8859-1" if filetype == "export" else "utf8"
     trees = READERS[filetype](config.inputfile, encoding=encoding, punct="move", headrules=config.headrules)
-    print(config)
     ex = corpus_extractor(config)
     
     splitdict = config.split or next(preset_splits[k] for k in preset_splits if k in config.inputfile.lower())

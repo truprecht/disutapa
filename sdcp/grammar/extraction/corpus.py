@@ -23,7 +23,7 @@ class ExtractionParameter:
     rightmostunary: bool = False
     coarsents: str = None
     composition: str = "lcfrs"
-    nts: str = "fanout"
+    nts: str = "classic"
     guide: str = "strict"
     penn_treebank_replacements: bool = None
 
@@ -31,7 +31,9 @@ class ExtractionParameter:
         assert self.hmarkov >= 0 and self.vmarkov > 0
         assert self.factor in ("right", "left", "headoutward")
         assert self.composition in ("lcfrs", "dcp")
-        assert self.nts in ("fanout", "plain")
+        assert self.nts in ("vanilla", "classic", "coarse")
+        if self.nts == "coarse":
+            assert not self.coarsents is None
         assert self.guide in ("strict", "vanilla", "dependent", "head", "least", "near")
 
 

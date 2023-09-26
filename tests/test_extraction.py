@@ -1,4 +1,4 @@
-from sdcp.grammar.extraction.extract import rule, extract, __extract_tree, singleton, sdcp_clause, lcfrs_composition, Guide
+from sdcp.grammar.extraction.extract import rule, extract, __extract_tree, singleton, sdcp_clause, lcfrs_composition, Guide, NtConstructor
 from sdcp.grammar.composition import Composition
 from sdcp.grammar.extraction.corpus import corpus_extractor, ExtractionParameter
 from sdcp.grammar.sdcp import integerize_rules
@@ -16,19 +16,20 @@ def test_singleton():
 
 example_rules = [
     rule("L-VP"),
-    rule("ROOT", ("VP", None, "NP"), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=lcfrs_composition("0120")),
-    rule("NP", dcp=sdcp_clause.binary_node("NP")),
-    rule("VP", ("VP", None), dcp=sdcp_clause.binary_node("VP", 1), scomp=lcfrs_composition("0,10")),
-    rule("VP", ("L-VP", None, "VP|<>"), dcp=sdcp_clause.binary_node("VP", 2), scomp=lcfrs_composition("0,12")),
-    rule("VP|<>"),
+    rule("ROOT", ("VP/2", None, "NP/1"), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=lcfrs_composition("0120")),
+    rule("NP/1", dcp=sdcp_clause.binary_node("NP")),
+    rule("VP/2", ("VP/2", None), dcp=sdcp_clause.binary_node("VP", 1), scomp=lcfrs_composition("0,10")),
+    rule("VP/2", ("L-VP", None, "VP|<>/1"), dcp=sdcp_clause.binary_node("VP", 2), scomp=lcfrs_composition("0,12")),
+    rule("VP|<>/1"),
 ]
 
 def test_extract():
     tree = AutoTree("(SBAR+S (VP (VP 0 (VP|<> 4 5)) 3) (NP 1 2))")
     guide = Guide.construct("strict", tree)
+    nt = NtConstructor("classic")
     
-    assert __extract_tree(tree[(0,0,1)], guide, "VP", {4}) == Tree((5, SortedSet([5]), example_rules[5], SortedSet([4,5])), [])
-    assert __extract_tree(tree[(0,0)], guide, "VP", set()) == \
+    assert __extract_tree(tree[(0,0,1)], guide, nt, "VP", {4}) == Tree((5, SortedSet([5]), example_rules[5], SortedSet([4,5])), [])
+    assert __extract_tree(tree[(0,0)], guide, nt, "VP", set()) == \
         Tree((4, SortedSet([0,4,5]), example_rules[4], SortedSet([0,4,5])), [
             Tree((0, SortedSet([0]), example_rules[0], SortedSet([0])), []),
             Tree((5, SortedSet([5]), example_rules[5], SortedSet([4,5])), [])
@@ -40,31 +41,29 @@ def test_extract():
 def test_corpus_extractor():
     c = corpus_extractor(ExtractionParameter(hmarkov=0))
     rules, pos = c.read_tree(Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))"))
-    rules = list(integerize_rules(eval(r) for r in rules))
+    print(rules)
+    rules = list(eval(r) for r in rules)
 
     assert pos == tuple("WRB PT NN VBD VBN RP".split())
     assert rules ==  [
-        rule(1, (-1,)),
-        rule(0, (2, -1, 3), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=lcfrs_composition("0120")),
-        rule(3, (-1,), dcp=sdcp_clause.binary_node("NP")),
-        rule(2, (2, -1), dcp=sdcp_clause.binary_node("VP", 1), scomp=lcfrs_composition("0,10")),
-        rule(2, (1, -1, 4), dcp=sdcp_clause.binary_node("VP", 2), scomp=lcfrs_composition("0,12")),
-        rule(4, (-1,)),
+        rule("L-VP", (-1,)),
+        rule("ROOT", ("VP/2", -1, "NP/1"), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=lcfrs_composition("0120")),
+        rule("NP/1", (-1,), dcp=sdcp_clause.binary_node("NP")),
+        rule("VP/2", ("VP/2", -1), dcp=sdcp_clause.binary_node("VP", 1), scomp=lcfrs_composition("0,10")),
+        rule("VP/2", ("L-VP", -1, "VP|<>/1"), dcp=sdcp_clause.binary_node("VP", 2), scomp=lcfrs_composition("0,12")),
+        rule("VP|<>/1", (-1,)),
     ]
     
     rules, pos = c.read_tree(Tree("(ROOT (S ($. 0)))"))
-    rules = list(integerize_rules(eval(r) for r in rules))
+    rules = list(eval(r) for r in rules)
 
     assert pos == tuple("$.".split())
     assert rules == [
-        rule(0, (-1,), dcp=sdcp_clause.binary_node("ROOT+S")),
+        rule("ROOT", (-1,), dcp=sdcp_clause.binary_node("ROOT+S")),
     ]
 
 
 def test_derivations():
-    from sdcp.grammar.extraction.extract import __extract_tree
-    from discodop.tree import Tree # type: ignore
-
     def eval_derivation(deriv, p = None):
         lex, _, rul, _ = deriv.label
         clause, ps = rul.dcp(lex, p)
@@ -74,7 +73,9 @@ def test_derivations():
 
     t = AutoTree("(SBAR+S (VP (VP (WRB 0) (VP|<> (VBN 4) (RP 5))) (VBD 3)) (NP (PT 1) (NN 2)))")
     guide = Guide.construct("strict", t)
-    assert __extract_tree(t, guide, None, set(), override_lhs="ROOT") == Tree(
+    nt = NtConstructor("classic")
+
+    assert __extract_tree(t, guide, nt, None, set(), override_lhs="ROOT") == Tree(
         (1, SortedSet(range(6)), example_rules[1], SortedSet([0,1,2,3,4,5])), [
             Tree((3, SortedSet([0,3,4,5]), example_rules[3], SortedSet([0,3,4,5])), [
                 Tree((4, SortedSet([0,4,5]), example_rules[4], SortedSet([0,4,5])), [
@@ -85,19 +86,19 @@ def test_derivations():
             Tree((2, SortedSet([2]), example_rules[2], SortedSet([1,2])), [])
         ]
     )
-    assert AutoTree.convert(eval_derivation(__extract_tree(t, guide, "ROOT", set()))[0]) == AutoTree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
+    assert AutoTree.convert(eval_derivation(__extract_tree(t, guide, nt, "ROOT", set()))[0]) == AutoTree("(SBAR (S (VP (VP 0 4 5) 3) (NP 1 2)))")
 
 
     rules = [
-        rule("ROOT", ("DU", None), dcp=sdcp_clause.binary_node("ROOT", 1), scomp=lcfrs_composition("010")),
-            rule("DU", ("PP", None, "DU|<>"), dcp=sdcp_clause.binary_node("DU", 2), scomp=lcfrs_composition("012,2")),
-                rule("PP", ("L-PP", None), dcp=sdcp_clause.binary_node("PP", 1), scomp=lcfrs_composition("01")),
+        rule("ROOT/1", ("DU/2", None), dcp=sdcp_clause.binary_node("ROOT", 1), scomp=lcfrs_composition("010")),
+            rule("DU/2", ("PP/1", None, "DU|<>/2"), dcp=sdcp_clause.binary_node("DU", 2), scomp=lcfrs_composition("012,2")),
+                rule("PP/1", ("L-PP", None), dcp=sdcp_clause.binary_node("PP", 1), scomp=lcfrs_composition("01")),
                     rule("L-PP"),
-                rule("DU|<>", (None, "SMAIN"), dcp=sdcp_clause.binary_node(None, 1, transport_idx=0), scomp=lcfrs_composition("01,1")),
-                    rule("SMAIN", (None, "PP", "NP"), dcp=sdcp_clause.binary_node("SMAIN", 2, transport_idx=0), scomp=lcfrs_composition("01,2")),
-                        rule("PP", (None, "NP",), dcp=sdcp_clause.binary_node("PP", 1, transport_idx=0), scomp=lcfrs_composition("01")),
-                            rule("NP", dcp=sdcp_clause.binary_node("NP")),
-                        rule("NP", dcp=sdcp_clause.binary_node("NP"))
+                rule("DU|<>/2", (None, "SMAIN/2"), dcp=sdcp_clause.binary_node(None, 1, transport_idx=0), scomp=lcfrs_composition("01,1")),
+                    rule("SMAIN/2", (None, "PP/1", "NP/1"), dcp=sdcp_clause.binary_node("SMAIN", 2, transport_idx=0), scomp=lcfrs_composition("01,2")),
+                        rule("PP/1", (None, "NP/1",), dcp=sdcp_clause.binary_node("PP", 1, transport_idx=0), scomp=lcfrs_composition("01")),
+                            rule("NP/1", dcp=sdcp_clause.binary_node("NP")),
+                        rule("NP/1", dcp=sdcp_clause.binary_node("NP"))
     ]
     yields = [
         SortedSet(range(9)),
@@ -112,7 +113,7 @@ def test_derivations():
     ]
     t = AutoTree("(ROOT (DU (PP 0 1) (DU|<> 2 (SMAIN (NP 3 8) (PP 4 (NP 5 6))))) 7)")
     guide = Guide.construct("strict", t)
-    assert __extract_tree(t, guide, None, set()) == Tree(
+    assert __extract_tree(t, guide, nt, None, set()) == Tree(
         (7, yields[0], rules[0], yields[0]), [
             Tree((2, yields[1], rules[1], yields[1]), [
                 Tree((1, yields[2], rules[2], yields[2]), [
@@ -129,4 +130,4 @@ def test_derivations():
             ])
         ]
     )
-    assert AutoTree.convert(eval_derivation(__extract_tree(t, guide, "ROOT", set()))[0]) == AutoTree("(ROOT (DU (PP 0 1) 2 (SMAIN (NP 3 8) (PP 4 (NP 5 6)))) 7)")
+    assert AutoTree.convert(eval_derivation(__extract_tree(t, guide, nt, "ROOT", set()))[0]) == AutoTree("(ROOT (DU (PP 0 1) 2 (SMAIN (NP 3 8) (PP 4 (NP 5 6)))) 7)")

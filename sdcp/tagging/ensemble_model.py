@@ -186,7 +186,7 @@ class EnsembleModel(flair.nn.Model):
 
                 # parse sentence and store parse tree in sentence
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
-                parser.fill_chart(len(sentence), sentweights.numpy(), (senttags-1).numpy())
+                parser.fill_chart(len(sentence), sentweights.cpu().numpy(), (senttags-1).cpu().numpy())
 
                 # todo: move into evaluate
                 # chosen_tag_stats = []

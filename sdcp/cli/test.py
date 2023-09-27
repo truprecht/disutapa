@@ -48,7 +48,7 @@ def main(config: Namespace):
         goldpostags = [idtopos[i] for i in sample.get_raw_labels("pos")]
         goldtree = ParentedTree(sample.get_raw_labels("tree"))
 
-        p.fill_chart(len(sample), weights.numpy(), indices.numpy())
+        p.fill_chart(len(sample), weights.cpu().numpy(), indices.cpu().numpy())
         if config.k == 1:
             prediction = with_pos(p.get_best()[0], goldpostags)
             evaluator.add(i, goldtree, list(sample.get_raw_labels("sentence")),

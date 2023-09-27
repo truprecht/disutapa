@@ -25,8 +25,6 @@ cdef class ParserAdapter:
         cdef bint all_at_end
 
         self.parser.init(length)
-        # threshs = self.weights[:, 0].clone().detach().unsqueeze(1).numpy()
-        # weights = self.weights.numpy()
         found_root_node = False
         while not found_root_node:
             threshs += self.step

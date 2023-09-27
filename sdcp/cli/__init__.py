@@ -1,4 +1,4 @@
-from . import extract, test, train, eval, train_dop
+from . import extract, test, train, eval, train_dop, grid
 from argparse import ArgumentParser
 
 def main():
@@ -15,5 +15,7 @@ def main():
         subcommands.add_parser(name="eval", description="Evaluate a trained classifier"))
     train_dop.subcommand(
         subcommands.add_parser(name="dop", description="Train a reranking dop model"))
+    grid.subcommand(
+        subcommands.add_parser(name="grid", description="Execute commands for each combination of variables specified in a configuration file. (Grid Search)"))
     parsed_args = args.parse_args()
     parsed_args.func(parsed_args)

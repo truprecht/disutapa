@@ -1,0 +1,10 @@
+variables:
+  corpus: ["../disco-dop/alpinosample.export"]
+  headrules: ["../disco-dop/negra.headrules"]
+  nts: ["classic", "coarse"]
+  guide: ["strict"]
+  hmarkov: ["0", "1", "2"]
+  vmarkov: ["1"]
+commands:
+  - "sdcp extract [corpus] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --output ./corpora/sample-[nts]-[guide]-[hmarkov]-[vmarkov]"
+  - "sdcp train ./corpora/sample-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 10 --embedding Supervised --lr 1e-4"

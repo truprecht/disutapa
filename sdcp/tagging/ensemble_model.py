@@ -29,6 +29,8 @@ class ModelParameters:
     step: float = 2.0
     dropout: float = 0.1
     evalparam: Optional[dict] = None
+    lstm_layers: int = 0
+    lstm_size: int = 256
 
     def __post_init__(self):
         if self.embedding in EmbeddingPresets:
@@ -71,11 +73,15 @@ class EnsembleModel(flair.nn.Model):
             builder.produce() for builder in embeddings
         ])
         self.config = config
+        embedding_len = self.embedding.embedding_length
 
+        if self.config.lstm_layers > 0:
+            self.lstm = torch.nn.LSTM(embedding_len, self.config.lstm_size, self.config.lstm_layers, dropout=self.config.dropout, bidirectional=True)
+            embedding_len = self.config.lstm_size * 2
         self.dropout = torch.nn.Dropout(self.config.dropout)
         self.dictionaries = dictionaries
         self.scores = torch.nn.ModuleDict({
-            field: torch.nn.Linear(self.embedding.embedding_length, len(dict))
+            field: torch.nn.Linear(embedding_len, len(dict))
             for field, dict in self.dictionaries.items()
         })
 
@@ -131,10 +137,15 @@ class EnsembleModel(flair.nn.Model):
         return self._tagging_loss(feats.items(), batch)
 
 
-    def forward(self, embeddings):
+    def forward(self, embeddings, batch_first=False):
         inputfeats = self.dropout(embeddings)
+        if self.config.lstm_layers > 0:
+            inputfeats, _ = self.lstm(inputfeats)
+            inputfeats = self.dropout(inputfeats)
         for field, layer in self.scores.items():
             logits = layer(inputfeats)
+            if batch_first:
+                logits=logits.transpose(0,1)
             yield field, logits
 
 
@@ -172,13 +183,13 @@ class EnsembleModel(flair.nn.Model):
 
         with torch.no_grad():
             parser = ParserAdapter(self.__grammar__, step=self.config.step, total_limit=self.config.ktags)
-            embeds = self._batch_to_embeddings(batch, batch_first=True)
-            scores = dict(self.forward(embeds))
-            topweights, toptags = scores["supertag"].topk(parser.total_limit, dim=-1, sorted=True)
+            scores = dict(self.forward(self._batch_to_embeddings(batch), batch_first=True))
+            topweights, toptags = scores["supertag"][:,:,1:].topk(parser.total_limit, dim=-1, sorted=True)
+            toptags += 1
             topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
             postags = scores["pos"].argmax(dim=-1)
 
-            for sentence, sembed, sentweights, senttags, postag in zip(batch, embeds, topweights, toptags, postags):
+            for sentence, sentweights, senttags, postag in zip(batch, topweights, toptags, postags):
                 # store tags in tokens
                 sentence.store_raw_prediction("supertag-k", senttags[:len(sentence), :self.config.ktags])
                 sentence.store_raw_prediction("supertag", senttags[:len(sentence), 0])

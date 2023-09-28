@@ -1,6 +1,6 @@
+constants:
+  - corpus
 variables:
-  corpus: ["../../corpora/negra.export"]
-  headrules: ["../disco-dop/negra.headrules"]
   nts: ["classic"]
   guide: ["strict"]
   hmarkov: ["0"]

@@ -12,4 +12,4 @@ variables:
 commands:
   - "sdcp extract [corpus] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --output ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]"
   - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 5 --embedding GBert --lr [bert_lr] --output_dir ./models/bert-negra-[nts]-[guide]-[hmarkov]-[vmarkov] --ktags [ktags]"
-  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 10 --embedding supervised --lr [supervised_lr] --output_dir ./models/supervised-negra-[nts]-[guide]-[hmarkov]-[vmarkov] --ktags [ktags]"
+  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 10 --lr [supervised_lr] --output_dir ./models/supervised-negra-[nts]-[guide]-[hmarkov]-[vmarkov] --ktags [ktags] --lstm_layers 2"

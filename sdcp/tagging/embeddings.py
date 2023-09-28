@@ -75,7 +75,7 @@ class OneHotEmbeddingBuilder(TokenEmbeddingBuilder):
         return embeddings.OneHotEmbeddings(self.vocab, self.field, self.length)
 
 EmbeddingPresets = dict(
-    Supervised = [OneHotEmbeddingBuilder("text"), CharacterEmbeddingBuilder()],
+    Supervised = [OneHotEmbeddingBuilder("text", minfreq=3, embedding_dim=256), CharacterEmbeddingBuilder(lstm_dim=128, embedding_dim=64)],
     
     BERT = [PretrainedBuilder("bert-base-cased", fine_tune=True)],
     GBert = [PretrainedBuilder("bert-base-german-cased", fine_tune=True)],

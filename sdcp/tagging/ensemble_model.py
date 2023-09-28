@@ -30,7 +30,7 @@ class ModelParameters:
     dropout: float = 0.1
     evalparam: Optional[dict] = None
     lstm_layers: int = 0
-    lstm_size: int = 256
+    lstm_size: int = 512
 
     def __post_init__(self):
         if self.embedding in EmbeddingPresets:

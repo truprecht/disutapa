@@ -11,8 +11,8 @@ from sdcp.tagging.data import CorpusWrapper
 class TrainingParameter:
     corpus: str
     epochs: int = 32
-    lr: float = 1e-5
-    batch: int = 16
+    lr: float = 5e-5
+    batch: int = 32
     micro_batch: int = None
     weight_decay: float = 0.01
     optimizer: str = "AdamW"
@@ -32,9 +32,7 @@ def main(config: TrainingParameter):
         config
     )
     trainer = flair.trainers.ModelTrainer(model, corpus)
-    train = trainer.fine_tune if any(em.fine_tune() for em in model.embedding_builder) else \
-                trainer.train
-    train(
+    trainer.train(
         config.output_dir,
         learning_rate=config.lr,
         mini_batch_size=config.batch,
@@ -45,7 +43,6 @@ def main(config: TrainingParameter):
         checkpoint=True,
         use_final_model_for_eval=True,
         patience=config.epochs
-        #scheduler=torch.optim.lr_scheduler.OneCycleLR
     )
 
 

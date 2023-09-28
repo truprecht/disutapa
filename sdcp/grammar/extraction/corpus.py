@@ -51,8 +51,8 @@ PTB_SPECIAL_TOKENS = {
 
 class corpus_extractor:
     def __init__(self, config: ExtractionParameter):
-        self.rules: set[str] = set()
-        self.postags: set[str] = set()
+        self.rules: dict[str, None] = dict()
+        self.postags: dict[str, None] = dict()
         self.binarizer = Binarizer(
             vmarkov = config.vmarkov,
             hmarkov = config.hmarkov,
@@ -86,8 +86,10 @@ class corpus_extractor:
                     node.children = [(c if len(c) > 0 else c.label) for c in node]
                 pos = tuple(p for _, p in sorted(bintree.postags.items()))
         rules = tuple(repr(gr) for gr in rules)
-        self.rules.update(rules)
-        self.postags.update(pos)
+        for r in rules:
+            self.rules.setdefault(r, None)
+        for p in pos:
+            self.postags.setdefault(p, None)
         return rules, pos
     
     @staticmethod

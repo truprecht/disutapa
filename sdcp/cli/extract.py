@@ -56,8 +56,8 @@ def main(config):
             dataset["tree"].append(str(corpusobj.tree))
         datasets[split] = Dataset.from_dict(dataset, features=Features({
             "sentence": Sequence(Value("string")),
-            "supertag": Sequence(ClassLabel(names = list(ex.rules))),
-            "pos": Sequence(ClassLabel(names = list(ex.postags))),
+            "supertag": Sequence(ClassLabel(names = list(ex.rules.keys()))),
+            "pos": Sequence(ClassLabel(names = list(ex.postags.keys()))),
             "tree": Value("string"),
         }))
 

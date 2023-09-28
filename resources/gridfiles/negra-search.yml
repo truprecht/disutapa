@@ -7,5 +7,5 @@ variables:
   vmarkov: ["1", "2"]
 commands:
   - "sdcp extract [corpus] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --output ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]"
-  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 5 --embedding bert-base-german-cased"
-  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 10 --embedding supervised --lr 1e-4"
+  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 5 --embedding GBert --lr 5e-5 --output_dir ./models/bert-negra-[nts]-[guide]-[hmarkov]-[vmarkov]"
+  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 10 --embedding supervised --lr 1e-3 --output_dir ./models/supervised-negra-[nts]-[guide]-[hmarkov]-[vmarkov]"

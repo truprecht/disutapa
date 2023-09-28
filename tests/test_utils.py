@@ -1,5 +1,5 @@
 from sdcp.autotree import AutoTree, Tree, HEAD
-from sdcp.grammar.extraction.ranktransform import Binarizer
+from sdcp.grammar.extraction.ranktransform import Binarizer, HeadInward
 
 def test_tree():
     t = AutoTree("(WRB 0)")
@@ -99,3 +99,29 @@ def test_binarize():
     assert bt2[(0,0,1)].type == HEAD
     assert bt2[(0,0,1,0)].type == HEAD
     assert bt2[(1,1)].type == HEAD
+
+
+def test_headinward():
+    t = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4))")
+    t[2].type = HEAD
+
+    h = HeadInward()
+    bt = h(t)
+    assert bt == Tree("(S (S|<A,B>[l] (A 0) (S|<B>[r] (B 1))) (C 2) (S|<D,E>[r] (D 3) (S|<E>[r] (E 4))))")
+    assert bt[1].type == HEAD
+    assert bt[(0,0)].type == HEAD
+    assert bt[(0,1,0)].type == HEAD
+    assert bt[(2,0)].type == HEAD
+    assert bt[(2,1,0)].type == HEAD
+
+
+    t = Tree("(SBAR (S (VP (VP (WRB 0) (VBN 4) (RP 5)) (VBD 3)) (NP (PT 1) (NN 2))))")
+    t[0].type = HEAD
+    t[(0,0)].type = HEAD
+    t[(0,0,1)].type = HEAD
+    t[(0,0,0,1)].type = HEAD
+    t[(0,1,1)].type = HEAD
+    
+    h = HeadInward(hmarkov=0)
+    bt = h(t)
+    assert bt == Tree("(SBAR (S (VP (VP|<>[l] (VP (VP|<>[l] (WRB 0)) (VBN 4) (VP|<>[r] (RP 5)))) (VBD 3)) (S|<>[r] (NP (NP|<>[l] (PT 1)) (NN 2)))))")

@@ -20,7 +20,6 @@ class ExtractionParameter:
     hmarkov: int = 999
     vmarkov: int = 1
     factor: str = "right"
-    rightmostunary: bool = False
     coarsents: str = None
     composition: str = "lcfrs"
     nts: str = "classic"
@@ -67,11 +66,9 @@ class corpus_extractor:
             ht: AutoTree = AutoTree.convert(tree)
             rules, deriv = Extractor(
                 composition=self.params.composition,
+                ntype=self.params.nts,
                 hmarkov=self.params.hmarkov,
                 vmarkov=self.params.vmarkov,
-                rightmostunary=self.params.rightmostunary,
-                bindirection=True if self.params.bindirection is None else self.params.bindirection,
-                mark=self.params.nts
             )(ht)
             pos = tuple(p for _, p in sorted(ht.postags.items()))
         else:

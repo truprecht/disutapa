@@ -69,3 +69,48 @@ class Binarizer:
             constructree = constructree[1 if currentfactor == "right" else 0]
 
         return rootnode
+
+
+@dataclass
+class HeadInward:
+    hmarkov: int = 999
+    vmarkov: int = 1
+    mark_direction: bool = field(init=False, default=True)
+    # trailing_node: bool = field(init=False, default=True)
+
+    def __call__(self, tree: Tree, vlist=[]) -> Tree:
+        # abort at pos nodes
+        if len(tree) == 1 and not isinstance(tree[0], Tree):
+            node = Tree(tree.label, tree.children)
+            node.type = HEAD
+            return node
+
+        rootlabel = tree.label
+        if self.vmarkov > 1:
+            rootlabel = f"{tree.label}^<{','.join(vlist[:self.vmarkov-1])}>"
+        vlist = [tree.label] + vlist
+
+        headidx = next(i for i, c in enumerate(tree.children) if c.type == HEAD)
+        print(headidx, tree)
+
+        rootnode = Tree(rootlabel, [])
+        for siblinglist, direction in ((tree.children[:headidx], "l"), (tree.children[headidx], "m"), (tree.children[headidx+1:], "r")):
+            if direction == "m":
+                rootnode.children.append(self(siblinglist, vlist))
+                continue
+            processedchildren = (self(s) for s in siblinglist)
+            origlabels = list(c.label for c in siblinglist)
+            print(origlabels)
+            constructnodes = rootnode.children
+            for s in processedchildren:
+                label = f"{rootlabel}|<{','.join(origlabels[:self.hmarkov])}>"
+                if self.mark_direction:
+                    label += f"[{direction}]"
+                constructnodes.append(Tree(label, []))
+                constructnodes = constructnodes[-1].children
+                constructnodes.append(s)
+                origlabels.pop(0)
+                direction = "r"
+
+        rootnode.type = HEAD
+        return rootnode

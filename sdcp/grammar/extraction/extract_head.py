@@ -23,14 +23,13 @@ def read_clusters(filename: str):
 
 @dataclass
 class Nonterminal:
+    type: str = "classic"
     hmarkov: int = 999
     vmarkov: int = 1
-    rightmostunary: bool = False
-    markrepeats: bool = False
     coarselabels: dict[str, str] | None = None
-    bindirection: bool = False
-    mark: str = "plain"
-
+    rightmostunary: bool = field(init=False, default=True)
+    bindirection: bool = field(init=False, default=True)
+    
     def __post_init__(self):
         if self.hmarkov < 0 or self.vmarkov < 1:
             raise ValueError("illegal markov. parameters: h =", self.hmarkov, "and v =", self.vmarkov)
@@ -51,15 +50,10 @@ class Nonterminal:
         return self(parents) + f"|<{','.join(siblings[:self.hmarkov])}>"
 
     def __call__(self, parents: tuple[str, ...]) -> str:
-        lab = ";".join(parents[-self.vmarkov:])
-        if self.markrepeats and len(parents) >= 2 and parents[-1] == parents[-2]:
-            lab += "+"
-        return lab
+        return ";".join(parents[-self.vmarkov:])
     
     def fo(self, fanout: int):
-        if self.mark.startswith("f") and fanout > 1: return f"/{fanout}"
-        if self.mark.startswith("d") and fanout > 1: return "/D"
-        return ""
+        return f"/{fanout}"
 
 
 extraction_result = namedtuple("extraction_result", ["lex", "leaves", "rule"])
@@ -69,8 +63,8 @@ class Extractor:
     root: str
     ctype: Any
 
-    def __init__(self, root: str = "ROOT", composition: str = "lcfrs", **ntargs):
-        self.nonterminals = Nonterminal(**ntargs)
+    def __init__(self, root: str = "ROOT", composition: str = "lcfrs", ntype: str = "classic", **ntargs):
+        self.nonterminals = Nonterminal(ntype, **ntargs)
         self.root = root
         self.__binarize = self.nonterminals.hmarkov < 999
         self.cconstructor = {"lcfrs": lcfrs_from_positions, "dcp": union_from_positions}.get(composition, lcfrs_from_positions)
@@ -126,7 +120,8 @@ class Extractor:
         for child in children:
             leaves |= child.label.leaves
         lcfrs, rhs_order = self.cconstructor(leaves, [c.label.leaves for c in children])
-        lhs += self.nonterminals.fo(lcfrs.fanout)
+        if overridelhs is None:
+            lhs += self.nonterminals.fo(lcfrs.fanout)
         rhs = tuple((None, *rhs_nts)[o] for o in rhs_order)
 
         r = rule(lhs, rhs, dcp=sdcp_clause.spine(c), scomp=lcfrs)
@@ -161,15 +156,11 @@ class Extractor:
         for tree in trees[-2::-1]:
             markovnts.append(tree.label if isinstance(tree, Tree) else "POS")
             yd = yd.union(tree.leaves() if isinstance(tree, Tree) else SortedSet([tree]))
-            child = self.extract_node(tree, self.nonterminals.vert(parents, markovnts), parents)
+            label = self.nonterminals.vert(parents, markovnts)
+            if self.nonterminals.bindirection:
+                label += "[l]" if direction < 0 else "[r]"
+            child = self.extract_node(tree, label, parents)
             deriv = self._fuse_modrule(child, deriv, yd)
-        if self.nonterminals.bindirection:
-            direction_marker = {-1: "[L]", +1: ""}[direction]
-            deriv.label = extraction_result(
-                deriv.label.lex,
-                deriv.label.leaves,
-                deriv.label.rule.with_lhs(deriv.label.rule.lhs+direction_marker)
-            )
         return deriv
 
 

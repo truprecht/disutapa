@@ -2,7 +2,7 @@ from datasets import Dataset, DatasetDict  # type: ignore
 from flair.data import Sentence, Dictionary, Token  # type: ignore
 from collections import Counter
 
-from ..grammar.sdcp import rule, sdcp_clause, grammar, integerize_rules
+from ..grammar.sdcp import rule, sdcp_clause, grammar, integerize_rules, ImmutableTree
 from ..grammar.composition import lcfrs_composition, ordered_union_composition, Composition
 
 

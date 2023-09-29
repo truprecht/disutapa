@@ -4,7 +4,7 @@ constants:
 variables:
   nts: ["vanilla", "classic", "coarse"]
   guide: ["vanilla", "strict", "dependent", "least", "near"]
-  hmarkov: ["0", "1", "2"]
+  hmarkov: ["0", "1"]
   vmarkov: ["1", "2"]
   ktags: ["10"]
   bert_lr: ["5e-5"]

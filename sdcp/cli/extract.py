@@ -3,10 +3,11 @@ from argparse import ArgumentParser
 from pathlib import Path
 from datasets import Dataset, DatasetDict, Features, Value, ClassLabel, Sequence
 from tqdm import tqdm
-from sdcp.grammar.extraction.corpus import corpus_extractor, Split, ExtractionParameter
+from sdcp.grammar.extraction.corpus import corpus_extractor, ExtractionParameter
 from sdcp.grammar.extraction.nonterminal import read_clusters
 
 from discodop.treebank import READERS, CorpusReader  # type: ignore
+from os.path import exists
 
 
 def splitstr(s: str) -> dict:
@@ -27,14 +28,21 @@ class CliParams:
     outputfile: str = None
     split: splitstr = None # e.g. "dict(train=range(18602), dev=range(18602, 19602), test=range(19602, 20602))"
     headrules: str = None
+    override: bool = False
 
 
 def main(config):
+    if config.outputfile is None:
+        config.outputfile = f"/tmp/{Path(config.inputfile).stem}"
+    elif exists(config.outputfile) and not config.override:
+        print(f"Specified output destination '{config.outputfile}' already exists. Change it, remove it or start the app with '--override'.")
+        exit(1)
+
     filetype = config.inputfile.split(".")[-1]
     if filetype == "xml":
         filetype = "tiger"
     encoding = "iso-8859-1" if filetype == "export" else "utf8"
-    trees = READERS[filetype](config.inputfile, encoding=encoding, punct="move", headrules=config.headrules)
+    trees: CorpusReader = READERS[filetype](config.inputfile, encoding=encoding, punct="move", headrules=config.headrules)
 
     if not config.coarsents is None:
         config.coarsents = read_clusters(config.coarsents)
@@ -63,7 +71,7 @@ def main(config):
 
     if not "dev" in datasets:
         datasets["dev"] = datasets["train"]
-    DatasetDict(**datasets).save_to_disk(config.outputfile or f"/tmp/{Path(config.inputfile).stem}")
+    DatasetDict(**datasets).save_to_disk(config.outputfile)
 
 
 def subcommand(sub: ArgumentParser):

@@ -3,8 +3,8 @@ constants:
 variables:
   nts: ["classic", "coarse"]
   guide: ["strict"]
-  hmarkov: ["0", "1", "2"]
+  hmarkov: ["0", "999"]
   vmarkov: ["1"]
 commands:
   - "sdcp extract [corpus] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --output ./corpora/sample-[nts]-[guide]-[hmarkov]-[vmarkov]"
-  - "sdcp train ./corpora/sample-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 10 --embedding Supervised --lr 1e-4"
+  - "sdcp train ./corpora/sample-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 10 --embedding Supervised --lr 1e-4 --output_dir=/tmp/sample-[nts]-[hmarkov]"

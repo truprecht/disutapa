@@ -1,5 +1,6 @@
 from dataclasses import dataclass, fields, MISSING
 from argparse import ArgumentParser
+from os.path import exists
 
 import flair
 import torch
@@ -22,6 +23,11 @@ class TrainingParameter:
 
 
 def main(config: TrainingParameter):
+    if exists(config.output_dir) and not config.override:
+        print("Specified output destination already exists. Change it, remove it or start the app with '--override'.")
+        exit(1)
+
+
     if not config.device is None:
         flair.device = config.device
     torch.manual_seed(config.random_seed)
@@ -60,4 +66,5 @@ def subcommand(sub: ArgumentParser):
             default = list()
         sub.add_argument(name, type=ftype, default=default, nargs=nargs)
     sub.add_argument("--device", type=torch.device, default=None)
+    sub.add_argument("--override", default=False, action="store_true")
     sub.set_defaults(func=lambda args: main(args))

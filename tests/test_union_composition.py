@@ -36,16 +36,16 @@ def test_extract():
 
 
 def test_nonbin_extraction():
-    e = Extractor(hmarkov=0, rightmostunary=True, composition="dcp")
+    e = Extractor(hmarkov=0, composition="dcp")
     t = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4))")
     t[1].type = HEAD
     t = AutoTree.convert(t)
     assert e(t)[0] == [
-        rule("S|<>"),
-        rule("ROOT", ("S|<>", None, "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=ordered_union_composition()),
-        rule("S|<>", (None, "S|<>",), dcp=sdcp_clause.default(1), scomp=ordered_union_composition()),
-        rule("S|<>", (None, "S|<>",), dcp=sdcp_clause.default(1), scomp=ordered_union_composition()),
-        rule("S|<>"),
+        rule("S|<>[l]/1"),
+        rule("ROOT", ("S|<>[l]/1", None, "S|<>[r]/1"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=ordered_union_composition()),
+        rule("S|<>[r]/1", (None, "S|<>[r]/1",), dcp=sdcp_clause.default(1), scomp=ordered_union_composition()),
+        rule("S|<>[r]/1", (None, "S|<>[r]/1",), dcp=sdcp_clause.default(1), scomp=ordered_union_composition()),
+        rule("S|<>[r]/1"),
     ]
 
     t = Tree("(S (A 0) (B 1) (T (C 2) (D 3) (E 4)) (D 5) (E 6))")
@@ -53,13 +53,13 @@ def test_nonbin_extraction():
     t[(2,1)].type = HEAD
     t = AutoTree.convert(t)
     assert e(t)[0] == [
-        rule("S|<>"),
-        rule("ROOT", ("S|<>", None, "S|<>"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=ordered_union_composition()),
-        rule("T|<>"),
-        rule("S|<>", ("T|<>", None, "T|<>", "S|<>",), dcp=sdcp_clause.spine("(T 1 0 2)", 3), scomp=ordered_union_composition()),
-        rule("T|<>"),
-        rule("S|<>", (None, "S|<>"), dcp=sdcp_clause.default(1), scomp=ordered_union_composition()),
-        rule("S|<>"),
+        rule("S|<>[l]/1"),
+        rule("ROOT", ("S|<>[l]/1", None, "S|<>[r]/1"), dcp=sdcp_clause.spine("(S 1 0 2)"), scomp=ordered_union_composition()),
+        rule("T|<>[l]/1"),
+        rule("S|<>[r]/1", ("T|<>[l]/1", None, "T|<>[r]/1", "S|<>[r]/1",), dcp=sdcp_clause.spine("(T 1 0 2)", 3), scomp=ordered_union_composition()),
+        rule("T|<>[r]/1"),
+        rule("S|<>[r]/1", (None, "S|<>[r]/1"), dcp=sdcp_clause.default(1), scomp=ordered_union_composition()),
+        rule("S|<>[r]/1"),
     ]
 
 def test_active_parser():

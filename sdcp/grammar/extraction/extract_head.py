@@ -5,7 +5,7 @@ from collections import namedtuple
 from typing import Any
 
 from ...autotree import AutoTree
-from ..composition import lcfrs_from_positions, union_from_positions, lcfrs_composition, ordered_union_composition
+from ..composition import lcfrs_from_positions, union_from_positions, lcfrs_composition, ordered_union_composition, fanout
 from ..sdcp import rule, sdcp_clause, swap_vars
 
 
@@ -151,6 +151,9 @@ class Extractor:
         lowestnt = None
         if self.nonterminals.rightmostunary:
             lowestnt = self.nonterminals.vert(parents, markovnts)
+            if self.nonterminals.bindirection:
+                lowestnt += "[l]" if direction < 0 and len(trees) == 1 else "[r]"
+            lowestnt += self.nonterminals.fo(fanout(trees[-1].leaves()) if isinstance(trees[-1], Tree) else 1)
         deriv = self.extract_node(trees[-1], lowestnt, parents)
         yd = trees[-1].leaves() if isinstance(trees[-1], Tree) else SortedSet([trees[-1]])
         for tree in trees[-2::-1]:
@@ -158,7 +161,8 @@ class Extractor:
             yd = yd.union(tree.leaves() if isinstance(tree, Tree) else SortedSet([tree]))
             label = self.nonterminals.vert(parents, markovnts)
             if self.nonterminals.bindirection:
-                label += "[l]" if direction < 0 else "[r]"
+                label += "[l]" if direction < 0 and tree is trees[0] else "[r]"
+            label += self.nonterminals.fo(fanout(yd) if isinstance(tree, Tree) else 1)
             child = self.extract_node(tree, label, parents)
             deriv = self._fuse_modrule(child, deriv, yd)
         return deriv

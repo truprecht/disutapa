@@ -64,14 +64,19 @@ Guide_Classes["vanilla"] = VanillaGuide
 
 class LeastGuide(Guide):
     @staticmethod
-    def bfsleaf(tree: AutoTree, exclude: set[int]) -> int:
+    def bfsleaf(tree: AutoTree, exclude: set[int], exclude_subtrees: bool = False) -> int:
         queue = [tree]
         while queue:
             t = queue.pop(0)
             if not isinstance(t, AutoTree) and not t in exclude:
                 return t
             if isinstance(t, AutoTree):
-                queue.extend(c for c in t.children if not isinstance(c, AutoTree) or not c.leaves().intersection(exclude))
+                successors = (
+                    c for c in t.children
+                    if not exclude_subtrees or not isinstance(c, AutoTree) or \
+                        not c.leaves().intersection(exclude)
+                )
+                queue.extend(successors)
         raise Exception(f"Could not find any admissible leaf in {tree} excluding {exclude}")
 
     def _construct_guide(self, tree):
@@ -93,7 +98,7 @@ class NearGuide(LeastGuide):
     def _construct_guide(self, tree):
         if not isinstance(tree, AutoTree):
             return
-        leaf = self.__class__.bfsleaf(tree, self.assignment.values())
+        leaf = self.__class__.bfsleaf(tree, self.assignment.values(), exclude_subtrees=True)
         self.assignment[id(tree)] = leaf
         for child in tree:
             self._construct_guide(child)

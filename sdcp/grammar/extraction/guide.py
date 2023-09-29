@@ -71,7 +71,8 @@ class LeastGuide(Guide):
             if not isinstance(t, AutoTree) and not t in exclude:
                 return t
             if isinstance(t, AutoTree):
-                queue.extend(t.children)
+                queue.extend(c for c in t.children if not isinstance(c, AutoTree) or not c.leaves().intersection(exclude))
+        raise Exception(f"Could not find any admissible leaf in {tree} excluding {exclude}")
 
     def _construct_guide(self, tree):
         if not isinstance(tree, AutoTree):

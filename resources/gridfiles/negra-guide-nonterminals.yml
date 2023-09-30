@@ -10,7 +10,8 @@ variables:
   bert_lr: ["5e-5"]
   supervised_lr: ["1e-3"]
   epochs: ["10"]
+  dev: ["cuda:0"]
 commands:
   - "sdcp extract [corpus] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --output ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]"
-  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs [epochs] --embedding GBert --lr [bert_lr] --output_dir ./models/bert-negra-[nts]-[guide]-[hmarkov]-[vmarkov] --ktags [ktags] --parameter-search"
-  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs [epochs] --lr [supervised_lr] --output_dir ./models/supervised-negra-[nts]-[guide]-[hmarkov]-[vmarkov] --ktags [ktags] --lstm_layers 2 --parameter-search"
+  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs [epochs] --embedding GBert --lr [bert_lr] --output_dir ./models/bert-negra-[nts]-[guide]-[hmarkov]-[vmarkov] --ktags [ktags] --parameter-search --device [dev]"
+  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs [epochs] --lr [supervised_lr] --output_dir ./models/supervised-negra-[nts]-[guide]-[hmarkov]-[vmarkov] --ktags [ktags] --lstm_layers 2 --parameter-search --device [dev]"

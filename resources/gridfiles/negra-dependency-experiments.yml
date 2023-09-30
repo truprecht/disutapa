@@ -13,5 +13,5 @@ variables:
   comp: ["lcfrs", "dcp"]
 commands:
   - "sdcp extract [corpus] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --composition [comp] --output ./corpora/negra-dependency-[hmarkov]-[vmarkov]-[comp]"
-  - "sdcp train ./corpora/negra-dependency-[hmarkov]-[vmarkov]-[comp] --epochs [epochs] --embedding GBert --lr [bert_lr] --output_dir ./models/bert-negra-dependency-[hmarkov]-[vmarkov]-[comp] --ktags [ktags]"
-  - "sdcp train ./corpora/negra-dependency-[hmarkov]-[vmarkov]-[comp] --epochs [epochs] --lr [supervised_lr] --output_dir ./models/supervised-negra-dependency-[hmarkov]-[vmarkov]-[comp] --ktags [ktags] --lstm_layers 2"
+  - "sdcp train ./corpora/negra-dependency-[hmarkov]-[vmarkov]-[comp] --epochs [epochs] --embedding GBert --lr [bert_lr] --output_dir ./models/bert-negra-dependency-[hmarkov]-[vmarkov]-[comp] --ktags [ktags] --parameter-search"
+  - "sdcp train ./corpora/negra-dependency-[hmarkov]-[vmarkov]-[comp] --epochs [epochs] --lr [supervised_lr] --output_dir ./models/supervised-negra-dependency-[hmarkov]-[vmarkov]-[comp] --ktags [ktags] --lstm_layers 2 --parameter-search"

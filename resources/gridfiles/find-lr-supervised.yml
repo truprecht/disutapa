@@ -9,4 +9,4 @@ variables:
   decay: ["1e-1", "1e-2", "1e-3"]
 commands:
   - "sdcp extract [corpus] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --output ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]"
-  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 10 --embedding Supervised --lr [lr] --weight-decay [decay]"
+  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 10 --embedding Supervised --lr [lr] --weight-decay [decay] --parameter-search"

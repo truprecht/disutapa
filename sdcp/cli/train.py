@@ -46,9 +46,9 @@ def main(config: TrainingParameter):
         max_epochs=config.epochs,
         weight_decay=config.weight_decay,
         optimizer=torch.optim.__dict__[config.optimizer],
-        checkpoint=True,
         use_final_model_for_eval=True,
-        patience=config.epochs
+        patience=config.epochs,
+        param_selection_mode=config.parameter_search
     )
 
 
@@ -67,4 +67,5 @@ def subcommand(sub: ArgumentParser):
         sub.add_argument(name, type=ftype, default=default, nargs=nargs)
     sub.add_argument("--device", type=torch.device, default=None)
     sub.add_argument("--override", default=False, action="store_true")
+    sub.add_argument("--parameter-search", default=False, action="store_true")
     sub.set_defaults(func=lambda args: main(args))

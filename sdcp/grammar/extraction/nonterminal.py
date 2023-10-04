@@ -37,7 +37,9 @@ def firstCharReplacement(string: str):
 
 class NtConstructor:
     def __init__(self, type: str, coarsetab: dict[str, str] | None = None):
-        self.type = type
+        if not "-" in type:
+            type += "-"
+        self.type, self.decoration = type.split("-")
         self.coarsetab = MultiKeyReplacement(coarsetab) \
             if not coarsetab is None else firstCharReplacement
     
@@ -52,8 +54,16 @@ class NtConstructor:
             case "classic":
                 # binarization nodes do not contain "+"-merged unary constituents
                 baselabel = ctree.label.split("+")[0]
-                return f"{baselabel}/{fanout(deriv_yield)}"
             case "coarse":
                 # binarization nodes do not contain "+"-merged unary constituents
-                baselabel = ctree.label.split("+")[0]
-                return f"{self.coarsetab(baselabel)}/{fanout(deriv_yield)}"
+                baselabel = self.coarsetab(ctree.label.split("+")[0])
+        
+        match self.decoration:
+            case "nof":
+                return baselabel
+            case "disc":
+                decor = "D" if fanout(deriv_yield) > 1 else ""
+            case "":
+                decor = str(fanout(deriv_yield))
+        
+        return f"{baselabel}/{decor}" if decor else baselabel

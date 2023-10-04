@@ -29,12 +29,15 @@ class Nonterminal:
     coarselabels: dict[str, str] | None = None
     rightmostunary: bool = field(init=False, default=True)
     bindirection: bool = field(init=False, default=True)
+    decoration: str = field(init=False, default="")
     
     def __post_init__(self):
         if self.hmarkov < 0 or self.vmarkov < 1:
             raise ValueError("illegal markov. parameters: h =", self.hmarkov, "and v =", self.vmarkov)
         if self.coarselabels:
             self.coarselabels = read_clusters(self.coarselabels)
+        if "-" in self.type:
+            self.type, self.decoration = self.type.split("-")
 
     def get_label(self, node: AutoTree) -> str:
         if not isinstance(node, Tree): return "ARG"
@@ -53,7 +56,13 @@ class Nonterminal:
         return ";".join(parents[-self.vmarkov:])
     
     def fo(self, fanout: int):
-        return f"/{fanout}"
+        match self.decoration:
+            case "nof":
+                return ""
+            case "disc":
+                return "/D" if fanout > 1 else ""
+            case "":
+                return f"/{fanout}"
 
 
 extraction_result = namedtuple("extraction_result", ["lex", "leaves", "rule"])

@@ -14,9 +14,9 @@ def read_clusters(filename: str):
 
 class MultiKeyReplacement:
     def __init__(self, map: dict[str, str]):
-        self.regex = compile(
-            "|".join(escape(k) for k in map)
-        )
+        # sort keys in decreasing length to prefer substituting whole constituent symbols
+        keys = sorted(map.keys(), key=lambda s: len(s), reverse=True)
+        self.regex = compile("|".join(escape(k) for k in keys))
         self.map = map
 
     def _replace_single_match(self, m: Match) -> str:
@@ -42,6 +42,13 @@ class NtConstructor:
         self.type, self.decoration = type.split("-")
         self.coarsetab = MultiKeyReplacement(coarsetab) \
             if not coarsetab is None else firstCharReplacement
+        
+    def leaf(self, parent: str):
+        match self.type:
+            case "vanilla":
+                return f"arg({parent})"
+            case _:
+                return f"arg"
     
     def __call__(self, ctree, deriv_yield):
         match self.type:

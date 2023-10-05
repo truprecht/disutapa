@@ -10,11 +10,11 @@ from sdcp.grammar.sdcp import integerize_rules
 from sdcp.grammar.composition import union_from_positions
 
 example_rules = [
-    rule("L-VP"),
+    rule("arg"),
     rule("ROOT", ("VP/2", None, "NP/1"), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=ordered_union_composition(fanout=1)),
     rule("NP/1", dcp=sdcp_clause.binary_node("NP")),
     rule("VP/2", ("VP/2", None), dcp=sdcp_clause.binary_node("VP", 1), scomp=ordered_union_composition(fanout=2)),
-    rule("VP/2", ("L-VP", None, "VP|<>/1"), dcp=sdcp_clause.binary_node("VP", 2), scomp=ordered_union_composition(fanout=2)),
+    rule("VP/2", ("arg", None, "VP|<>/1"), dcp=sdcp_clause.binary_node("VP", 2), scomp=ordered_union_composition(fanout=2)),
     rule("VP|<>/1"),
 ]
 

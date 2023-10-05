@@ -16,8 +16,7 @@ def __extract_tree(tree: Tree, guide: Guide, ntype: NtConstructor, parent: str, 
     if not isinstance(tree, Tree):
         if tree in exclude:
             return None
-        lhs = override_lhs if not override_lhs is None else \
-            "L-" + parent.split("+")[0]
+        lhs = override_lhs if not override_lhs is None else ntype.leaf(parent)
         return Tree((tree, SortedSet([tree]), rule(lhs), SortedSet([tree])), [])
     lex: int = guide(tree)
     yd = SortedSet([lex])

@@ -47,8 +47,11 @@ class NtConstructor:
         match self.type:
             case "vanilla":
                 return f"arg({parent})"
-            case _:
-                return f"arg"
+            case "classic":
+                return f"arg({parent.split('+')[0]})"
+            case "coarse":
+                p = self.coarsetab(parent.split('+')[0])
+                return f"arg({p})"
     
     def __call__(self, ctree, deriv_yield):
         match self.type:

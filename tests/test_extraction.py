@@ -15,11 +15,11 @@ def test_singleton():
 
 
 example_rules = [
-    rule("arg"),
+    rule("arg(VP)"),
     rule("ROOT", ("VP/2", None, "NP/1"), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=lcfrs_composition("0120")),
     rule("NP/1", dcp=sdcp_clause.binary_node("NP")),
     rule("VP/2", ("VP/2", None), dcp=sdcp_clause.binary_node("VP", 1), scomp=lcfrs_composition("0,10")),
-    rule("VP/2", ("arg", None, "VP|<>/1"), dcp=sdcp_clause.binary_node("VP", 2), scomp=lcfrs_composition("0,12")),
+    rule("VP/2", ("arg(VP)", None, "VP|<>/1"), dcp=sdcp_clause.binary_node("VP", 2), scomp=lcfrs_composition("0,12")),
     rule("VP|<>/1"),
 ]
 
@@ -46,11 +46,11 @@ def test_corpus_extractor():
 
     assert pos == tuple("WRB PT NN VBD VBN RP".split())
     assert rules ==  [
-        rule("arg", (-1,)),
+        rule("arg(VP)", (-1,)),
         rule("ROOT", ("VP/2", -1, "NP/1"), dcp=sdcp_clause.binary_node("SBAR+S", 2), scomp=lcfrs_composition("0120")),
         rule("NP/1", (-1,), dcp=sdcp_clause.binary_node("NP")),
         rule("VP/2", ("VP/2", -1), dcp=sdcp_clause.binary_node("VP", 1), scomp=lcfrs_composition("0,10")),
-        rule("VP/2", ("arg", -1, "VP|<>/1"), dcp=sdcp_clause.binary_node("VP", 2), scomp=lcfrs_composition("0,12")),
+        rule("VP/2", ("arg(VP)", -1, "VP|<>/1"), dcp=sdcp_clause.binary_node("VP", 2), scomp=lcfrs_composition("0,12")),
         rule("VP|<>/1", (-1,)),
     ]
     
@@ -92,8 +92,8 @@ def test_derivations():
     rules = [
         rule("ROOT/1", ("DU/2", None), dcp=sdcp_clause.binary_node("ROOT", 1), scomp=lcfrs_composition("010")),
             rule("DU/2", ("PP/1", None, "DU|<>/2"), dcp=sdcp_clause.binary_node("DU", 2), scomp=lcfrs_composition("012,2")),
-                rule("PP/1", ("arg", None), dcp=sdcp_clause.binary_node("PP", 1), scomp=lcfrs_composition("01")),
-                    rule("arg"),
+                rule("PP/1", ("arg(PP)", None), dcp=sdcp_clause.binary_node("PP", 1), scomp=lcfrs_composition("01")),
+                    rule("arg(PP)"),
                 rule("DU|<>/2", (None, "SMAIN/2"), dcp=sdcp_clause.binary_node(None, 1, transport_idx=0), scomp=lcfrs_composition("01,1")),
                     rule("SMAIN/2", (None, "PP/1", "NP/1"), dcp=sdcp_clause.binary_node("SMAIN", 2, transport_idx=0), scomp=lcfrs_composition("01,2")),
                         rule("PP/1", (None, "NP/1",), dcp=sdcp_clause.binary_node("PP", 1, transport_idx=0), scomp=lcfrs_composition("01")),

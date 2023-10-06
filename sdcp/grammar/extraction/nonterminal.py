@@ -26,13 +26,9 @@ class MultiKeyReplacement:
         return self.regex.sub(self._replace_single_match, string)
     
 
+R_CSYMBOL = compile(r"$[,.()]|\w+")
 def firstCharReplacement(string: str):
-    if not "|<" in string:
-        return string[0]
-    head, tail = string[:-1].split("|<")
-    markovsuffix = ",".join((nt[0] if nt else "") for nt in tail.replace("$,", "$").split(",")) \
-        if tail else ""
-    return f"{head[0]}|<{markovsuffix}>"
+    return R_CSYMBOL.sub(lambda m: m.group()[0], string)
 
 
 class NtConstructor:
@@ -44,29 +40,34 @@ class NtConstructor:
             if not coarsetab is None else firstCharReplacement
         
     def leaf(self, parent: str):
-        match self.type:
-            case "vanilla":
-                return f"arg({parent})"
-            case "classic":
-                return f"arg({parent.split('+')[0]})"
-            case "coarse":
-                p = self.coarsetab(parent.split('+')[0])
-                return f"arg({p})"
+        if self.type == "vanilla":
+            return f"arg({parent})"
+        parent = self.__class__.rmchain(parent)
+        if self.type == "coarse":
+            parent = self.coarsetab(parent)
+        return f"arg({parent})"
+
+    @classmethod
+    def rmchain(cls, cnst: str):
+        # remove bottom merged unary nodes
+        # markovization annotations do not contain "+"-merged unary constituents
+        if "+" in cnst:
+            cnst, tail = cnst.split("+", 1)
+            if "^<" in tail:
+                cnst += "^<" + tail.split("^<", 1)[1]
+        return cnst
     
     def __call__(self, ctree, deriv_yield):
-        match self.type:
-            case "vanilla":
-                oldfanout = fanout(ctree.leaves())
-                if ctree.leaves() != deriv_yield:
-                    newfanout = fanout(deriv_yield)
-                    return f"{ctree.label}/{oldfanout}/{newfanout-oldfanout}"
-                return f"{ctree.label}/{oldfanout}"
-            case "classic":
-                # binarization nodes do not contain "+"-merged unary constituents
-                baselabel = ctree.label.split("+")[0]
-            case "coarse":
-                # binarization nodes do not contain "+"-merged unary constituents
-                baselabel = self.coarsetab(ctree.label.split("+")[0])
+        if self.type == "vanilla":
+            oldfanout = fanout(ctree.leaves())
+            if ctree.leaves() != deriv_yield:
+                newfanout = fanout(deriv_yield)
+                return f"{ctree.label}/{oldfanout}/{newfanout-oldfanout}"
+            return f"{ctree.label}/{oldfanout}"
+        
+        baselabel = self.__class__.rmchain(ctree.label)
+        if self.type == "coarse":
+            baselabel = self.coarsetab(baselabel)
         
         match self.decoration:
             case "nof":

@@ -36,20 +36,21 @@ class Nonterminal:
             raise ValueError("illegal markov. parameters: h =", self.hmarkov, "and v =", self.vmarkov)
         if self.coarselabels:
             self.coarselabels = read_clusters(self.coarselabels)
+        if self.hmarkov == 999:
+            self.bindirection = False
+            self.rightmostunary = False
         if "-" in self.type:
             self.type, self.decoration = self.type.split("-")
 
-    def get_label(self, node: AutoTree) -> str:
-        if not isinstance(node, Tree): return "ARG"
-        label = node.label
-        if not self.coarselabels is None:
-            if not (nlabel := self.coarselabels.get(label, None)) is None:
-                label = nlabel
-            else:
-                print(f"Warning: in {self.__class__}.get_label: no coarse label found for", label)
+    def get_label(self, node: AutoTree, postags: dict[int, str] | None = None) -> str:
+        label = node.label if isinstance(node, Tree) else postags[node]
+        if self.type == "coarse":
+            label = self.coarselabels.get(label, label) if not self.coarselabels is None else label[0]
         return label
 
     def vert(self, parents: tuple[str, ...], siblings: list[str]) -> str:
+        if self.hmarkov == 999:
+            return self(parents)
         return self(parents) + f"|<{','.join(siblings[:self.hmarkov])}>"
 
     def __call__(self, parents: tuple[str, ...]) -> str:
@@ -111,7 +112,7 @@ class Extractor:
     def extract_node(self, tree: AutoTree, overridelhs: str | None = None, parents: tuple[str, ...] = ()):
         if not isinstance(tree, AutoTree):
             # TODO: use pos symbol?
-            lhs = overridelhs if not overridelhs is None else f"ARG({parents[-1]})"
+            lhs = overridelhs if not overridelhs is None else f"ARG({';'.join(parents[-self.nonterminals.vmarkov:])})"
             resultnode = extraction_result(tree, SortedSet([tree]), rule(lhs))
             return Tree(resultnode, [])
         lex = tree.headterm
@@ -156,7 +157,7 @@ class Extractor:
  
 
     def extract_nodes(self, trees: list[AutoTree], parents: tuple[str, ...], direction: int = 0):
-        markovnts = [trees[-1].label if isinstance(trees[-1], Tree) else "POS"]
+        markovnts = [self.nonterminals.get_label(trees[-1], self.postags)]
         lowestnt = None
         if self.nonterminals.rightmostunary:
             lowestnt = self.nonterminals.vert(parents, markovnts)
@@ -166,7 +167,7 @@ class Extractor:
         deriv = self.extract_node(trees[-1], lowestnt, parents)
         yd = trees[-1].leaves() if isinstance(trees[-1], Tree) else SortedSet([trees[-1]])
         for tree in trees[-2::-1]:
-            markovnts.append(tree.label if isinstance(tree, Tree) else "POS")
+            markovnts.append(self.nonterminals.get_label(tree, self.postags))
             yd = yd.union(tree.leaves() if isinstance(tree, Tree) else SortedSet([tree]))
             label = self.nonterminals.vert(parents, markovnts)
             if self.nonterminals.bindirection:
@@ -177,7 +178,8 @@ class Extractor:
         return deriv
 
 
-    def __call__(self, tree):
+    def __call__(self, tree: AutoTree):
+        self.postags = tree.postags
         derivation = self.extract_node(tree, self.root)
         rules = [r for _, _, r in sorted(node.label for node in derivation.subtrees())]
         for node in derivation.subtrees():

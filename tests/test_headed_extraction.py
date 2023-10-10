@@ -47,6 +47,7 @@ def test_extract():
     t = AutoTree.convert(t)
     r1 = rule("ROOT", ["S|<>/1", None], dcp=sdcp_clause.spine(Tree("S", [1, 0])))
     r2 = rule("S|<>/1", dcp=sdcp_clause.spine(0))
+    e.postags = {0: "WRB", 1: "NN"}
     assert e.extract_node(t, "ROOT") == Tree(
         extraction_result(1, SortedSet([0, 1]), r1), [Tree(
             extraction_result(0, SortedSet([0]), r2), [])])
@@ -68,6 +69,7 @@ def test_extract():
     t[(0,0,0,1)].type = HEAD
     t[(0,1,1)].type = HEAD
     t = AutoTree.convert(t)
+    e.postags = {0: "WRB", 1: "PT", 2: "NN", 3: "VBD", 4: "VBN", 5: "RP"}
     deriv = e.extract_node(t, "ROOT")
     assert deriv.label == extraction_result(3, SortedSet(range(6)),
                                 rule("ROOT", ["VP|<>/2", "S|<>/1", None], dcp=sdcp_clause.spine("(SBAR (S (VP 1 0) 2))"), scomp=lcfrs_composition("0120")))
@@ -82,6 +84,7 @@ def test_extract():
     assert deriv[(1,0)].label == extraction_result(1, SortedSet([1]), rule("NP|<>/1", dcp=sdcp_clause.spine(0)))
 
     e = Extractor(hmarkov=0)
+    e.postags = {0: "WRB", 1: "PT", 2: "NN", 3: "VBD", 4: "VBN", 5: "RP"}
     e.nonterminals.bindirection = False
     e.nonterminals.rightmostunary = False
     deriv = e.extract_node(t, "ROOT")

@@ -46,11 +46,11 @@ def main(config: TrainingParameter):
         max_epochs=config.epochs,
         weight_decay=config.weight_decay,
         optimizer=torch.optim.__dict__[config.optimizer],
-        use_final_model_for_eval=True,
+        use_final_model_for_eval=config.parameter_search,
         param_selection_mode=config.parameter_search,
         patience=config.patience,
         anneal_factor=0.2,
-        min_learning_rate=config.lr * (0.2**4) # abort after hitting a plateau 4 times
+        min_learning_rate=config.lr * (0.2**config.patience) # abort after hitting a plateau (n+1) times
     )
 
 

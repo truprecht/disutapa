@@ -391,7 +391,7 @@ class EnsembleModel(flair.nn.Model):
         scores["pos"] = scores["pos"].item() / predictions
 
         result_args = dict(
-            main_score=scores['supertag'],
+            main_score=scores['F1-all'],
             log_header="\t".join(f"{mode}" for mode in scores),
             log_line="\t".join(f"{s}" for s in scores.values()),
             detailed_results='\n\n'.join(evaluator.summary() for evaluator in evaluators.values()))

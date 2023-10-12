@@ -19,7 +19,7 @@ class TrainingParameter:
     optimizer: str = "AdamW"
     output_dir: str = "/tmp/sdcp-training"
     random_seed: int = 0
-
+    patience: int = 2
 
 
 def main(config: TrainingParameter):
@@ -47,8 +47,10 @@ def main(config: TrainingParameter):
         weight_decay=config.weight_decay,
         optimizer=torch.optim.__dict__[config.optimizer],
         use_final_model_for_eval=True,
-        patience=config.epochs,
-        param_selection_mode=config.parameter_search
+        param_selection_mode=config.parameter_search,
+        patience=config.patience,
+        anneal_factor=0.2,
+        min_learning_rate=config.lr * (0.2**4) # abort after hitting a plateau 4 times
     )
 
 

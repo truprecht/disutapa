@@ -1,4 +1,4 @@
-from . import extract, test, train, eval, train_dop, grid
+from . import extract, test, train, eval, train_dop, grid, prediction_statistic
 from argparse import ArgumentParser
 
 def main():
@@ -17,5 +17,7 @@ def main():
         subcommands.add_parser(name="dop", description="Train a reranking dop model"))
     grid.subcommand(
         subcommands.add_parser(name="grid", description="Execute commands for each combination of variables specified in a configuration file. (Grid Search)"))
+    prediction_statistic.subcommand(
+        subcommands.add_parser(name="stat", description="Print statistics for the supertag prediction using a trained classifier"))
     parsed_args = args.parse_args()
     parsed_args.func(parsed_args)

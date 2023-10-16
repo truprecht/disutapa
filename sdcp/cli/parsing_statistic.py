@@ -10,8 +10,10 @@ from sdcp.autotree import with_pos, fix_rotation
 from discodop.eval import Evaluator, Tree
 from discodop.tree import ParentedTree
 
+from itertools import islice
 from pickle import dump
 from tqdm import tqdm
+from timeit import default_timer
 
 def percentile(vs: torch.Tensor, p: float):
     values = sorted(set(vs))
@@ -30,6 +32,8 @@ def main(config):
         config.maxks = [model.config.ktags]
     if config.steps is None:
         config.steps = [model.config.step]
+    if config.maxn is None:
+        config.maxn = model.config.ktrees
     maximumk = max(config.maxks)
 
     parsers = [
@@ -44,6 +48,7 @@ def main(config):
     first_eval  = {(s,k): Evaluator(model.config.evalparam) for s in config.steps for k in config.maxks}
     noparses  = {(s,k): [] for s in config.steps for k in config.maxks}
     oracle_score, first_score = {}, {}
+    times = {(s,k): [] for s in config.steps for k in config.maxks}
 
     i = 0
     for sentence in tqdm(testset):
@@ -56,7 +61,10 @@ def main(config):
             pos = [model.dictionaries["pos"].get_item_for_index(p) for p in scores["pos"].argmax(dim=-1)[:len(sentence)]]
 
             for (s,k,parser) in parsers:
+                start_time = default_timer()
                 parser.fill_chart(len(sentence), topweights[:,:parser.total_limit].cpu().numpy(), (toptags[:,:parser.total_limit]-1).cpu().numpy())
+                end_time = default_timer()
+                times[(s,k)].append(end_time - start_time)
                 wd, chid = [], []
                 leaves = list(str(i) for i in range(len(sentence)))
                 noparses[(s,k)].append(parser.parser.numparses())
@@ -66,7 +74,8 @@ def main(config):
                         wd.append(topweights[lexi, chid[-1]] - topweights[lexi, 0])
                     wdiffs[(s,k)].append(wd)
                     chosen_idcs[(s,k)].append(chid)
-                    predlist = [ParentedTree.convert(fix_rotation(with_pos(d[0], pos))[1]) for d, _ in parser.parser.get_best_iter()]
+                    predlist = islice(parser.parser.get_best_iter(), config.maxn)
+                    predlist = [ParentedTree.convert(fix_rotation(with_pos(d[0], pos))[1]) for d, _ in predlist]
                     _, otree = oracle_tree(predlist, sentence.get_raw_labels("tree"), model.config.evalparam)
                 else:
                     otree = ParentedTree("NOPARSE", [ParentedTree(p, [i]) for i,p in enumerate(pos)])
@@ -83,29 +92,34 @@ def main(config):
             print(f"score via first tree: {first_score[(s,k)]}, score via oracle in chart: {oracle_score[(s,k)]}")
 
             print("no. of noparse:", sum(1 if n == 0 else 0 for n in noparses[(s,k)]))
-            maxidxs = torch.tensor([max(p for p in ps if not p is None) for ps in chosen_idcs])
-            print("indices:", maxidxs.max().item(), "(max)")
-            print("80% indices are below", percentile(maxidxs, 0.8)+1)
-            print("90% indices are below", percentile(maxidxs, 0.9)+1)
-            print("99% indices are below", percentile(maxidxs, 0.99)+1)
+            maxidxs = torch.tensor([max(p for p in ps if not p is None) for ps in chosen_idcs[(s,k)]])
+            print("biggest used tag position:", maxidxs.max().item())
+            print("50% indices are at or below", percentile(maxidxs, 0.5))
+            print("90% indices are at or below", percentile(maxidxs, 0.9))
+            print("99% indices are at or below", percentile(maxidxs, 0.99))
             print()
-            maxcfd = torch.tensor([max(p for p in ps if not p is None) for ps in wdiffs])
+            maxcfd = torch.tensor([max(p for p in ps if not p is None) for ps in wdiffs[(s,k)]])
             print("score distance:", "max", maxcfd.max().item(), "min", maxcfd.min().item())
-            print("80% values are at or below", percentile(maxcfd, 0.8))
+            print("50% values are at or below", percentile(maxcfd, 0.5))
             print("90% values are at or below", percentile(maxcfd, 0.9))
             print("99% values are at or below", percentile(maxcfd, 0.99))
             print()
             parses = torch.tensor(noparses[(s,k)])
             print("maximum number of parses in chart", parses.max().item())
-            print("in 80% cases there are less or equal to", percentile(parses, 0.8), "parses")
+            print("in 50% cases there are less or equal to", percentile(parses, 0.5), "parses")
             print("in 90% cases there are less or equal to", percentile(parses, 0.9), "parses")
             print("in 99% cases there are less or equal to", percentile(parses, 0.99), "parses")
             print()
+            time = torch.tensor(times[(s,k)])
+            print("total parse time:", time.sum().item())
+            print(f"min: {time.min().item()}, max: {time.max().item()}")
+            print("in 90% cases the parse time was less or equal to", percentile(time, 0.9), "parses")
+            print("in 90% cases the parse time was less or equal to", percentile(time, 0.99), "parses")
     
 
     if not config.output is None:
         with open(config.output, "wb") as outfile:
-            obj = {"chosen_tag_weight": wdiffs, "chosen_tag_index": chosen_idcs, "noparses": noparses}
+            obj = {"chosen_tag_weight": wdiffs, "chosen_tag_index": chosen_idcs, "noparses": noparses, "times": times}
             dump(obj, outfile)
 
 
@@ -115,6 +129,7 @@ def subcommand(sub: ArgumentParser):
     sub.add_argument("corpus", type=str)
     sub.add_argument("output", type=str, nargs="?")
     sub.add_argument("--device", type=torch.device, default=None)
-    sub.add_argument("--steps", nargs="+", type=int, required=False, default=None)
+    sub.add_argument("--steps", nargs="+", type=float, required=False, default=None)
     sub.add_argument("--maxks", nargs="+", type=int, required=False, default=None)
+    sub.add_argument("--maxn", type=int, required=False, default=None)
     sub.set_defaults(func=lambda args: main(args))

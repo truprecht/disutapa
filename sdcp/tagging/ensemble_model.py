@@ -199,15 +199,6 @@ class EnsembleModel(flair.nn.Model):
                 pos = [self.dictionaries["pos"].get_item_for_index(p) for p in postag[:len(sentence)]]
                 parser.fill_chart(len(sentence), sentweights.cpu().numpy(), (senttags-1).cpu().numpy())
 
-                # todo: move into evaluate
-                # chosen_tag_stats = []
-                # if not parser.parser.rootid is None:
-                #     for lexi, rulei in sorted((t.label[1], t.label[0]) for t in parser.parser.get_best_derivation().subtrees()):
-                #         idx = next(i for i, ri in enumerate(senttags[lexi]) if ri-1 == rulei)
-                #         weightdiff = sentweights[lexi, idx] - sentweights[lexi, 0]
-                #         chosen_tag_stats.append((idx, weightdiff))
-                # sentence.store_raw_prediction("chosen-supertag", chosen_tag_stats)
-
                 if self.config.ktrees > 1:
                     derivs = islice(parser.get_best_iter(), self.config.ktrees)
                     derivs = [(fix_rotation(with_pos(d[0], pos))[1], w) for d, w in derivs]
@@ -313,11 +304,6 @@ class EnsembleModel(flair.nn.Model):
                 (sentence.get_raw_labels("pos"), sentence.get_raw_prediction("pos"))
                 for sentence in batch
             )
-            # chosen_supertags.extend(
-            #     idxwdiff
-            #     for sentence in batch
-            #     for idxwdiff in sentence.get_raw_prediction("chosen-supertag")
-            # )
             if oracle_scores:
                 oracle_trees.extend(
                     (len(sentence),
@@ -345,23 +331,6 @@ class EnsembleModel(flair.nn.Model):
             for strmode, evaluator in evaluators.items()}
         scores["supertag"] = 0
         scores["pos"] = 0
-        
-        # scores["chose-first"] = 0
-        # # scores["median-choice"] = 0
-        # # scores["worst-choice"] = 0
-        # scores["90-choice"] = 0
-        # scores["median-wdiff"] = 0
-        # scores["worst-wdiff"] = 0
-        # scores["90-wdiff"] = 0
-        # if chosen_supertags:
-        #     choices = sorted(idx for idx, _ in chosen_supertags if not idx == 0)
-        #     wdiffs = sorted(wdiff for idx, wdiff in chosen_supertags if not idx == 0)
-        #     scores["median-choice"] = choices[len(choices)//2]
-        #     scores["worst-choice"] = choices[-1]
-        #     scores["90-choice"] = choices[int(len(choices)*0.9)]
-        #     scores["median-wdiff"] = wdiffs[len(choices)//2]
-        #     scores["worst-wdiff"] = wdiffs[-1]
-        #     scores["90-wdiff"] = wdiffs[int(len(choices)*0.9)]
 
         if oracle_scores:
             ev = Evaluator(self.config.evalparam)

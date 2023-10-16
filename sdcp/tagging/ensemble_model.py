@@ -432,7 +432,7 @@ def oracle_tree(kbestlist, gold, params):
     besttree, bestscore, bestindex = None, None, None
     gold = ParentedTree(gold)
     sent = [str(i) for i in range(len(gold.leaves()))]
-    for i, (candidate, w) in enumerate(kbestlist):
+    for i, candidate in enumerate(kbestlist):
         scores = TreePairResult(0, ParentedTree.convert(gold), list(sent), ParentedTree.convert(candidate), list(sent), params)
         lf1 = scores.scores()["LF"]
         if bestscore is None or lf1 > bestscore:

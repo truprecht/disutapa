@@ -170,3 +170,17 @@ class ActiveParser:
                 return None, None
         bt: backtrace = self.backtraces[item][0]
         return Tree((bt.rid, bt.leaf), [self.get_best_derivation(i) for i in bt.children])
+
+    def numparses(self, item: int = None):
+        if item is None:
+            item = self.rootid
+            if self.rootid == -1:
+                return 0
+
+        nodesum = 0
+        for bt in self.backtraces[item]:
+            edgeprod = 1
+            for child in bt.children:
+                edgeprod *= self.numparses(child)
+            nodesum += edgeprod
+        return nodesum

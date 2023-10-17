@@ -70,7 +70,7 @@ def main(config):
                 if noparses[(s,k)][-1] > 0:
                     for lexi, rulei in sorted((t.label[1], t.label[0]) for t in parser.parser.get_best_derivation().subtrees()):
                         chid.append(next(i for i, ri in enumerate(toptags[lexi]) if ri-1 == rulei))
-                        wd.append(topweights[lexi, chid[-1]] - topweights[lexi, 0])
+                        wd.append(topweights[lexi, chid[-1]].item() - topweights[lexi, 0].item())
                     wdiffs[(s,k)].append(wd)
                     chosen_idcs[(s,k)].append(chid)
                     predlist = islice(parser.parser.get_best_iter(), config.maxn)

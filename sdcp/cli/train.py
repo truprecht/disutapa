@@ -32,6 +32,8 @@ def main(config: TrainingParameter):
         flair.device = config.device
     torch.manual_seed(config.random_seed)
     corpus = CorpusWrapper(config.corpus)
+    if config.parameter_search:
+        corpus.test = None
     model = EnsembleModel.from_corpus(
         corpus.train,
         corpus.train.get_grammar(),

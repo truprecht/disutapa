@@ -50,10 +50,9 @@ def main(config):
     oracle_score, first_score = {}, {}
     times = {(s,k): [] for s in config.steps for k in config.maxks}
 
-    i = 0
+    treeid = 0
     for sentence in tqdm(testset):
         with torch.no_grad():
-            scores = next(t for f, t in model.forward(model._batch_to_embeddings([sentence], batch_first=True)) if f == "supertag")
             scores = dict((k,v[0]) for k,v in model.forward(model._batch_to_embeddings([sentence], batch_first=True)))
             topweights, toptags = scores["supertag"][:,1:].topk(maximumk, dim=-1, sorted=True)
             toptags += 1
@@ -80,8 +79,9 @@ def main(config):
                 else:
                     otree = ParentedTree("NOPARSE", [ParentedTree(p, [i]) for i,p in enumerate(pos)])
                     predlist = [ParentedTree.convert(otree)]
-                oracle_eval[(s,k)].add(i, ParentedTree(sentence.get_raw_labels("tree")), list(leaves), ParentedTree.convert(otree), list(leaves))
-                first_eval[(s,k)].add(i, ParentedTree(sentence.get_raw_labels("tree")), list(leaves), predlist[0], list(leaves))
+                oracle_eval[(s,k)].add(treeid, ParentedTree(sentence.get_raw_labels("tree")), list(leaves), ParentedTree.convert(otree), list(leaves))
+                first_eval[(s,k)].add(treeid, ParentedTree(sentence.get_raw_labels("tree")), list(leaves), predlist[0], list(leaves))
+                treeid += 1
     for s in config.steps:
         for k in config.maxks:
             oracle_score[(s,k)] = float_or_zero(oracle_eval[(s,k)].acc.scores()['lf'])

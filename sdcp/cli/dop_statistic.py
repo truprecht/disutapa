@@ -42,6 +42,9 @@ def main(config):
     oracle_eval = Evaluator(model.config.evalparam)
     dop_eval = Evaluator(model.config.evalparam)
 
+    chose_better = 0
+    chose_worse = 0
+    chose_same = 0
     sentid = 0
     for sentence in tqdm(testset):
         with torch.no_grad():
@@ -54,21 +57,31 @@ def main(config):
 
             parser.fill_chart(len(sentence), topweights[:,:parser.total_limit].cpu().numpy(), (toptags[:,:parser.total_limit]-1).cpu().numpy())
             leaves = list(str(i) for i in range(len(sentence)))
-            if parser.parser.numparses() > 0:
-                predlist1 = [fix_rotation(with_pos(d[0], pos))[1] for d, _ in islice(parser.parser.get_best_iter(), config.maxn)]
-                oracle_scores = [oraclescore(ParentedTree.convert(gold), ParentedTree.convert(p), leaves, model.config.evalparam) for p in predlist1]
-                dop_scores = [model.reranking.match(p) for p in predlist1]
-                print(oracle_scores, dop_scores)
-                oindex, otree = oracle_tree([ParentedTree.convert(p) for p in predlist1], sentence.get_raw_labels("tree"), model.config.evalparam)
-                dindex, dtree = model.reranking.select((ParentedTree.convert(p), 0) for p in predlist1)
-            else:
-                otree = ParentedTree("NOPARSE", [ParentedTree(p, [i]) for i,p in enumerate(pos)])
-                dtree = ParentedTree.convert(otree)
-                predlist1 = [ParentedTree.convert(otree)]
+            if parser.parser.numparses() <= 1:
+                continue
+            predlist1 = [(fix_rotation(with_pos(d[0], pos))[1], w) for d, w in islice(parser.parser.get_best_iter(), config.maxn)]
+            predlist1, ws = zip(*predlist1)
+            oracle_scores = [oraclescore(ParentedTree.convert(gold), ParentedTree.convert(p), leaves, model.config.evalparam) for p in predlist1]
+            dop_scores = [model.reranking.match(p) for p in predlist1]
+            oindex, otree = oracle_tree([ParentedTree.convert(p) for p in predlist1], sentence.get_raw_labels("tree"), model.config.evalparam)
+            dindex, dtree = model.reranking.select((ParentedTree.convert(p), 0) for p in predlist1)
+            print(oracle_scores, dop_scores, ws)
+            print("chose", (dindex, oracle_scores[dindex], ws[dindex]), f"instead of {(oindex, oracle_scores[oindex], ws[oindex])}" if oindex != dindex else "")
             oracle_eval.add(sentid, ParentedTree.convert(gold), list(leaves), otree, list(leaves))
             dop_eval.add(sentid, ParentedTree.convert(gold), list(leaves), dtree, list(leaves))
             first_eval.add(sentid, ParentedTree.convert(gold), list(leaves), ParentedTree.convert(predlist1[0]), list(leaves))
             sentid += 1
+            
+            chose_same += int(dindex == 0)
+            chose_better += int(oracle_scores[dindex] > oracle_scores[0])
+            chose_worse += int(oracle_scores[dindex] < oracle_scores[0])
+    print("chose first tree in", chose_same, "cases")
+    print("chose better tree in", chose_better, "cases")
+    print("chose worse tree in", chose_worse, "cases")
+    print("via first:", float_or_zero(first_eval.acc.scores()['lf']))
+    print("via dop:", float_or_zero(dop_eval.acc.scores()['lf']))
+    print("via oracle:", float_or_zero(oracle_eval.acc.scores()['lf']))
+
 
 
 

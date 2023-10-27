@@ -1,4 +1,4 @@
-from . import extract, test, train, eval, train_dop, grid, prediction_statistic, parsing_statistic
+from . import extract, test, train, eval, train_dop, grid, prediction_statistic, parsing_statistic, dop_statistic
 from argparse import ArgumentParser
 
 def main():
@@ -21,5 +21,7 @@ def main():
         subcommands.add_parser(name="stats", description="Print statistics for the supertag prediction using a trained classifier"))
     parsing_statistic.subcommand(
         subcommands.add_parser(name="p_stats", description="Print statistics for parsing using a trained classifier"))
+    dop_statistic.subcommand(
+        subcommands.add_parser(name="d_stats", description="Print statistics for parsing using a trained classifier"))
     parsed_args = args.parse_args()
     parsed_args.func(parsed_args)

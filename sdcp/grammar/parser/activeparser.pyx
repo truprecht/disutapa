@@ -8,6 +8,7 @@ from .span cimport Discospan, empty_span
 cimport cython
 cimport numpy as cnp
 cnp.import_array()
+from time import time
 
 
 @cython.cclass
@@ -85,7 +86,7 @@ class ActiveParser:
             self.ruleweights[(rid, i)] = weight
 
 
-    def fill_chart(self, stop_early: bool = False) -> bool:
+    def fill_chart(self, stop_early: bool = False, timeout: float = None) -> bool:
         qi: Qelement
         backtrace_id: cython.int
         rootspan: Discospan = Discospan((0, self.len))
@@ -97,9 +98,16 @@ class ActiveParser:
         span: Discospan
         pbt: cython.int
         pweight: cython.float
+        
+        if not timeout is None:
+            timeout = time() + timeout
 
         heapify(self.queue)     
         while self.queue:
+            if not timeout is None and time() > timeout:
+                self.queue.clear()
+                break
+
             qi = heappop(self.queue)
             if qi.item in self.expanded:
                 if qi.item.is_passive():

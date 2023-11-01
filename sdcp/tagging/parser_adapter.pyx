@@ -10,11 +10,13 @@ cdef class ParserAdapter:
     cdef public object parser
     cdef public float step
     cdef public int total_limit
+    cdef public float timeout
 
-    def __init__(self, grammar, step: float = 2, total_limit = 10):
+    def __init__(self, grammar, step: float = 2, total_limit = 10, timeout = 0.01):
         self.parser = ActiveParser(grammar)
         self.step = step
         self.total_limit = total_limit
+        self.timeout = timeout
 
     def fill_chart(self, int length, cnp.ndarray[float,ndim=2] weights, cnp.ndarray[long,ndim=2] tags):
         cdef cnp.ndarray[long] starts = np.zeros(length, dtype=long)
@@ -38,7 +40,7 @@ cdef class ParserAdapter:
                 self.parser.add_rules_i(tidx, e-s, tags[tidx,s:e], weights[tidx,s:e])
                 starts[tidx] = e
                 all_at_end = all_at_end and e == self.total_limit
-            found_root_node = self.parser.fill_chart()
+            found_root_node = self.parser.fill_chart(timeout=self.timeout)
             if all_at_end:
                 break
 

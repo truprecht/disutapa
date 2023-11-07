@@ -102,7 +102,7 @@ class ActiveParser:
         if not timeout is None:
             timeout = time() + timeout
 
-        heapify(self.queue)     
+        heapify(self.queue)
         while self.queue:
             if not timeout is None and time() > timeout:
                 self.queue.clear()

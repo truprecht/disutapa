@@ -66,6 +66,14 @@ class Nonterminal:
                 return f"/{fanout}"
 
 
+def reorder_vars(dcp_clause, vars):
+    if isinstance(dcp_clause, int):
+        return vars.get(dcp_clause, 0)
+    for i in range(len(dcp_clause)):
+        dcp_clause[i] = reorder_vars(dcp_clause[i], vars)
+    return dcp_clause
+
+
 extraction_result = namedtuple("extraction_result", ["lex", "leaves", "rule"])
 @dataclass(init=False)
 class Extractor:
@@ -124,15 +132,18 @@ class Extractor:
             rhs_nts.append(children[-1].label.rule.lhs)
         lhs = overridelhs if not overridelhs is None else \
                 self.nonterminals(parents + (self.nonterminals.get_label(tree),))
-        children.sort(key=lambda t: t.label.leaves[0])
+        sortedidx = sorted(range(len(children)+1), key=lambda i: children[i-1].label.leaves[0] if i > 0 else lex)
+        children = [children[i-1] for i in sortedidx if i > 0]
+        rhs = [rhs_nts[i-1] if i > 0 else None for i in sortedidx]
+        var2sortidx = { v: (i+1) for i, v in enumerate(s for s in sortedidx if s > 0) }
+        c = reorder_vars(c, var2sortidx)
         
         leaves = SortedSet([lex])
         for child in children:
             leaves |= child.label.leaves
-        lcfrs, rhs_order = self.cconstructor(leaves, [c.label.leaves for c in children])
+        lcfrs, _ = self.cconstructor(leaves, [c.label.leaves for c in children])
         if overridelhs is None:
             lhs += self.nonterminals.fo(lcfrs.fanout)
-        rhs = tuple((None, *rhs_nts)[o] for o in rhs_order)
 
         r = rule(lhs, rhs, dcp=sdcp_clause.spine(c), scomp=lcfrs)
         # rule = rule.reorder((lex,) + tuple(c.label.leaves[0] for c in children))

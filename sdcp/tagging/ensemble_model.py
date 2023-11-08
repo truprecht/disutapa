@@ -66,6 +66,19 @@ class EnsembleModel(flair.nn.Model):
         ]
         return cls(embeddings, tag_dicts, grammar, parameters)
 
+
+    @classmethod
+    def mlp(cls, n_inputs, n_outputs, hidden=None):
+        if hidden is None:
+            hidden = n_inputs*2
+        return torch.nn.Sequential(
+            torch.nn.Linear(n_inputs, hidden),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden, hidden),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hidden, n_outputs))
+
+
     def __init__(self, embeddings, dictionaries, grammar, config: ModelParameters):
         super().__init__()
         self.embedding_builder = embeddings
@@ -76,13 +89,13 @@ class EnsembleModel(flair.nn.Model):
         embedding_len = self.embedding.embedding_length
 
         if self.config.lstm_layers > 0:
-            self.lstm = torch.nn.LSTM(embedding_len, self.config.lstm_size, self.config.lstm_layers, dropout=self.config.dropout, bidirectional=True)
+            self.lstm = torch.nn.LSTM(embedding_len, self.config.lstm_size, self.config.lstm_layers, bidirectional=True)
+            self.dropout = torch.nn.Dropout(self.config.dropout)
             embedding_len = self.config.lstm_size * 2
-        self.dropout = torch.nn.Dropout(self.config.dropout)
         self.dictionaries = dictionaries
         self.scores = torch.nn.ModuleDict({
-            field: torch.nn.Linear(embedding_len, len(dict))
-            for field, dict in self.dictionaries.items()
+            "supertag": self.__class__.mlp(embedding_len, len(self.dictionaries["supertag"])),
+            "pos": torch.nn.Linear(embedding_len, len(self.dictionaries["pos"]))
         })
 
         self.reranking: TreeRanker = None
@@ -138,12 +151,12 @@ class EnsembleModel(flair.nn.Model):
 
 
     def forward(self, embeddings, batch_first=False):
-        inputfeats = self.dropout(embeddings)
         if self.config.lstm_layers > 0:
-            inputfeats, _ = self.lstm(inputfeats)
-            inputfeats = self.dropout(inputfeats)
+            embeddings = self.dropout(embeddings)
+            embeddings, _ = self.lstm(embeddings)
+            embeddings = self.dropout(embeddings)
         for field, layer in self.scores.items():
-            logits = layer(inputfeats)
+            logits = layer(embeddings)
             if batch_first:
                 logits=logits.transpose(0,1)
             yield field, logits

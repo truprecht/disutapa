@@ -49,10 +49,13 @@ def main(config: TrainingParameter):
         weight_decay=config.weight_decay,
         optimizer=torch.optim.__dict__[config.optimizer],
         use_final_model_for_eval=config.parameter_search,
-        param_selection_mode=config.parameter_search,
+        save_final_model=not config.parameter_search,
         patience=config.patience,
         anneal_factor=0.2,
-        min_learning_rate=config.lr * (0.2**config.patience) # abort after hitting a plateau (n+1) times
+        min_learning_rate=config.lr * (0.2**config.patience), # abort after hitting a plateau (n+1) times
+        reduce_transformer_vocab=True,
+        create_loss_file=False,
+        plugins=[flair.trainers.plugins.LossFilePlugin(config.output_dir, 0, metrics_to_collect={"loss": "LOSS", "F1-all": "F", "F1-disc": "FD", "supertag": "STAG_ACC", "pos": "POS_ACC", "coverage": "COV", "time": "T"})]
     )
 
 

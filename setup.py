@@ -14,7 +14,7 @@ setup(
         "sortedcontainers>=2.4.0",
         "bitarray>=2.7",
         "datasets>=2.10",
-        "flair>=0.12.2",
+        "flair>=0.13",
         "torch>=2.0",
         "cython>=3.0"
     ],

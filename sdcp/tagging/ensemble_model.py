@@ -111,7 +111,7 @@ class EnsembleModel(flair.nn.Model):
     def label_type(self):
         return "supertag"
 
-    def _batch_to_embeddings(self, batch, batch_first: bool = False):
+    def _batch_to_embeddings(self, batch):
         if not type(batch) is list:
             batch = [batch]
         self.embedding.embed(batch)
@@ -119,8 +119,6 @@ class EnsembleModel(flair.nn.Model):
         input = torch.nn.utils.rnn.pad_sequence([
             torch.stack([ word.get_embedding(embedding_name) for word in sentence ])
             for sentence in batch]).to(flair.device)
-        if batch_first:
-            input = input.transpose(0,1)
         return input
 
 
@@ -225,27 +223,20 @@ class EnsembleModel(flair.nn.Model):
                 
                 sentence.set_label(label_name, str(tree))
 
-            store_embeddings(batch, storage_mode=embedding_storage_mode)
             if return_loss:
-                l, n = self._tagging_loss(scores.items(), batch, batch_first=True, check_bounds=True)
-                return l, n
+                return self._tagging_loss(scores.items(), batch, batch_first=True, check_bounds=True)
 
     def evaluate(self,
             dataset: DatasetWrapper,
-            gold_label_type: str = "supertag",
             mini_batch_size: int = 32,
-            num_workers: int = 1,
             embedding_storage_mode: str = "none",
-            out_path = None,
             only_disc: str = "both",
             accuracy: str = "both",
             othertag_accuracy: bool = True,
-            main_evaluation_metric = (),
-            gold_label_dictionary = None,
             return_loss: bool = True,
-            exclude_labels = [],
             progressbar: bool = False,
-            oracle_scores: bool = False
+            oracle_scores: bool = False,
+            **kwargs
         ) -> Tuple[flair.training_utils.Result, float]:
         """ Predicts supertags, pos tags and parse trees, and reports the
             predictions scores for a set of sentences.
@@ -281,7 +272,7 @@ class EnsembleModel(flair.nn.Model):
             evaluators = {
                 strmode: Evaluator({ **self.config.evalparam, "DISC_ONLY": mode })}
         
-        data_loader = DataLoader(dataset, batch_size=mini_batch_size, num_workers=num_workers)
+        data_loader = DataLoader(dataset, batch_size=mini_batch_size)
         iterator = data_loader if not progressbar else tqdm(data_loader)
 
         # predict supertags and parse trees
@@ -295,6 +286,8 @@ class EnsembleModel(flair.nn.Model):
         chosen_supertags = []
         oracle_trees = []
         for batch in iterator:
+            for sentence in batch:
+                sentence.clear_embeddings()
             loss = self.predict(
                 batch,
                 embedding_storage_mode=embedding_storage_mode,
@@ -372,14 +365,14 @@ class EnsembleModel(flair.nn.Model):
         # scores["chose-first"] /= predictions
         scores["supertag"] = scores["supertag"].item() / predictions
         scores["pos"] = scores["pos"].item() / predictions
+        scores["loss"] = eval_loss
 
-        result_args = dict(
+        results = flair.training_utils.Result(
             main_score=scores['F1-all'],
-            log_header="\t".join(f"{mode}" for mode in scores),
-            log_line="\t".join(f"{s}" for s in scores.values()),
+            scores=scores,
             detailed_results='\n\n'.join(evaluator.summary() for evaluator in evaluators.values()))
         
-        return flair.training_utils.Result(**result_args, loss=eval_loss, classification_report=None)
+        return results
 
     def _get_state_dict(self):
         return {

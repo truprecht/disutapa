@@ -1,0 +1,18 @@
+constants:
+  - corpus
+  - headrules
+variables:
+  nts: ["vanilla", "classic", "coarse"]
+  guide: ["strict"]
+  hmarkov: ["0", "1"]
+  vmarkov: ["1", "2"]
+  factor: ["left", "headoutward"]
+  ktags: ["10"]
+  bert_lr: ["5e-5"]
+  supervised_lr: ["1e-3"]
+  epochs: ["10"]
+  dev: ["cuda:0"]
+commands:
+  - "sdcp extract [corpus] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --factor [factor] --output ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor]"
+  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] --epochs [epochs] --embedding GBert --lr [bert_lr] --output_dir ./models/bert-negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] --ktags [ktags] --parameter-search --device [dev]"
+  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] --epochs [epochs] --lr [supervised_lr] --output_dir ./models/supervised-negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] --ktags [ktags] --lstm_layers 2 --parameter-search --device [dev]"

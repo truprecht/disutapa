@@ -4,8 +4,8 @@ constants:
 variables:
   nts: ["vanilla", "classic", "coarse"]
   guide: ["vanilla", "strict", "dependent", "least", "near"]
-  hmarkov: ["0", "1"]
-  vmarkov: ["1", "2"]
+  hmarkov: ["0"]
+  vmarkov: ["1"]
   ktags: ["10"]
   bert_lr: ["5e-5"]
   supervised_lr: ["1e-3"]

@@ -2,7 +2,7 @@ constants:
   - corpus
   - headrules
 variables:
-  nts: ["classic-nof", "coarse-disc"]
+  nts: ["--nts classic-nof --lstm_layers 2", "--nts coarse-disc --embeddings GBert"]
   guide: ["strict"]
   hmarkov: ["0"]
   vmarkov: ["1"]
@@ -12,6 +12,7 @@ variables:
   epochs: ["100"]
   comp: ["dcp"]
   dev: ["cuda:0"]
+  seeds: ["0"]
 commands:
   - "sdcp extract [corpus] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --composition [comp] --output ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[comp]"
   - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[comp] --epochs [epochs] --embedding GBert --lr [bert_lr] --output_dir ./models/final-bert-negra-[nts] --ktags [ktags] --device [dev]"

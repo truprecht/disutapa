@@ -67,8 +67,9 @@ class EnsembleModel(flair.nn.Model):
         return cls(embeddings, tag_dicts, grammar, parameters)
 
 
-    @classmethod
-    def mlp(cls, n_inputs, n_outputs, hidden=None):
+    def supertag_layer(self, n_inputs, n_outputs, hidden=None):
+        if any(e.fine_tune() for e in self.embedding_builder):
+            return torch.nn.Linear(n_inputs, n_outputs)
         if hidden is None:
             hidden = n_inputs*2
         return torch.nn.Sequential(
@@ -94,7 +95,7 @@ class EnsembleModel(flair.nn.Model):
             embedding_len = self.config.lstm_size * 2
         self.dictionaries = dictionaries
         self.scores = torch.nn.ModuleDict({
-            "supertag": self.__class__.mlp(embedding_len, len(self.dictionaries["supertag"])),
+            "supertag": self.supertag_layer(embedding_len, len(self.dictionaries["supertag"])),
             "pos": torch.nn.Linear(embedding_len, len(self.dictionaries["pos"]))
         })
 

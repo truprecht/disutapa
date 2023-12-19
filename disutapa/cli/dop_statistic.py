@@ -4,9 +4,9 @@ from pickle import load
 import flair
 import torch
 
-from sdcp.tagging.ensemble_model import EnsembleModel, ParserAdapter, oracle_tree, float_or_zero
-from sdcp.tagging.data import CorpusWrapper
-from sdcp.autotree import with_pos, fix_rotation
+from disutapa.tagging.ensemble_model import EnsembleModel, ParserAdapter, oracle_tree, float_or_zero
+from disutapa.tagging.data import CorpusWrapper
+from disutapa.autotree import with_pos, fix_rotation
 from discodop.eval import Evaluator, Tree, TreePairResult
 from discodop.tree import ParentedTree
 

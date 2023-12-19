@@ -1,5 +1,5 @@
-from sdcp.grammar.composition import fanout, Composition, default_lcfrs, lcfrs_from_positions, union_from_positions
-from sdcp.grammar.parser.span import Discospan
+from disutapa.grammar.composition import fanout, Composition, default_lcfrs, lcfrs_from_positions, union_from_positions
+from disutapa.grammar.parser.span import Discospan
 
 def test_fanout():
     assert fanout([1]) == 1

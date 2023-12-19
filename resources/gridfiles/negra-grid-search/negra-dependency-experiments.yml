@@ -13,6 +13,6 @@ variables:
   comp: ["lcfrs"]
   dev: ["cuda:0"]
 commands:
-  - "sdcp extract [corpus] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --output ./corpora/negra-dependency-[hmarkov]-[vmarkov]"
-  - "sdcp train ./corpora/negra-dependency-[hmarkov]-[vmarkov] --epochs [epochs] --embedding GBert --lr [bert_lr] --output_dir ./models/bert-negra-dependency-[hmarkov]-[vmarkov] --ktags [ktags] --parameter-search --device [dev]"
-  - "sdcp train ./corpora/negra-dependency-[hmarkov]-[vmarkov] --epochs [epochs] --lr [supervised_lr] --output_dir ./models/supervised-negra-dependency-[hmarkov]-[vmarkov] --ktags [ktags] --lstm_layers 2 --parameter-search --device [dev]"
+  - "disutapa extract [corpus] ./corpora/negra-dependency-[hmarkov]-[vmarkov] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov]"
+  - "disutapa train ./corpora/negra-dependency-[hmarkov]-[vmarkov] ./models/bert-negra-dependency-[hmarkov]-[vmarkov] --epochs [epochs] --embedding GBert --lr [bert_lr] --ktags [ktags] --parameter-search --device [dev]"
+  - "disutapa train ./corpora/negra-dependency-[hmarkov]-[vmarkov] ./models/supervised-negra-dependency-[hmarkov]-[vmarkov] --ktags [ktags] --epochs [epochs] --lr [supervised_lr] --lstm_layers 2 --parameter-search --device [dev]"

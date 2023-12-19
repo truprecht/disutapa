@@ -13,6 +13,6 @@ variables:
   epochs: ["10"]
   dev: ["cuda:0"]
 commands:
-  - "sdcp extract [corpus] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --factor [factor] --output ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor]"
-  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] --epochs [epochs] --embedding GBert --lr [bert_lr] --output_dir ./models/bert-negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] --ktags [ktags] --parameter-search --device [dev]"
-  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] --epochs [epochs] --lr [supervised_lr] --output_dir ./models/supervised-negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] --ktags [ktags] --lstm_layers 2 --parameter-search --device [dev]"
+  - "disutapa extract [corpus] ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --factor [factor]"
+  - "disutapa train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] ./models/bert-negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] --epochs [epochs] --embedding GBert --lr [bert_lr] --ktags [ktags] --parameter-search --device [dev]"
+  - "disutapa train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] ./models/supervised-negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[factor] --epochs [epochs] --lr [supervised_lr] --ktags [ktags] --lstm_layers 2 --parameter-search --device [dev]"

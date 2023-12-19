@@ -6,5 +6,5 @@ variables:
   hmarkov: ["0", "999"]
   vmarkov: ["1"]
 commands:
-  - "sdcp extract [corpus] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --output ./corpora/sample-[nts]-[guide]-[hmarkov]-[vmarkov]"
-  - "sdcp train ./corpora/sample-[nts]-[guide]-[hmarkov]-[vmarkov] --epochs 10 --embedding Supervised --lr 1e-4 --output_dir=/tmp/sample-[nts]-[hmarkov] --parameter-search"
+  - "disutapa extract [corpus] ./corpora/sample-[nts]-[guide]-[hmarkov]-[vmarkov] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov]"
+  - "disutapa train ./corpora/sample-[nts]-[guide]-[hmarkov]-[vmarkov]  /tmp/sample-[nts]-[hmarkov] --epochs 10 --embedding Supervised --lr 1e-4 --parameter-search"

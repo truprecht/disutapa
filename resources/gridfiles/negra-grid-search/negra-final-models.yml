@@ -14,6 +14,6 @@ variables:
   dev: ["cuda:0"]
   seeds: ["0"]
 commands:
-  - "sdcp extract [corpus] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --composition [comp] --output ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[comp]"
-  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[comp] --epochs [epochs] --embedding GBert --lr [bert_lr] --output_dir ./models/final-bert-negra-[nts] --ktags [ktags] --device [dev]"
-  - "sdcp train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[comp] --epochs [epochs] --lr [supervised_lr] --output_dir ./models/final-supervised-negra-[nts] --ktags [ktags] --lstm_layers 2 --device [dev]"
+  - "disutapa extract [corpus] ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[comp] --headrules [headrules] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --composition [comp]"
+  - "disutapa train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[comp] ./models/final-bert-negra-[nts] --epochs [epochs] --embedding GBert --lr [bert_lr] --ktags [ktags] --device [dev]"
+  - "disutapa train ./corpora/negra-[nts]-[guide]-[hmarkov]-[vmarkov]-[comp] ./models/final-supervised-negra-[nts] --epochs [epochs] --lr [supervised_lr] --ktags [ktags] --lstm_layers 2 --device [dev]"

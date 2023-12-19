@@ -1,8 +1,8 @@
-from sdcp.grammar.extraction.extract import rule, extract, __extract_tree, singleton, sdcp_clause, lcfrs_composition, Guide, NtConstructor
-from sdcp.grammar.composition import Composition
-from sdcp.grammar.extraction.corpus import corpus_extractor, ExtractionParameter
-from sdcp.grammar.sdcp import integerize_rules
-from sdcp.autotree import AutoTree, Tree
+from disutapa.grammar.extraction.extract import rule, extract, __extract_tree, singleton, sdcp_clause, lcfrs_composition, Guide, NtConstructor
+from disutapa.grammar.composition import Composition
+from disutapa.grammar.extraction.corpus import corpus_extractor, ExtractionParameter
+from disutapa.grammar.sdcp import integerize_rules
+from disutapa.autotree import AutoTree, Tree
 
 from sortedcontainers import SortedSet # type: ignore
 

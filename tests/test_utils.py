@@ -1,5 +1,5 @@
-from sdcp.autotree import AutoTree, Tree, HEAD
-from sdcp.grammar.extraction.ranktransform import Binarizer, HeadInward
+from disutapa.autotree import AutoTree, Tree, HEAD
+from disutapa.grammar.extraction.ranktransform import Binarizer, HeadInward
 
 def test_tree():
     t = AutoTree("(WRB 0)")

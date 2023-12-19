@@ -2,7 +2,7 @@ from . import extract, test, train, eval, train_dop, grid, prediction_statistic,
 from argparse import ArgumentParser
 
 def main():
-    args = ArgumentParser("hybrid-supertags", description="Supertags for constituent parsing using hybrid grammars.")
+    args = ArgumentParser("disutapa", description="Discontinuous Supertagging and Parsing")
     args.set_defaults(func=lambda x: args.print_help())
     subcommands = args.add_subparsers()
     extract.subcommand(

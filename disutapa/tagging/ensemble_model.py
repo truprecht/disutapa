@@ -7,13 +7,13 @@ from itertools import islice
 CPU = torch.device("cpu")
 
 from typing import Tuple, Optional
-from sdcp.grammar.sdcp import grammar
-from sdcp.autotree import AutoTree, with_pos, fix_rotation
+from disutapa.grammar.sdcp import grammar
+from disutapa.autotree import AutoTree, with_pos, fix_rotation
 
 from discodop.eval import readparam, TreePairResult
 from discodop.tree import ParentedTree, Tree
 
-from .data import DatasetWrapper, SentenceWrapper
+from .data import DatasetWrapper, SentenceWrapper, CorpusWrapper
 from .embeddings import TokenEmbeddingBuilder, EmbeddingPresets, PretrainedBuilder
 from .parser_adapter import ParserAdapter
 
@@ -40,7 +40,7 @@ class ModelParameters:
             self.embedding = [PretrainedBuilder(self.embedding, **options)]
         
         if self.evalparam is None:
-            self.evalparam = readparam("../disco-dop/proper.prm")
+            self.evalparam = readparam("resources/disco-dop/proper.prm")
 
     @classmethod
     def from_namespace(cls, config: Namespace) -> "ModelParameters":
@@ -51,7 +51,11 @@ class ModelParameters:
         return cls(**kwargs)
 
 
-class EnsembleModel(flair.nn.Model):
+class EnsembleModel(flair.nn.Model, flair.nn.model.ReduceTransformerVocabMixin):
+    def get_used_tokens(self, corpus: CorpusWrapper):
+        for sentence in corpus.get_all_sentences():
+            yield [t.text for t in sentence]
+
     @classmethod
     def from_corpus(cls, corpus: DatasetWrapper, grammar: grammar, parameters: Namespace):
         """ Construct an instance of the model using
@@ -83,11 +87,11 @@ class EnsembleModel(flair.nn.Model):
     def __init__(self, embeddings, dictionaries, grammar, config: ModelParameters):
         super().__init__()
         self.embedding_builder = embeddings
-        self.embedding = flair.embeddings.StackedEmbeddings([
+        self.embeddings = flair.embeddings.StackedEmbeddings([
             builder.produce() for builder in embeddings
         ])
         self.config = config
-        embedding_len = self.embedding.embedding_length
+        embedding_len = self.embeddings.embedding_length
 
         if self.config.lstm_layers > 0:
             self.lstm = torch.nn.LSTM(embedding_len, self.config.lstm_size, self.config.lstm_layers, bidirectional=True)
@@ -114,8 +118,8 @@ class EnsembleModel(flair.nn.Model):
     def _batch_to_embeddings(self, batch):
         if not type(batch) is list:
             batch = [batch]
-        self.embedding.embed(batch)
-        embedding_name = self.embedding.get_names()
+        self.embeddings.embed(batch)
+        embedding_name = self.embeddings.get_names()
         input = torch.nn.utils.rnn.pad_sequence([
             torch.stack([ word.get_embedding(embedding_name) for word in sentence ])
             for sentence in batch]).to(flair.device)
@@ -391,6 +395,11 @@ class EnsembleModel(flair.nn.Model):
             grammar(*state["grammar"]),
             state["config"],
         )
+        # compatibility with old version, embeddings field was renamed to embedding
+        for key in list(state["state_dict"].keys()):
+            if key.startswith("embedding."):
+                newkey = "embeddings" + key[9:]
+                state["state_dict"][newkey] = state["state_dict"].pop(key)
         model.load_state_dict(state["state_dict"])
         return model
 

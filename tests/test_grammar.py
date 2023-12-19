@@ -1,4 +1,4 @@
-from sdcp.grammar.sdcp import sdcp_clause, tree_constructor, rule, Tree, lcfrs_composition, ImmutableTree
+from disutapa.grammar.sdcp import sdcp_clause, tree_constructor, rule, Tree, lcfrs_composition, ImmutableTree
 
 example_rules = [
     rule("L-VP"),

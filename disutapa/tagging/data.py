@@ -63,9 +63,17 @@ class DatasetWrapper:
         return grammar(rules, root=0)
 
 
+
 class CorpusWrapper:
     def __init__(self, location: str):
         corpus = DatasetDict.load_from_disk(location)
         self.train = DatasetWrapper(corpus["train"])
         self.dev = DatasetWrapper(corpus["dev"])
         self.test = DatasetWrapper(corpus["test"])
+    
+    def get_all_sentences(self):
+        for portion in [self.train, self.dev, self.test]:
+            if portion is None:
+                continue
+            for sentence in portion:
+                yield sentence

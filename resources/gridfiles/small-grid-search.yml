@@ -12,6 +12,6 @@ variables:
   dev: ["cuda:0"]
   cmp: ["dcp", "lcfrs"]
 commands:
-  - "sdcp extract [corpus] --headrules [headrules] --composition [cmp] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov] --output [output]/[cmp]-[nts]-[guide]-[vmarkov]/corpus"
-  - "sdcp train [output]/[cmp]-[nts]-[guide]-[vmarkov]/corpus --epochs 10 --embedding GBert --lr [plr] --parameter-search  --output_dir [output]/[cmp]-[nts]-[guide]-[vmarkov]/supervised --device [dev]"
-  - "sdcp train [output]/[cmp]-[nts]-[guide]-[vmarkov]/corpus --epochs 10 --lstm_layers 2 --lr [slr] --parameter-search --output_dir [output]/[cmp]-[nts]-[guide]-[vmarkov]/pretrained --device [dev]"
+  - "disutapa extract [corpus] [output]/[cmp]-[nts]-[guide]-[vmarkov]/corpus --headrules [headrules] --composition [cmp] --nts [nts] --guide [guide] --hmarkov [hmarkov] --vmarkov [vmarkov]"
+  - "disutapa train [output]/[cmp]-[nts]-[guide]-[vmarkov]/corpus [output]/[cmp]-[nts]-[guide]-[vmarkov]/supervised  --epochs 10 --embedding GBert --lr [plr] --parameter-search--device [dev]"
+  - "disutapa train [output]/[cmp]-[nts]-[guide]-[vmarkov]/corpus [output]/[cmp]-[nts]-[guide]-[vmarkov]/pretrained --epochs 10 --lstm_layers 2 --lr [slr] --parameter-search --device [dev]"

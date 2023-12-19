@@ -1,5 +1,5 @@
-from sdcp.grammar.dop import *
-from sdcp.grammar.composition import lcfrs_composition
+from disutapa.grammar.dop import *
+from disutapa.grammar.composition import lcfrs_composition
 
 trees = [
     Tree("(S (S (A 0) (B 1)) (S (A 2) (C 3) (S (D 4))))"),

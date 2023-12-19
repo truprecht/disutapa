@@ -1,6 +1,6 @@
-from sdcp.grammar.extraction.nonterminal import NtConstructor
+from disutapa.grammar.extraction.nonterminal import NtConstructor
 from sortedcontainers import SortedSet
-from sdcp.autotree import AutoTree
+from disutapa.autotree import AutoTree
 
 tree = AutoTree("(SBAR+S (VP (VP (WRB 0) (VP|<VBD,PT> (VBD 4) (PT 5))) (VBN 3)) (NP (DT 1) (NN 2)))")
 

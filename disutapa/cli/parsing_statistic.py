@@ -2,11 +2,12 @@ from argparse import ArgumentParser
 from pickle import load
 
 import flair
+from flair.datasets import DataLoader
 import torch
 
-from sdcp.tagging.ensemble_model import EnsembleModel, ParserAdapter, oracle_tree, float_or_zero
-from sdcp.tagging.data import CorpusWrapper
-from sdcp.autotree import with_pos, fix_rotation
+from disutapa.tagging.ensemble_model import EnsembleModel, ParserAdapter, oracle_tree, float_or_zero
+from disutapa.tagging.data import CorpusWrapper
+from disutapa.autotree import with_pos, fix_rotation
 from discodop.eval import Evaluator, Tree
 from discodop.tree import ParentedTree
 
@@ -51,37 +52,39 @@ def main(config):
     times = {(s,k): [] for s in config.steps for k in config.maxks}
 
     treeid = 0
-    for sentence in tqdm(testset):
-        with torch.no_grad():
-            scores = dict((k,v[0]) for k,v in model.forward(model._batch_to_embeddings([sentence], batch_first=True)))
-            topweights, toptags = scores["supertag"][:,1:].topk(maximumk, dim=-1, sorted=True)
-            toptags += 1
-            topweights = -torch.nn.functional.log_softmax(topweights, dim=-1)
-            pos = [model.dictionaries["pos"].get_item_for_index(p) for p in scores["pos"].argmax(dim=-1)[:len(sentence)]]
+    data_loader = tqdm(DataLoader(testset, batch_size=config.batch))
+    with torch.no_grad():
+        for batch in data_loader:
+            scores = dict(model.forward(model._batch_to_embeddings(batch), batch_first=True))
+            topweights_, toptags_ = scores["supertag"][:,:,1:].topk(maximumk, dim=-1, sorted=True)
+            toptags_ += 1
+            topweights_ = -torch.nn.functional.log_softmax(topweights_, dim=-1)
 
-            for (s,k,parser) in parsers:
-                start_time = default_timer()
-                parser.fill_chart(len(sentence), topweights[:,:parser.total_limit].cpu().numpy(), (toptags[:,:parser.total_limit]-1).cpu().numpy())
-                end_time = default_timer()
-                times[(s,k)].append(end_time - start_time)
-                wd, chid = [], []
-                leaves = list(str(i) for i in range(len(sentence)))
-                noparses[(s,k)].append(parser.parser.numparses())
-                if noparses[(s,k)][-1] > 0:
-                    for lexi, rulei in sorted((t.label[1], t.label[0]) for t in parser.parser.get_best_derivation().subtrees()):
-                        chid.append(next(i for i, ri in enumerate(toptags[lexi]) if ri-1 == rulei))
-                        wd.append(topweights[lexi, chid[-1]].item() - topweights[lexi, 0].item())
-                    wdiffs[(s,k)].append(wd)
-                    chosen_idcs[(s,k)].append(chid)
-                    predlist = islice(parser.parser.get_best_iter(), config.maxn)
-                    predlist = [ParentedTree.convert(fix_rotation(with_pos(d[0], pos))[1]) for d, _ in predlist]
-                    _, otree = oracle_tree(predlist, sentence.get_raw_labels("tree"), model.config.evalparam)
-                else:
-                    otree = ParentedTree("NOPARSE", [ParentedTree(p, [i]) for i,p in enumerate(pos)])
-                    predlist = [ParentedTree.convert(otree)]
-                oracle_eval[(s,k)].add(treeid, ParentedTree(sentence.get_raw_labels("tree")), list(leaves), ParentedTree.convert(otree), list(leaves))
-                first_eval[(s,k)].add(treeid, ParentedTree(sentence.get_raw_labels("tree")), list(leaves), predlist[0], list(leaves))
-                treeid += 1
+            for (sid, sentence, topweights, toptags, pscores) in zip(range(config.batch), batch, topweights_, toptags_, scores["pos"]):
+                pos = [model.dictionaries["pos"].get_item_for_index(p) for p in pscores.argmax(dim=-1)[:len(sentence)]]
+                for (s,k,parser) in parsers:
+                    start_time = default_timer()
+                    parser.fill_chart(len(sentence), topweights[:,:k].cpu().numpy(), (toptags[:,:k]-1).cpu().numpy())
+                    end_time = default_timer()
+                    times[(s,k)].append(end_time - start_time)
+                    wd, chid = [], []
+                    leaves = list(str(i) for i in range(len(sentence)))
+                    noparses[(s,k)].append(parser.parser.numparses())
+                    if noparses[(s,k)][-1] > 0:
+                        for lexi, rulei in sorted((t.label[1], t.label[0]) for t in parser.parser.get_best_derivation().subtrees()):
+                            chid.append(next(i for i, ri in enumerate(toptags[lexi]) if ri-1 == rulei))
+                            wd.append(topweights[lexi, chid[-1]].item() - topweights[lexi, 0].item())
+                        wdiffs[(s,k)].append(wd)
+                        chosen_idcs[(s,k)].append(chid)
+                        predlist = islice(parser.parser.get_best_iter(), config.maxn)
+                        predlist = [ParentedTree.convert(fix_rotation(with_pos(d[0], pos))[1]) for d, _ in predlist]
+                        _, otree = oracle_tree(predlist, sentence.get_raw_labels("tree"), model.config.evalparam)
+                    else:
+                        otree = ParentedTree("NOPARSE", [ParentedTree(p, [i]) for i,p in enumerate(pos)])
+                        predlist = [ParentedTree.convert(otree)]
+                    oracle_eval[(s,k)].add(treeid, ParentedTree(sentence.get_raw_labels("tree")), list(leaves), ParentedTree.convert(otree), list(leaves))
+                    first_eval[(s,k)].add(treeid, ParentedTree(sentence.get_raw_labels("tree")), list(leaves), predlist[0], list(leaves))
+                    treeid += 1
     for s in config.steps:
         for k in config.maxks:
             oracle_score[(s,k)] = float_or_zero(oracle_eval[(s,k)].acc.scores()['lf'])
@@ -132,4 +135,5 @@ def subcommand(sub: ArgumentParser):
     sub.add_argument("--steps", nargs="+", type=float, required=False, default=None)
     sub.add_argument("--maxks", nargs="+", type=int, required=False, default=None)
     sub.add_argument("--maxn", type=int, required=False, default=None)
+    sub.add_argument("--batch", type=int, required=False, default=32)
     sub.set_defaults(func=lambda args: main(args))

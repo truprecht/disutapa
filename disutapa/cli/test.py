@@ -1,7 +1,7 @@
 from argparse import ArgumentParser, Namespace
-from sdcp.autotree import with_pos, fix_rotation
-from sdcp.tagging.data import DatasetWrapper
-from sdcp.tagging.ensemble_model import ParserAdapter
+from disutapa.autotree import with_pos, fix_rotation
+from disutapa.tagging.data import DatasetWrapper
+from disutapa.tagging.ensemble_model import ParserAdapter
 from discodop.eval import Evaluator, readparam
 from discodop.tree import ParentedTree
 from tqdm import tqdm
@@ -72,7 +72,7 @@ def main(config: Namespace):
 
 def subcommand(sub: ArgumentParser):
     sub.add_argument("corpus", help="file containing gold tags", type=str)
-    sub.add_argument("--param", help="evalb parameter file for score calculation", type=str, required=False, default="../disco-dop/proper.prm")
+    sub.add_argument("--param", help="evalb parameter file for score calculation", type=str, required=False, default="resources/disco-dop/proper.prm")
     sub.add_argument("--weighted", type=int, default=1)
     sub.add_argument("--k", type=int, default=1)
     sub.add_argument("--range", type=int, nargs=2, default=None)

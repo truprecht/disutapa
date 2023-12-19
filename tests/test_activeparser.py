@@ -1,11 +1,11 @@
-from sdcp.grammar.sdcp import rule, grammar, lcfrs_composition, sdcp_clause, integerize_rules
-from sdcp.grammar.composition import lcfrs_composition, ordered_union_composition, Composition
-from sdcp.grammar.extraction.extract_head import Extractor
-from sdcp.grammar.parser.activeparser import ActiveParser
-from sdcp.grammar.extraction.corpus import corpus_extractor, ExtractionParameter
-from sdcp.autotree import with_pos
+from disutapa.grammar.sdcp import rule, grammar, lcfrs_composition, sdcp_clause, integerize_rules
+from disutapa.grammar.composition import lcfrs_composition, ordered_union_composition, Composition
+from disutapa.grammar.extraction.extract_head import Extractor
+from disutapa.grammar.parser.activeparser import ActiveParser
+from disutapa.grammar.extraction.corpus import corpus_extractor, ExtractionParameter
+from disutapa.autotree import with_pos
 from random import sample, randint, shuffle
-from sdcp.autotree import AutoTree, Tree, HEAD
+from disutapa.autotree import AutoTree, Tree, HEAD
 
 
 hrules = [
@@ -60,7 +60,7 @@ def test_pipeline():
 
 def read_corpus():
     from discodop.treebank import READERS, CorpusReader  # type: ignore
-    ctrees = READERS["export"]("tests/sample.export", encoding="iso-8859-1", punct="move", headrules="../disco-dop/alpino.headrules")
+    ctrees = READERS["export"]("tests/sample.export", encoding="iso-8859-1", punct="move", headrules="resources/disco-dop/alpino.headrules")
     ex = corpus_extractor(ExtractionParameter())
     trees, rules, pos = [], [], []
     for ctree in ctrees.trees().values():

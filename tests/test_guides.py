@@ -1,4 +1,4 @@
-from sdcp.grammar.extraction.guide import *
+from disutapa.grammar.extraction.guide import *
 from discodop.tree import Tree, HEAD
 
 def test_guides():

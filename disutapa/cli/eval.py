@@ -4,8 +4,8 @@ from pickle import load
 import flair
 import torch
 
-from sdcp.tagging.ensemble_model import EnsembleModel
-from sdcp.tagging.data import CorpusWrapper
+from disutapa.tagging.ensemble_model import EnsembleModel
+from disutapa.tagging.data import CorpusWrapper
 
 
 def main(config):
@@ -20,8 +20,7 @@ def main(config):
         treeranker = load(open(config.reranking, "rb"))
         model.reranking = treeranker
     results = model.evaluate(testset, progressbar=True, oracle_scores=config.oracle_scores)
-    print(results.log_header)
-    print(results.log_line)
+    print(results.scores)
     print(results.detailed_results)
 
 

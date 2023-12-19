@@ -4,8 +4,8 @@ from pickle import load
 import flair
 import torch
 
-from sdcp.tagging.ensemble_model import EnsembleModel
-from sdcp.tagging.data import CorpusWrapper
+from disutapa.tagging.ensemble_model import EnsembleModel
+from disutapa.tagging.data import CorpusWrapper
 
 from pickle import dump
 from tqdm import tqdm

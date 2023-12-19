@@ -1,13 +1,13 @@
-from sdcp.grammar.extraction.extract import rule, extract, __extract_tree, Guide, NtConstructor
-from sdcp.grammar.parser.activeparser import ActiveParser, grammar
-from sdcp.autotree import AutoTree, Tree
+from disutapa.grammar.extraction.extract import rule, extract, __extract_tree, Guide, NtConstructor
+from disutapa.grammar.parser.activeparser import ActiveParser, grammar
+from disutapa.autotree import AutoTree, Tree
 
-from sdcp.grammar.extraction.extract_head import Extractor, SortedSet, ordered_union_composition, sdcp_clause
-from sdcp.autotree import AutoTree, Tree, HEAD
+from disutapa.grammar.extraction.extract_head import Extractor, SortedSet, ordered_union_composition, sdcp_clause
+from disutapa.autotree import AutoTree, Tree, HEAD
 
 from sortedcontainers import SortedSet # type: ignore
-from sdcp.grammar.sdcp import integerize_rules
-from sdcp.grammar.composition import union_from_positions
+from disutapa.grammar.sdcp import integerize_rules
+from disutapa.grammar.composition import union_from_positions
 
 example_rules = [
     rule("arg(VP)"),

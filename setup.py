@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 from Cython.Build import cythonize
 import numpy
 
@@ -7,7 +7,7 @@ setup(
     version="3.2",
     ext_modules=cythonize(["disutapa/grammar/parser/*.pyx", "disutapa/grammar/composition.pyx", "disutapa/tagging/parser_adapter.pyx"]),
     include_dirs=[numpy.get_include()],
-    packages=["disutapa"],
+    packages=find_packages(),
     package_dir={"disutapa": "disutapa"},
     entry_points={"console_scripts": ["disutapa=disutapa.cli:main"]},
     install_requires=[
@@ -17,11 +17,14 @@ setup(
         "flair>=0.13",
         "torch>=2.0",
         "cython>=3.0",
-        "disco-dop"
+        "disco-dop @ git+https://github.com/andreasvc/disco-dop.git",
+        "numpy",
+        "grapheme" # disco-dop misses this dependency
     ],
     setup_requires=[
         "setuptools",
         "wheel",
-        "cython>=3.0"
+        "cython>=3.0",
+        "numpy"
     ]
 )

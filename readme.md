@@ -12,13 +12,16 @@ Before parsing, an extraction/training procedure converts a provided constituent
 ## Build
 
 The project was developed and tested using python 3.9.
-We strongly recommend using a conda (or virtualenv) environment when running it:
+We strongly recommend using a conda (or venv) environment when running it:
 
     conda create -n supertags python && conda activate supertags
+    # or: python -m venv ./virtualenv && . ./virtualenv/bin/activate
 
-Build and install all dependencies, build the source files and install the package and executable
+Build and install all dependencies, build the source files and install the package and executable.
+If you are running a machine without a discrete gpu, then you probably want to install the (much smaller) cpu version of pytorch; skip this step if you want to run the gpu implementation of torch.
 
-    pip install .
+    # (optional) install cpu version of pytorch: pip install torch --index-url https://download.pytorch.org/whl/cpu
+    pip install cython && pip install .
 
 ## Usage
 

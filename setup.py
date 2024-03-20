@@ -3,7 +3,9 @@ from Cython.Build import cythonize
 import numpy
 
 setup(
-    name='Discontinuous Supertagging and Parsing',
+    name='Disutapa',
+    description="Discontinuous supertag-based parsing",
+    long_description="This is a prototype implementation for the extraction of supertags from discontinuous constituent treebanks, as well as the training, prediction, and parsing with such supertags.",
     version="3.2",
     ext_modules=cythonize(["disutapa/grammar/parser/*.pyx", "disutapa/grammar/composition.pyx", "disutapa/tagging/parser_adapter.pyx"]),
     include_dirs=[numpy.get_include()],

@@ -48,13 +48,53 @@ The full list of parameters and valid values are as follows:
   * the first positional parameter is the file for the treebank supplied in the usual format (NEGRA in export and iso-8859-1 encoding, TIGER in xml format, and DPTB in export format)
   * the second and optional positional parameter is the output location where the extraction script creates a directory
 
-Usign the defaults values, a call of
+Using the defaults values, a call of
 
     disutapa extract negra.export
 
 is equivalent to
 
     disutapa extract --hmarkov 999 --vmarkov 1 --factor right --guide strict --nts classic --composition lcfrs --split dict(train=range(0,18602), test=range(18602, 19602), dev=range(19602, 20602)) negra.export /tmp/negra
+
+### Extracted Supertags
+
+The result of the `extract` subcommand is already split into a training, dev and test portion and can be read using the `datasets` python library as follows:
+
+    disutapa extract resources/disco-dop/alpinosample.export data/sample
+    python
+    >>> from datasets import DatasetDict
+    >>> corpus = DatasetDict.load_from_disk("data/sample")
+    
+The `corpus` object is a python dictionary object containing the three portions, each portion is a dataset where each data point consists of a sentence, a sequence of supertag blueprints, a sequence of pos tags and a constituent tree:
+
+    >>> corpus
+    DatasetDict({
+        train: Dataset({
+            features: ['sentence', 'supertag', 'pos', 'tree'],
+            num_rows: 2
+        })
+        dev: Dataset({
+            features: ['sentence', 'supertag', 'pos', 'tree'],
+            num_rows: 1
+        })
+        test: Dataset({
+            features: ['sentence', 'supertag', 'pos', 'tree'],
+            num_rows: 2
+        })
+    })
+
+The list of supertag blueprints can be accessed for each portion as follows:
+
+    >>> corpus["train"].features["supertag"].feature.names
+    ["rule('arg(PP)')", "rule('PP/1', ('arg(PP)', -1), dcp=sdcp_clause('(PP 0 2)', args=(1,)))", ...
+    >>> len(corpus["train"].features["supertag"].feature.names)
+    39
+    
+Each element in the list is a string representation that can be deserialized into a python object after loading the necessary libraries:
+
+    from disutapa.grammar.sdcp import rule, sdcp_clause, grammar
+    from disutapa.grammar.composition import Composition
+    blueprints = [eval(bstr) for bstr in corpus["train"].features["supertag"].feature.names]
 
 ### Training Parameters
 

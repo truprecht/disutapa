@@ -2,15 +2,18 @@ from setuptools import setup, find_packages
 from Cython.Build import cythonize
 import numpy
 
+ext_modules = cythonize(["src/grammar/parser/*.pyx", "src/grammar/composition.pyx", "src/tagging/parser_adapter.pyx"])
+packages = find_packages()
+
 setup(
     name='Disutapa',
     description="Discontinuous supertag-based parsing",
     long_description="This is a prototype implementation for the extraction of supertags from discontinuous constituent treebanks, as well as the training, prediction, and parsing with such supertags.",
     version="3.2",
-    ext_modules=cythonize(["disutapa/grammar/parser/*.pyx", "disutapa/grammar/composition.pyx", "disutapa/tagging/parser_adapter.pyx"]),
+    ext_modules=ext_modules,
     include_dirs=[numpy.get_include()],
-    packages=find_packages(),
-    package_dir={"disutapa": "disutapa"},
+    packages=packages,
+    package_dir={"disutapa": "src"},
     entry_points={"console_scripts": ["disutapa=disutapa.cli:main"]},
     install_requires=[
         "sortedcontainers>=2.4.0",

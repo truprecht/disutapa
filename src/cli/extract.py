@@ -15,7 +15,7 @@ def splitstr(s: str) -> dict:
 
 
 preset_splits = {
-    "negra": { "train": range(18602), "dev": range(18602, 19602), "test": range(19602, 20602) },
+    "negra": { "train": range(18602), "test": range(18602, 19602), "dev": range(19602, 20602) },
     "dptb": { "train": range(3914, 43746), "dev": range(43746, 45446), "test": range(45446, 47862) },
     "tiger": { "train": range(40472), "dev": range(40472, 45472), "test": range(45472, 50472) },
     "alpinosample": { "train": range(2), "test": range(2, 3) },

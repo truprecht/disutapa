@@ -11,7 +11,7 @@ Before parsing, an extraction/training procedure converts a provided constituent
 
 ## Build
 
-The project was developed and tested using python 3.9.
+The project was developed and tested using python 3.10 and pip>=22.
 We strongly recommend using a conda (or venv) environment when running it:
 
     conda create -n supertags python && conda activate supertags
@@ -21,7 +21,7 @@ Build and install all dependencies, build the source files and install the packa
 If you are running a machine without a discrete gpu, then you probably want to install the (much smaller) cpu version of pytorch; skip this step if you want to run the gpu implementation of torch.
 
     # (optional) install cpu version of pytorch: pip install torch --index-url https://download.pytorch.org/whl/cpu
-    pip install cython && pip install .
+    pip install "cython>=3.0" numpy setuptools wheel && pip install --no-build-isolation .
 
 ## Usage
 

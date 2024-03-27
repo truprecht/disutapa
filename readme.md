@@ -28,8 +28,8 @@ If you are running a machine without a discrete gpu, then you probably want to i
 The above instructions install an executable called `disutapa`. There are several subcommands for the extraction, training, evaluation, and so on. Each subcommand has its own set of parameters, which can be printed using the `--help` flag. The following three commands use example files to extract a tiny corpus of grammar rules, train a classifier and evaluate the prediction/parsing process on a test portion of the data:
 
     disutapa extract resources/disco-dop/alpinosample.export data/sample
-    disutapa train data/sample model/sample --lr 0.01
-    disutapa eval --dev model/sample/best-model.pt data/sample
+    disutapa train data/sample model/sample --lr 0.01 --ktags 2
+    disutapa eval model/sample/best-model.pt data/sample
 
 These three commands should work out-of-the box. For a real-world example, the filename `resources/disco-dop/alpinosample.export` is swapped in favor of a real treebank.
 

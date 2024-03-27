@@ -1,12 +1,16 @@
 from setuptools import setup, find_packages
 from Cython.Build import cythonize
 import numpy
+from sys import argv
 
 ext_modules = cythonize(["src/grammar/parser/*.pyx", "src/grammar/composition.pyx", "src/tagging/parser_adapter.pyx"])
-packages = find_packages()
+if "-e" in argv or "--editable" in argv:
+    for mod in ext_modules:
+        mod.name = mod.name.replace("src", "disutapa", 1)
+packages = [pak.replace("src", "disutapa", 1) for pak in find_packages()]
 
 setup(
-    name='Disutapa',
+    name='disutapa',
     description="Discontinuous supertag-based parsing",
     long_description="This is a prototype implementation for the extraction of supertags from discontinuous constituent treebanks, as well as the training, prediction, and parsing with such supertags.",
     version="3.2",
